@@ -1,0 +1,27 @@
+export default function Pricing() {
+
+  const subscribe = async (plan: string) => {
+
+    const user_id = localStorage.getItem("user_id");
+
+    const res = await fetch("http://localhost:8000/api/stripe/subscribe", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ user_id, plan })
+    });
+
+    const data = await res.json();
+
+    window.location.href = data.checkout_url;
+  };
+
+  return (
+    <div>
+      <h1>Pricing</h1>
+
+      <button onClick={() => subscribe("starter")}>Starter</button>
+      <button onClick={() => subscribe("business")}>Business</button>
+      <button onClick={() => subscribe("growth")}>Growth</button>
+    </div>
+  );
+}

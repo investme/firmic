@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firmic — Business Operating System (BIaaS)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: #070a12;
+    }
+    .glow-effect {
+      box-shadow: 0 0 25px -5px rgba(59, 130, 246, 0.2);
+    }
+    @keyframes pulse-slow {
+      0%, 100% { opacity: 0.2; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.02); }
+    }
+    .animate-pulse-slow {
+      animation: pulse-slow 8s infinite ease-in-out;
+    }
+    @keyframes scanline {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(100%); }
+    }
+    .scan-line::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(to bottom, transparent 50%, rgba(59, 130, 246, 0.05) 50%);
+      background-size: 100% 4px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body class="text-slate-100 font-sans antialiased scan-line">
+
+  <!-- OVERLAY RADIAL GRADIENT BACKDROP -->
+  <div class="fixed inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-blue-950/20 via-transparent to-transparent pointer-events-none z-0"></div>
+
+  <!-- DESTRUCTURING NAVIGATION -->
+  <header class="relative z-10 flex justify-between items-center px-6 lg:px-16 py-6 max-w-7xl mx-auto border-b border-slate-900">
+    <div class="flex items-center gap-3">
+      <div class="w-7 h-7 bg-blue-600 rounded flex items-center justify-center font-black text-sm tracking-tighter">F</div>
+      <span class="text-lg font-bold tracking-tight text-white">Firmic</span>
+      <span class="text-[10px] uppercase font-mono tracking-widest bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20">BIaaS Platform</span>
+    </div>
+    <nav class="hidden md:flex space-x-8 text-slate-400 text-xs font-mono tracking-wider uppercase">
+      <a href="#architecture" class="hover:text-blue-400 transition-colors">Infrastructure Architecture</a>
+      <a href="#workforce" class="hover:text-blue-400 transition-colors">AI Workforce Layer</a>
+      <a href="#pricing" class="hover:text-blue-400 transition-colors">Leasing & Subscriptions</a>
+    </nav>
+    <div class="flex items-center gap-4">
+      <a href="#pricing" class="px-4 py-2 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 rounded-lg text-xs font-mono uppercase transition-all">
+        Deploy Infrastructure
+      </a>
+    </div>
+  </header>
+
+  <!-- HERO SECTION -->
+  <main class="relative z-10 max-w-7xl mx-auto px-6 lg:px-16 pt-20 pb-28 grid lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+    <div class="lg:col-span-7 space-y-8">
+      <div class="inline-flex items-center gap-2 px-3 py-1 bg-slate-900 rounded-full border border-slate-800 text-xs font-mono text-slate-400">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        v2.4 Live Engine: Modular Corporate Environments
+      </div>
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-[1.1]">
+        Lease a digital headquarters.<br/>
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400">Instantly launch your operations.</span>
+      </h1>
+      <p class="text-slate-400 text-base sm:text-lg max-w-2xl leading-relaxed">
+        Firmic abstracts the entire friction point of early-stage corporate setups. Within a single multi-tenant infrastructure tier, deploy sovereign legal formation, a secure digital office address, native communication protocol stacks, and modular AI workflows designed to scale asynchronously.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-4 pt-2">
+        <a href="#pricing" class="px-6 py-3.5 bg-blue-600 text-white hover:bg-blue-500 rounded-xl font-medium text-sm text-center shadow-lg shadow-blue-600/20 transition-all">
+          Initialize Tenant Environment
+        </a>
+        <a href="#workforce" class="px-6 py-3.5 bg-slate-900 text-slate-300 border border-slate-800 hover:border-slate-700 rounded-xl font-medium text-sm text-center transition-all">
+          View AI Agent Core Modules
+        </a>
+      </div>
+      <div class="grid grid-cols-3 gap-4 pt-6 border-t border-slate-900 text-left">
+        <div>
+          <p class="text-[10px] uppercase font-mono tracking-widest text-slate-500">Legal Standard</p>
+          <p class="text-sm font-semibold text-slate-300 mt-1">Sovereign Jurisdiction First</p>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase font-mono tracking-widest text-slate-500">Execution Speed</p>
+          <p class="text-sm font-semibold text-slate-300 mt-1">&lt; 120 Seconds to Sync</p>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase font-mono tracking-widest text-slate-500">Orchestration Layer</p>
+          <p class="text-sm font-semibold text-slate-300 mt-1">Autonomous Asynchronous Workers</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- MOCK MANAGEMENT INTERFACE PANEL -->
+    <div class="lg:col-span-5 relative">
+      <div class="absolute -inset-1 rounded-2xl bg-gradient-to-r from-blue-500/10 to-indigo-500/10 blur opacity-70 animate-pulse-slow"></div>
+      <div class="relative bg-slate-950 rounded-2xl p-6 border border-slate-800/80 shadow-2xl glow-effect text-slate-200">
+        <!-- Panel Header -->
+        <div class="flex justify-between items-center pb-4 border-b border-slate-900">
+          <div>
+            <div class="flex items-center gap-2">
+              <p class="text-[10px] font-mono tracking-wider text-slate-500 uppercase">Tenant Environment Active</p>
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            </div>
+            <p class="text-base font-bold text-white tracking-tight mt-0.5">District Suite: #4092-B</p>
+          </div>
+          <span class="px-2 py-0.5 text-[10px] font-mono bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded">
+            SYS_ONLINE
+          </span>
+        </div>
+
+        <!-- Metric Bars -->
+        <div class="my-6 space-y-4">
+          <div>
+            <div class="flex justify-between text-xs font-mono mb-1 text-slate-400">
+              <span>Jurisdiction Registration</span>
+              <span class="text-blue-400 font-bold">100% Linked</span>
+            </div>
+            <div class="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+              <div class="bg-blue-500 h-1.5 rounded-full" style="width: 100%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs font-mono mb-1 text-slate-400">
+              <span>Communication & SIP Routing</span>
+              <span class="text-blue-400 font-bold">100% Linked</span>
+            </div>
+            <div class="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+              <div class="bg-blue-500 h-1.5 rounded-full" style="width: 100%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs font-mono mb-1 text-slate-400">
+              <span>Autonomous Agents Assigned</span>
+              <span class="text-indigo-400 font-bold">4 Modules Configured</span>
+            </div>
+            <div class="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+              <div class="bg-indigo-500 h-1.5 rounded-full" style="width: 66%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Realtime System Log Stream -->
+        <div class="p-3 bg-slate-900/60 rounded-lg border border-slate-900 font-mono text-[11px] space-y-2 text-slate-400">
+          <div class="flex items-start gap-2">
+            <span class="text-blue-500">[SYSTEM]:</span>
+            <span>Virtual office routing established at Central Hub. IP verified.</span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-indigo-400">[AGENT_RECEPTIONIST]:</span>
+            <span>Handled inbound SIP voice stream request from pipeline. Logged to CRM.</span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-violet-400">[AGENT_SDR]:</span>
+            <span>Triggered outbox email blast seq #402. Verification checks green.</span>
+          </div>
+        </div>
+
+        <!-- Usage Metric Footer -->
+        <div class="mt-4 pt-4 border-t border-slate-900 flex justify-between items-center text-xs text-slate-500 font-mono">
+          <span>Usage This Session:</span>
+          <span class="text-slate-300">4.12 Agent Hours consumed</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- INFRASTRUCTURE METAPHOR ARCHITECTURE -->
+  <section id="architecture" class="relative z-10 border-t border-slate-900 bg-slate-950/40 py-24">
+    <div class="max-w-7xl mx-auto px-6 lg:px-16">
+      <div class="max-w-3xl">
+        <p class="text-xs font-mono uppercase tracking-widest text-blue-500">Product Layer 01</p>
+        <h2 class="text-3xl font-bold tracking-tight text-white mt-2 mb-6">The Digital District Layer</h2>
+        <p class="text-slate-400 leading-relaxed">
+          Your company is provisioned inside a multi-tenant corporate environment structured as digital towers and suites. This acts purely as an intuitive, zero-overhead technical management interface. There are no distracting graphics, maps, or gaming loops—only direct utility to visually manage corporate resources, map system paths, and review persistent infrastructure metrics.
+        </p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
+        <div class="p-6 bg-slate-950 rounded-xl border border-slate-900 hover:border-slate-800 transition-all space-y-3">
+          <div class="w-8 h-8 rounded bg-blue-500/10 flex items-center justify-center font-mono text-xs text-blue-400 font-bold">01</div>
+          <h4 class="text-base font-semibold text-white">Sovereign Presence & Office Proxies</h4>
+          <p class="text-xs text-slate-400 leading-relaxed">Secure digital physical presence profiles, business address structures, and incoming mail scanning setups handled natively without third-party physical infrastructure dependency.</p>
+        </div>
+        <div class="p-6 bg-slate-950 rounded-xl border border-slate-900 hover:border-slate-800 transition-all space-y-3">
+          <div class="w-8 h-8 rounded bg-indigo-500/10 flex items-center justify-center font-mono text-xs text-indigo-400 font-bold">02</div>
+          <h4 class="text-base font-semibold text-white">Native Integrated Communication Trunks</h4>
+          <p class="text-xs text-slate-400 leading-relaxed">Built-in VOIP logic routing, dedicated lines, internal chat architectures, and real-time audio conferencing pipelines immediately mapped to tenant workspaces upon deployment.</p>
+        </div>
+        <div class="p-6 bg-slate-950 rounded-xl border border-slate-900 hover:border-slate-800 transition-all space-y-3">
+          <div class="w-8 h-8 rounded bg-violet-500/10 flex items-center justify-center font-mono text-xs text-violet-400 font-bold">03</div>
+          <h4 class="text-base font-semibold text-white">Consolidated CRM & Log Storage</h4>
+          <p class="text-xs text-slate-400 leading-relaxed">A central data layer that automatically aggregates communication recordings, client state records, access patterns, and autonomous system actions across your operations.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WORKFORCE LAYER SECTION -->
+  <section id="workforce" class="relative z-10 py-24 max-w-7xl mx-auto px-6 lg:px-16">
+    <div class="max-w-3xl mb-16">
+      <p class="text-xs font-mono uppercase tracking-widest text-indigo-400">Product Layer 02</p>
+      <h2 class="text-3xl font-bold tracking-tight text-white mt-2 mb-6">The Modular AI Workforce Layer</h2>
+      <p class="text-slate-400 leading-relaxed">
+        The primary engine of Firmic consists of specialized, autonomous agents that replace standard administrative labor overhead. These modules run continuously on background worker routines, tracking core business indicators and managing platform functions on an ongoing basis.
+      </p>
+    </div>
+
+    <!-- AGENT EXAMPLES COMPONENT -->
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Agent Module 1 -->
+      <div class="bg-slate-950 rounded-xl border border-slate-900 p-5 space-y-4">
+        <div class="flex justify-between items-start">
+          <span class="px-2 py-0.5 font-mono text-[10px] tracking-wider bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded">ACTIVE</span>
+          <p class="text-[10px] font-mono text-slate-500">ID: MOD_RECEPT_01</p>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">AI Receptionist Module</h3>
+          <p class="text-xs text-slate-400 mt-1 leading-relaxed">Interceptors for voice lines, active script navigation, routing schedules, and real-time intent capturing.</p>
+        </div>
+        <div class="pt-3 border-t border-slate-900 grid grid-cols-2 gap-2 text-[11px] font-mono">
+          <div>
+            <span class="text-slate-500 block">PRIMARY KPI</span>
+            <span class="text-slate-300 font-medium">99.2% Call Resolution</span>
+          </div>
+          <div>
+            <span class="text-slate-500 block">DATA LINK</span>
+            <span class="text-slate-300 font-medium">SIP / CRM Engine</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent Module 2 -->
+      <div class="bg-slate-950 rounded-xl border border-slate-900 p-5 space-y-4">
+        <div class="flex justify-between items-start">
+          <span class="px-2 py-0.5 font-mono text-[10px] tracking-wider bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded">ACTIVE</span>
+          <p class="text-[10px] font-mono text-slate-500">ID: MOD_SDR_04</p>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">AI Sales Development Rep</h3>
+          <p class="text-xs text-slate-400 mt-1 leading-relaxed">Automated email follow-ups, continuous pipeline scoring, and outbound contact generation workflows.</p>
+        </div>
+        <div class="pt-3 border-t border-slate-900 grid grid-cols-2 gap-2 text-[11px] font-mono">
+          <div>
+            <span class="text-slate-500 block">PRIMARY KPI</span>
+            <span class="text-slate-300 font-medium">Meetings Set / Month</span>
+          </div>
+          <div>
+            <span class="text-slate-500 block">DATA LINK</span>
+            <span class="text-slate-300 font-medium">SMTP Trunks / IMAP</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent Module 3 -->
+      <div class="bg-slate-950 rounded-xl border border-slate-900 p-5 space-y-4">
+        <div class="flex justify-between items-start">
+          <span class="px-2 py-0.5 font-mono text-[10px] tracking-wider bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded">STANDBY</span>
+          <p class="text-[10px] font-mono text-slate-500">ID: MOD_FIN_09</p>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">AI Finance & Admin Agent</h3>
+          <p class="text-xs text-slate-400 mt-1 leading-relaxed">Monitors billing logs, creates invoicing lines, structures cost tracking, and generates ledger reconciliations.</p>
+        </div>
+        <div class="pt-3 border-t border-slate-900 grid grid-cols-2 gap-2 text-[11px] font-mono">
+          <div>
+            <span class="text-slate-500 block">PRIMARY KPI</span>
+            <span class="text-slate-300 font-medium">Ledger Discrepancy Error</span>
+          </div>
+          <div>
+            <span class="text-slate-500 block">DATA LINK</span>
+            <span class="text-slate-300 font-medium">Invoicing Engine AP</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING HARD HYBRID MODEL SECTION -->
+  <section id="pricing" class="relative z-10 border-t border-slate-900 bg-slate-950/20 py-24">
+    <div class="max-w-7xl mx-auto px-6 lg:px-16">
+      <div class="text-center max-w-2xl mx-auto mb-16">
+        <p class="text-xs font-mono uppercase tracking-widest text-violet-400">High-Margin Resource Allocation</p>
+        <h2 class="text-3xl font-bold tracking-tight text-white mt-2">Transparent Infrastructure Leasing</h2>
+        <p class="text-slate-400 text-sm mt-3">
+          Select your baseline multi-tenant virtual footprint. All accounts feature sub-second workspace generation and hybrid pay-as-you-go processing for autonomous background agent execution.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6 items-stretch">
+        <!-- Tier 1 -->
+        <div class="border border-slate-900 bg-slate-950 rounded-2xl p-6 flex flex-col justify-between">
+          <div class="space-y-4">
+            <div>
+              <p class="text-xs font-mono uppercase text-slate-500">Suite Tier</p>
+              <h3 class="text-xl font-bold text-white mt-1">Solo Suite</h3>
+            </div>
+            <div class="py-2">
+              <span class="text-3xl font-black text-white">$49</span>
+              <span class="text-slate-500 font-mono text-xs">/ month base lease</span>
+            </div>
+            <p class="text-xs text-slate-400 leading-relaxed">Perfect for micro-ventures requiring localized registration status, single phone network configurations, and basic data workspace routing.</p>
+            <ul class="space-y-2 text-xs font-mono text-slate-400 pt-2 border-t border-slate-900">
+              <li class="flex items-center gap-2">✓ 1 Core District Virtual Address</li>
+              <li class="flex items-center gap-2">✓ 1 Native VoIP Communication Node</li>
+              <li class="flex items-center gap-2">✓ Standard API Access Webhooks</li>
+            </ul>
+          </div>
+          <button class="w-full mt-8 py-3 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all border border-slate-800">
+            Lease Solo Suite
+          </button>
+        </div>
+
+        <!-- Tier 2 -->
+        <div class="border-2 border-blue-600 bg-slate-950 rounded-2xl p-6 flex flex-col justify-between relative shadow-xl shadow-blue-950/20">
+          <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-blue-600 text-white font-mono text-[10px] tracking-widest uppercase rounded-full font-bold">
+            RECOMMENDED METRIC
+          </div>
+          <div class="space-y-4">
+            <div>
+              <p class="text-xs font-mono uppercase text-blue-400 font-bold">Multi-Floor Corporate Tier</p>
+              <h3 class="text-xl font-bold text-white mt-1">Growth Tower Tier</h3>
+            </div>
+            <div class="py-2">
+              <span class="text-3xl font-black text-white">$199</span>
+              <span class="text-slate-500 font-mono text-xs">/ month base lease</span>
+            </div>
+            <p class="text-xs text-slate-400 leading-relaxed">For expanding companies looking to decouple scaling from manual operational human workforce costs. Includes advanced runtime priorities.</p>
+            <ul class="space-y-2 text-xs font-mono text-slate-400 pt-2 border-t border-slate-900">
+              <li class="flex items-center gap-2 text-slate-300">✓ 5 Sovereign Allocated Spaces</li>
+              <li class="flex items-center gap-2 text-slate-300">✓ High-Priority Call SIP Channels</li>
+              <li class="flex items-center gap-2 text-slate-300">✓ 4 Concurrent Agent Executions</li>
+              <li class="flex items-center gap-2 text-slate-300">✓ Advanced Integrations (Hubspot/Custom)</li>
+            </ul>
+          </div>
+          <button class="w-full mt-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all shadow-md shadow-blue-600/10">
+            Lease Growth Tower
+          </button>
+        </div>
+
+        <!-- Tier 3 -->
+        <div class="border border-slate-900 bg-slate-950 rounded-2xl p-6 flex flex-col justify-between">
+          <div class="space-y-4">
+            <div>
+              <p class="text-xs font-mono uppercase text-slate-500">Custom Perimeter</p>
+              <h3 class="text-xl font-bold text-white mt-1">Enterprise District</h3>
+            </div>
+            <div class="py-2">
+              <span class="text-3xl font-black text-white">$999</span>
+              <span class="text-slate-500 font-mono text-xs">/ month base lease</span>
+            </div>
+            <p class="text-xs text-slate-400 leading-relaxed">Dedicated clusters for institutional scale operations. Maximum compute limits, advanced throughput parameters, and tailored compliance setups.</p>
+            <ul class="space-y-2 text-xs font-mono text-slate-400 pt-2 border-t border-slate-900">
+              <li class="flex items-center gap-2">✓ Sovereign Cloud Isolation Pools</li>
+              <li class="flex items-center gap-2">✓ Custom Finetuned System Agents</li>
+              <li class="flex items-center gap-2">✓ SLA Processing Commitments</li>
+            </ul>
+          </div>
+          <button class="w-full mt-8 py-3 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all border border-slate-800">
+            Request District Specs
+          </button>
+        </div>
+      </div>
+
+      <!-- HYBRID COMPUTING METRICS MATRIX -->
+      <div class="mt-12 p-6 bg-slate-950 rounded-xl border border-slate-900 max-w-4xl mx-auto">
+        <h4 class="text-xs font-mono uppercase tracking-widest text-slate-400 mb-4 text-center sm:text-left">
+          + Pay-As-You-Go Compute Ledger Pricing Matrix
+        </h4>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center sm:text-left">
+          <div class="p-3 bg-slate-900/40 rounded border border-slate-900">
+            <span class="block text-[10px] font-mono text-slate-500 uppercase">VoIP Channels</span>
+            <span class="text-sm font-bold text-white mt-0.5">$0.015 / min</span>
+          </div>
+          <div class="p-3 bg-slate-900/40 rounded border border-slate-900">
+            <span class="block text-[10px] font-mono text-slate-500 uppercase">Agent Clock</span>
+            <span class="text-sm font-bold text-white mt-0.5">$0.45 / hour</span>
+          </div>
+          <div class="p-3 bg-slate-900/40 rounded border border-slate-900">
+            <span class="block text-[10px] font-mono text-slate-500 uppercase">Inbound Mail</span>
+            <span class="text-sm font-bold text-white mt-0.5">$0.80 / item</span>
+          </div>
+          <div class="p-3 bg-slate-900/40 rounded border border-slate-900">
+            <span class="block text-[10px] font-mono text-slate-500 uppercase">Outbox Blasts</span>
+            <span class="text-sm font-bold text-white mt-0.5">$0.005 / item</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLOSING CALL TO ACTION -->
+  <section class="relative z-10 text-center py-32 px-6 max-w-4xl mx-auto">
+    <h2 class="text-3xl sm:text-4xl font-bold text-white tracking-tight">
+      Stop managing fragmented tools.<br/>Deploy your sovereign operating layer.
+    </h2>
+    <p class="text-slate-400 max-w-xl mx-auto mt-4 text-sm leading-relaxed">
+      Provision your environment, establish secure data parameters, and initialize your automated workforce modules within minutes.
+    </p>
+    <div class="mt-8">
+      <a href="#pricing" class="px-8 py-4 bg-white text-slate-950 hover:bg-slate-100 rounded-xl font-bold text-sm tracking-tight transition-all inline-block shadow-xl shadow-white/5">
+        Initialize Core Tenant Setup
+      </a>
+    </div>
+  </section>
+
+  <!-- STANDARDIZED CORE FOOTER -->
+  <footer class="relative z-10 border-t border-slate-900 text-center text-slate-600 font-mono text-xs py-12 bg-slate-950/80">
+    <div class="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+        <span>© 2026 Firmic Systems Inc. Secure Corporate Cryptographic Engine.</span>
+      </div>
+      <div class="space-x-4 text-slate-500">
+        <a href="#" class="hover:text-slate-400">Security Parameters</a>
+        <a href="#" class="hover:text-slate-400">Terms of Lease</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

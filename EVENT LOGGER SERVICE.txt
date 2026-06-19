@@ -1,0 +1,18 @@
+from models.event import Event
+from database import SessionLocal
+import uuid
+import json
+
+def log_event(company_id: str, event_type: str, payload: dict):
+
+    db = SessionLocal()
+
+    event = Event(
+        id=str(uuid.uuid4()),
+        company_id=company_id,
+        type=event_type,
+        payload=json.dumps(payload)
+    )
+
+    db.add(event)
+    db.commit()
