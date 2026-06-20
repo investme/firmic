@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import company
+from routes import document
 from database import Base, engine
 from models.company import Company
 
@@ -24,6 +25,7 @@ app.add_middleware(
 )
 
 app.include_router(company.router, prefix="/api/company")
+app.include_router(document.router, prefix="/api/document")
 
 @app.get("/health")
 def health():
