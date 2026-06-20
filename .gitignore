@@ -7,3 +7,8 @@ __pycache__/
 *.db
 .env
 *.exe
+backend/__pycache__/
+.next/
+dist/
+build/
+.DS_Store
