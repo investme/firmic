@@ -13,6 +13,7 @@ class Company(Base):
     status = Column(String, default="initiated")
 
     documents = relationship("Document", back_populates="company")
+    tasks = relationship("Task", back_populates="company")
 
 
 class Document(Base):
@@ -29,3 +30,17 @@ class Document(Base):
     uploaded_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     company = relationship("Company", back_populates="documents")
+
+class Task(Base):
+    __tablename__ = "tasks"
+
+    id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, ForeignKey("companies.id"), index=True)
+
+    title = Column(String, index=True)
+    description = Column(String, nullable=True)
+    status = Column(String, default="pending")
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    company = relationship("Company", back_populates="tasks")

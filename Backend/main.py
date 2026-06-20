@@ -2,8 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import company
 from routes import document
+from routes import task
 from database import Base, engine
-from models.company import Company
+from models.company import Company, Document, Task
+from routes import task_update
+from routes import sonny
 
 Base.metadata.create_all(bind=engine)
 
@@ -26,6 +29,12 @@ app.add_middleware(
 
 app.include_router(company.router, prefix="/api/company")
 app.include_router(document.router, prefix="/api/document")
+app.include_router(task.router, prefix="/api/task")
+app.include_router(
+    task_update.router,
+    prefix="/api/task")
+app.include_router(task_update.router, prefix="/api/task")
+app.include_router(sonny.router, prefix="/api/sonny")
 
 @app.get("/health")
 def health():
