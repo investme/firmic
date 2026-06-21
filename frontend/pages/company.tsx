@@ -5,6 +5,8 @@ import {
   getCompanyDocuments,
   getCompanyTasks,
   getSonny,
+  getProgress,
+  updateTaskStatus,
 } from "../services/api";
 
 export default function CompanyWorkspace() {
@@ -15,43 +17,62 @@ export default function CompanyWorkspace() {
   const [documents, setDocuments] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [sonny, setSonny] = useState<any>(null);
+  const [progress, setProgress] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
 
-  useEffect(() => {
+  const loadWorkspace = async () => {
     if (!id) return;
 
-    const loadWorkspace = async () => {
-      try {
-        const companies = await getCompanies();
-        const selectedCompany = companies.find((c: any) => c.id === id);
-        setCompany(selectedCompany);
+    try {
+      const companies = await getCompanies();
+      const selectedCompany = companies.find((c: any) => c.id === id);
+      setCompany(selectedCompany);
 
-        const docs = await getCompanyDocuments(String(id));
-        setDocuments(docs);
+      const docs = await getCompanyDocuments(String(id));
+      setDocuments(docs);
 
-        const companyTasks = await getCompanyTasks(String(id));
-        setTasks(companyTasks);
+      const companyTasks = await getCompanyTasks(String(id));
+      setTasks(companyTasks);
 
-        const sonnyData = await getSonny(String(id));
-        setSonny(sonnyData);
-      } catch (err) {
-        console.error("Failed to load workspace:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
+      const sonnyData = await getSonny(String(id));
+      setSonny(sonnyData);
 
+      const progressData = await getProgress(String(id));
+      setProgress(progressData);
+    } catch (err) {
+      console.error("Failed to load workspace:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadWorkspace();
   }, [id]);
+
+  const completeTask = async (taskId: string) => {
+    await updateTaskStatus(taskId, "completed");
+    await loadWorkspace();
+  };
 
   if (loading) return <div className="p-8">Loading workspace...</div>;
   if (!company) return <div className="p-8">Company not found.</div>;
 
   return (
-    <div className={`min-h-screen p-8 ${darkMode ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-900"}`}>
+    <div
+      className={`min-h-screen p-8 ${
+        darkMode ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-900"
+      }`}
+    >
       <div className="mx-auto max-w-7xl space-y-8">
-        <div className={`rounded-3xl border p-8 shadow-xl ${darkMode ? "bg-slate-900 border-white/10" : "bg-white border-slate-200"}`}>
+        <div
+          className={`rounded-3xl border p-8 shadow-xl ${
+            darkMode
+              ? "bg-slate-900 border-white/10"
+              : "bg-white border-slate-200"
+          }`}
+        >
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm text-blue-500">Virtual Office Workspace</p>
@@ -82,7 +103,11 @@ export default function CompanyWorkspace() {
         <div className="grid gap-4 md:grid-cols-4">
           <Card title="Documents" value={documents.length} darkMode={darkMode} />
           <Card title="Tasks" value={tasks.length} darkMode={darkMode} />
-          <Card title="Progress" value={`${sonny?.summary?.progress || 0}%`} darkMode={darkMode} />
+          <Card
+            title="Progress"
+            value={`${progress?.progress || 0}%`}
+            darkMode={darkMode}
+          />
           <Card title="Agent" value="Sonny" darkMode={darkMode} />
         </div>
 
@@ -96,7 +121,9 @@ export default function CompanyWorkspace() {
                   <div key={doc.id} className="rounded-xl border p-4">
                     <p className="font-semibold">{doc.name}</p>
                     <p className="text-sm text-slate-500">Type: {doc.type}</p>
-                    <p className="text-sm text-slate-500">Status: {doc.status}</p>
+                    <p className="text-sm text-slate-500">
+                      Status: {doc.status}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -108,13 +135,13 @@ export default function CompanyWorkspace() {
               <div className="space-y-4">
                 <div className="rounded-xl border p-4">
                   <p className="font-semibold">Office Progress</p>
-                  <p className="text-3xl font-bold mt-2">
-                    {sonny.summary.progress}%
+                  <p className="mt-2 text-3xl font-bold">
+                    {progress?.progress || sonny.summary.progress}%
                   </p>
                 </div>
 
                 <div className="rounded-xl border p-4">
-                  <p className="font-semibold mb-2">Office Summary</p>
+                  <p className="mb-2 font-semibold">Office Summary</p>
                   <p>Documents: {sonny.summary.documents}</p>
                   <p>Tasks: {sonny.summary.tasks}</p>
                   <p>Pending Tasks: {sonny.summary.pending_tasks}</p>
@@ -122,7 +149,7 @@ export default function CompanyWorkspace() {
                 </div>
 
                 <div className="rounded-xl border p-4">
-                  <p className="font-semibold mb-2">Alerts</p>
+                  <p className="mb-2 font-semibold">Alerts</p>
                   {sonny.alerts.length === 0 ? (
                     <p className="text-slate-500">No alerts.</p>
                   ) : (
@@ -133,7 +160,7 @@ export default function CompanyWorkspace() {
                 </div>
 
                 <div className="rounded-xl border p-4">
-                  <p className="font-semibold mb-2">Recommendations</p>
+                  <p className="mb-2 font-semibold">Recommendations</p>
                   {sonny.recommendations.length === 0 ? (
                     <p className="text-slate-500">No recommendations.</p>
                   ) : (
@@ -155,11 +182,34 @@ export default function CompanyWorkspace() {
               <div className="space-y-3">
                 {tasks.map((task) => (
                   <div key={task.id} className="rounded-xl border p-4">
-                    <p className="font-semibold">{task.title}</p>
-                    {task.description && (
-                      <p className="text-sm text-slate-500">{task.description}</p>
-                    )}
-                    <p className="text-sm text-slate-500">Status: {task.status}</p>
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="font-semibold">{task.title}</p>
+
+                        {task.description && (
+                          <p className="text-sm text-slate-500">
+                            {task.description}
+                          </p>
+                        )}
+
+                        <p className="text-sm text-slate-500">
+                          Status: {task.status}
+                        </p>
+                      </div>
+
+                      {task.status !== "completed" ? (
+                        <button
+                          onClick={() => completeTask(task.id)}
+                          className="rounded-xl bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+                        >
+                          Complete
+                        </button>
+                      ) : (
+                        <span className="rounded-xl bg-green-100 px-4 py-2 text-green-700">
+                          Completed
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -167,7 +217,7 @@ export default function CompanyWorkspace() {
           </Panel>
 
           <Panel title="Workflows" darkMode={darkMode}>
-            <p className="text-slate-500">Workflow engine coming next.</p>
+            <p className="text-slate-500">Workflow engine connected. UI coming next.</p>
           </Panel>
         </div>
       </div>
@@ -177,7 +227,13 @@ export default function CompanyWorkspace() {
 
 function Card({ title, value, darkMode }: any) {
   return (
-    <div className={`rounded-2xl border p-5 ${darkMode ? "bg-white/5 border-white/10" : "bg-white border-slate-200"}`}>
+    <div
+      className={`rounded-2xl border p-5 ${
+        darkMode
+          ? "bg-white/5 border-white/10"
+          : "bg-white border-slate-200"
+      }`}
+    >
       <p className="text-sm text-slate-500">{title}</p>
       <p className="mt-2 text-3xl font-bold">{value}</p>
     </div>
@@ -186,7 +242,13 @@ function Card({ title, value, darkMode }: any) {
 
 function Panel({ title, children, darkMode }: any) {
   return (
-    <div className={`rounded-2xl border p-6 ${darkMode ? "bg-slate-900 border-white/10" : "bg-white border-slate-200"}`}>
+    <div
+      className={`rounded-2xl border p-6 ${
+        darkMode
+          ? "bg-slate-900 border-white/10"
+          : "bg-white border-slate-200"
+      }`}
+    >
       <h2 className="mb-4 text-xl font-semibold">{title}</h2>
       {children}
     </div>

@@ -4,9 +4,19 @@ from routes import company
 from routes import document
 from routes import task
 from database import Base, engine
-from models.company import Company, Document, Task
+from models.company import (
+    Company,
+    Document,
+    Task,
+    Workflow,
+    WorkflowStep,
+)
 from routes import task_update
 from routes import sonny
+from routes import workflow
+from routes import progress
+from routes import hermes
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -35,6 +45,15 @@ app.include_router(
     prefix="/api/task")
 app.include_router(task_update.router, prefix="/api/task")
 app.include_router(sonny.router, prefix="/api/sonny")
+app.include_router(workflow.router, prefix="/api/workflow")
+app.include_router(
+    progress.router,
+    prefix="/api/progress"
+)
+app.include_router(
+    hermes.router,
+    prefix="/api/hermes"
+)
 
 @app.get("/health")
 def health():

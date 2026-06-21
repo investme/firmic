@@ -171,3 +171,27 @@ export async function getSonny(companyId: string) {
 
   return res.json();
 }
+
+export async function getProgress(companyId: string) {
+  const res = await fetch(
+    `${API_URL}/api/progress/company/${companyId}`
+  );
+
+  if (!res.ok) {
+    throw new Error("Failed to load progress");
+  }
+
+  return res.json();
+}
+
+export async function getHermes(companyId: string) {
+  const res = await fetch(
+    `${API_URL}/api/hermes/company/${companyId}`
+  );
+
+  if (!res.ok) {
+    throw new Error("Failed to load Hermes");
+  }
+
+  return res.json();
+}

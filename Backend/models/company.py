@@ -14,6 +14,7 @@ class Company(Base):
 
     documents = relationship("Document", back_populates="company")
     tasks = relationship("Task", back_populates="company")
+    workflows = relationship("Workflow", back_populates="company")
 
 
 class Document(Base):
@@ -44,3 +45,31 @@ class Task(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     company = relationship("Company", back_populates="tasks")
+
+class Workflow(Base):
+    __tablename__ = "workflows"
+
+    id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, ForeignKey("companies.id"), index=True)
+
+    name = Column(String, index=True)
+    status = Column(String, default="running")
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    company = relationship("Company", back_populates="workflows")
+    steps = relationship("WorkflowStep", back_populates="workflow")
+
+
+class WorkflowStep(Base):
+    __tablename__ = "workflow_steps"
+
+    id = Column(String, primary_key=True, index=True)
+    workflow_id = Column(String, ForeignKey("workflows.id"), index=True)
+
+    title = Column(String, index=True)
+    status = Column(String, default="pending")
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    workflow = relationship("Workflow", back_populates="steps")
