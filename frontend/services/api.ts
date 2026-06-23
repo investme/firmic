@@ -195,3 +195,52 @@ export async function getHermes(companyId: string) {
 
   return res.json();
 }
+
+export async function getOffices() {
+  const res = await fetch(`${API_URL}/api/offices`);
+
+  if (!res.ok) {
+    throw new Error("Failed to load offices");
+  }
+
+  return res.json();
+}
+
+export async function rentOffice(data: {
+  office_id: number;
+  company_id: string;
+}) {
+  const res = await fetch(`${API_URL}/api/offices/rent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    throw new Error(text || "Failed to rent office");
+  }
+
+  return text ? JSON.parse(text) : null;
+}
+
+export async function getCompanyOverview(companyId: string) {
+  const [progress, sonny, hermes, documents, tasks] = await Promise.all([
+    getProgress(companyId),
+    getSonny(companyId),
+    getHermes(companyId),
+    getCompanyDocuments(companyId),
+    getCompanyTasks(companyId),
+  ]);
+
+  return {
+    progress,
+    sonny,
+    hermes,
+    documents,
+    tasks,
+  };
+}

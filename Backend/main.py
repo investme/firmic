@@ -16,11 +16,17 @@ from routes import sonny
 from routes import workflow
 from routes import progress
 from routes import hermes
+from api.offices import router as offices_router
+from api import offices
+
+
 
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Firmic Backend")
+
+app.include_router(offices_router)
 
 app.add_middleware(
     CORSMiddleware,

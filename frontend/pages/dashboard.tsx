@@ -1,296 +1,465 @@
-import { useEffect, useState } from "react";
-import {
-  LayoutDashboard,
-  Building2,
-  Bot,
-  FileText,
-  Settings,
-  Bell,
-  Moon,
-  Sun,
-  CheckCircle2,
-  AlertCircle,
-} from "lucide-react";
-import SonnyChat from "../components/SonnyChat";
-import { getHermes } from "../services/api";
+import { useState } from "react";
+import { aiAgents } from "../src/data/aiAgents";
+import { pricing, toAED } from "../src/data/pricing";
+import FirmicSidebar from "../components/FirmicSidebar";
 
 export default function Dashboard() {
-  const [companyId, setCompanyId] = useState<string | null>(null);
-  const [dark, setDark] = useState(false);
-  const [hermes, setHermes] = useState<any>(null);
+  const activeAgents = aiAgents.slice(0, 7);
 
-  useEffect(() => {
-    const savedCompanyId =
-      localStorage.getItem("company_id") ||
-      "fa490d00-a770-4703-b72c-fa39df766a64";
+  const monthlyUsd =
+    pricing.officeRental.usd +
+    pricing.mailbox.usd +
+    pricing.voip.usd +
+    pricing.zoom.usd +
+    pricing.crm.usd +
+    pricing.microsoft365.usd +
+    activeAgents.reduce((sum, agent) => sum + agent.price, 0);
 
-    setCompanyId(savedCompanyId);
-
-    const loadHermes = async () => {
-      try {
-        const data = await getHermes(savedCompanyId);
-        setHermes(data);
-      } catch (error) {
-        console.error("Failed to load Hermes:", error);
-      }
-    };
-
-    loadHermes();
-  }, []);
+  const taxUsd = monthlyUsd * 0.05;
+  const totalUsd = monthlyUsd + taxUsd;
 
   return (
-    <div className={dark ? "dark" : ""}>
-      <div className="flex min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-white">
-        <aside className="w-64 border-r border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <h1 className="mb-8 text-2xl font-bold">Firmic</h1>
+    <div className="min-h-screen bg-slate-50 flex">
+      <FirmicSidebar active="Dashboard" />
 
-          <nav className="space-y-2">
-            <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" href="/dashboard" />
-            <NavItem icon={<Building2 size={18} />} label="Companies" href="/companies" />
-            <NavItem icon={<Bot size={18} />} label="Sonny AI" href="/dashboard" />
-            <NavItem icon={<FileText size={18} />} label="Documents" href="/documents" />
-            <NavItem icon={<Settings size={18} />} label="Settings" href="/settings" />
-          </nav>
-        </aside>
+      <main className="flex-1 p-6 xl:p-8">
+        <Topbar />
 
-        <main className="flex-1 p-8">
-          <header className="mb-8 flex items-center justify-between">
-            <div>
-              <h2 className="text-3xl font-bold">Firmic Dashboard</h2>
-              <p className="text-slate-500 dark:text-slate-400">
-                Your business operating system is live.
-              </p>
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-6">
+          <div className="space-y-6">
+            <OfficeCard />
+            <AIWorkforce />
+            <AddonGrid />
+            <BottomGrid />
+          </div>
+
+          <div className="space-y-6">
+            <BillingSummary totalUsd={totalUsd} taxUsd={taxUsd} />
+            <QuickActions />
+            <HelpCard />
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function Topbar() {
+  return (
+    <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div>
+        <h2 className="text-3xl font-bold text-slate-950">
+          Welcome back, Matar! 👋
+        </h2>
+        <p className="text-slate-500 mt-1">
+          Firmic is the Shopify of Business Infrastructure — launch, operate,
+          and scale with an AI workforce from day one.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <a
+          href="/virtual-offices"
+          className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold shadow-sm"
+        >
+          + Launch New Company
+        </a>
+
+        <div className="bg-white border border-slate-200 rounded-2xl px-5 py-3 shadow-sm">
+          <p className="text-sm font-bold">Office A047</p>
+          <p className="text-xs text-slate-500">● Active</p>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function OfficeCard() {
+  return (
+    <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
+      <div className="flex justify-between items-start">
+        <h3 className="text-xl font-bold">My Virtual Office</h3>
+        <a
+          href="/my-office"
+          className="border border-slate-200 px-4 py-2 rounded-xl font-semibold"
+        >
+          View Office Details
+        </a>
+      </div>
+
+      <div className="mt-5 flex flex-col lg:flex-row gap-6 items-center lg:items-start">
+        <div className="w-full lg:w-56 h-36 rounded-2xl bg-gradient-to-br from-sky-100 to-violet-100 flex items-center justify-center text-6xl">
+          🏢
+        </div>
+
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold">Office A047</h2>
+            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold">
+              Active
+            </span>
+          </div>
+
+          <p className="text-slate-500 mt-2">📍 Business Bay, Dubai, UAE</p>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mt-6">
+            <Mini title="Mailbox" value="Active" icon="📬" />
+            <Mini title="VoIP Number" value="+971 4 XXX 047" icon="☎️" />
+            <Mini title="Office Plan" value="Premium" icon="⭐" />
+            <Mini title="Joined On" value="May 12, 2025" icon="📅" />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AIWorkforce() {
+  const [agentPage, setAgentPage] = useState(0);
+  const agentsPerPage = 5;
+  const totalPages = Math.ceil(aiAgents.length / agentsPerPage);
+
+  const visibleAgents = aiAgents.slice(
+    agentPage * agentsPerPage,
+    agentPage * agentsPerPage + agentsPerPage
+  );
+
+  return (
+    <section className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm relative">
+      <div className="flex justify-between items-center">
+        <h3 className="text-xl font-bold">AI Workforce</h3>
+        <span className="bg-violet-100 text-violet-700 px-3 py-1 rounded-full text-xs font-bold">
+          15 Agents
+        </span>
+      </div>
+
+      <button
+        onClick={() => setAgentPage(Math.max(0, agentPage - 1))}
+        className="absolute left-2 top-1/2 bg-white border border-slate-200 shadow-sm rounded-full h-9 w-9 z-10"
+      >
+        ‹
+      </button>
+
+      <button
+        onClick={() => setAgentPage(Math.min(totalPages - 1, agentPage + 1))}
+        className="absolute right-2 top-1/2 bg-white border border-slate-200 shadow-sm rounded-full h-9 w-9 z-10"
+      >
+        ›
+      </button>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-5 px-6">
+        {visibleAgents.map((agent, index) => (
+          <div
+            key={agent.name}
+            className="border border-slate-200 rounded-2xl p-4 text-center"
+          >
+            <div className="h-16 w-16 mx-auto rounded-full bg-violet-100 flex items-center justify-center text-3xl">
+              {index === 4 ? "🤖" : "👤"}
             </div>
 
-            <div className="flex items-center gap-3">
-              <button className="rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
-                <Bell size={18} />
-              </button>
+            <h4 className="font-bold text-sm mt-3 min-h-[38px]">
+              {agent.name}
+            </h4>
 
-              <button
-                onClick={() => setDark(!dark)}
-                className="rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900"
-              >
-                {dark ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
+            <span className="inline-block mt-2 bg-green-100 text-green-700 px-2 py-1 rounded-full text-[11px]">
+              Active
+            </span>
+
+            <p className="text-xs text-slate-500 mt-3 min-h-[48px]">
+              {agent.desc}
+            </p>
+
+            <p className="text-xs font-bold mt-3">{agent.price} USD/mo</p>
+            <p className="text-xs font-bold">{toAED(agent.price)} AED/mo</p>
+
+            <div className="mt-3 mx-auto h-5 w-9 rounded-full bg-violet-600 relative">
+              <div className="absolute right-1 top-1 h-3 w-3 rounded-full bg-white" />
             </div>
-          </header>
+          </div>
+        ))}
+      </div>
 
-          <section className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-4">
-            <Metric title="Company Status" value="Initiated" />
-            <Metric title="Sonny Actions" value="Running" />
-            <Metric
-              title="Hermes Compliance"
-              value={hermes ? `${hermes.score}%` : "Loading"}
-            />
-            <Metric
-              title="Missing Docs"
-              value={hermes ? String(hermes.missing_documents.length) : "..."}
-            />
-          </section>
+      <div className="flex justify-center gap-2 mt-5">
+        {Array.from({ length: totalPages }).map((_, index) => (
+          <button
+            key={index}
+            onClick={() => setAgentPage(index)}
+            className={`h-2.5 w-2.5 rounded-full ${
+              index === agentPage ? "bg-violet-600" : "bg-slate-300"
+            }`}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
 
-          <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="space-y-6 lg:col-span-2">
-              <Card>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold">Company Overview</h3>
-                    <p className="mt-1 text-slate-500 dark:text-slate-400">
-                      Current company onboarding status.
-                    </p>
-                  </div>
+function AddonGrid() {
+  const addons = [
+    {
+      title: "Meeting Rooms",
+      desc: "Book professional meeting rooms with Zoom.",
+      usd: 25,
+      suffix: "/hr",
+      icon: "📅",
+    },
+    {
+      title: "CRM Software",
+      desc: "Manage leads, deals and customers.",
+      usd: pricing.crm.usd,
+      suffix: "/mo",
+      icon: "📊",
+    },
+    {
+      title: "Microsoft 365",
+      desc: "Business apps, email and storage.",
+      usd: pricing.microsoft365.usd,
+      suffix: "/mo",
+      icon: "📁",
+    },
+    {
+      title: "Zoom Pro",
+      desc: "Host unlimited meetings.",
+      usd: pricing.zoom.usd,
+      suffix: "/mo",
+      icon: "🎥",
+    },
+  ];
 
-                  <span className="rounded-full bg-blue-100 px-3 py-1 text-sm text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                    Initiated
-                  </span>
-                </div>
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {addons.map((addon) => (
+        <div
+          key={addon.title}
+          className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"
+        >
+          <div className="text-3xl">{addon.icon}</div>
+          <h3 className="font-bold mt-3">{addon.title}</h3>
+          <p className="text-xs text-slate-500 mt-1 min-h-[34px]">
+            {addon.desc}
+          </p>
 
-                <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Info label="Company ID" value={companyId || "No company"} />
-                  <Info label="Formation Stage" value="Initial setup" />
-                  <Info label="Jurisdiction" value="Pending selection" />
-                  <Info label="Assigned AI" value="Sonny + Hermes" />
-                </div>
-              </Card>
+          <div className="mt-4">
+            <p className="font-bold">
+              {addon.usd} USD{addon.suffix}
+            </p>
+            <p className="font-bold">
+              {toAED(addon.usd)} AED{addon.suffix}
+            </p>
+          </div>
 
-              <Card>
-                <h3 className="mb-4 text-xl font-semibold">Action Center</h3>
+          <button className="mt-4 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold text-violet-700">
+            Manage
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-                <div className="space-y-3">
-                  <Action icon={<CheckCircle2 size={18} />} title="Company profile created" status="Done" />
-                  <Action icon={<AlertCircle size={18} />} title="Choose formation package" status="Pending" />
-                  <Action icon={<AlertCircle size={18} />} title="Upload incorporation documents" status="Pending" />
-                </div>
-              </Card>
+function BottomGrid() {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <Panel title="Activity & Feed">
+        {[
+          "Receptionist AI answered 18 calls",
+          "Sales AI booked 3 meetings",
+          "Support AI closed 12 tickets",
+          "Executive Assistant scheduled 4 tasks",
+          "New mail received",
+        ].map((item) => (
+          <div
+            key={item}
+            className="flex justify-between py-2 border-b border-slate-100 text-sm"
+          >
+            <span>{item}</span>
+            <span className="text-slate-400">Today</span>
+          </div>
+        ))}
+      </Panel>
 
-              <Card>
-                <h3 className="mb-4 text-xl font-semibold">Hermes Compliance Overview</h3>
+      <Panel title="Performance Overview">
+        <div className="grid grid-cols-2 gap-4">
+          <Metric icon="☎️" title="Calls Answered" value="142" />
+          <Metric icon="👥" title="Meetings Booked" value="23" />
+          <Metric icon="💬" title="Tickets Resolved" value="87" />
+          <Metric icon="✉️" title="Mail Pieces" value="16" />
+        </div>
+      </Panel>
 
-                {hermes ? (
-                  <div className="space-y-5">
-                    <div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Compliance Score
-                      </p>
-                      <p className="mt-1 text-4xl font-bold">{hermes.score}%</p>
-                    </div>
+      <Panel title="Mailbox">
+        <Mini title="2 New Mail Items" value="Today" icon="✉️" />
+        <Mini title="1 Package Received" value="Yesterday" icon="📦" />
+      </Panel>
 
-                    <div>
-                      <p className="mb-2 font-semibold">Missing Documents</p>
-                      {hermes.missing_documents.length === 0 ? (
-                        <p className="text-slate-500 dark:text-slate-400">
-                          No missing documents.
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {hermes.missing_documents.map((doc: string, index: number) => (
-                            <div
-                              key={index}
-                              className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950"
-                            >
-                              {doc}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+      <Panel title="VoIP & Calls">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Metric icon="☎️" title="Calls Today" value="14" compact />
+          <Metric icon="✅" title="Answered" value="12" compact />
+          <Metric icon="❌" title="Missed" value="2" compact />
+          <Metric icon="⏱️" title="Avg. Duration" value="03:14" compact />
+        </div>
+      </Panel>
+    </div>
+  );
+}
 
-                    <div>
-                      <p className="mb-2 font-semibold">Recommendations</p>
-                      {hermes.recommendations.length === 0 ? (
-                        <p className="text-slate-500 dark:text-slate-400">
-                          No recommendations.
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {hermes.recommendations.map((rec: string, index: number) => (
-                            <div
-                              key={index}
-                              className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950"
-                            >
-                              {rec}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-slate-500 dark:text-slate-400">
-                    Loading Hermes...
-                  </p>
-                )}
-              </Card>
-            </div>
+function BillingSummary({
+  totalUsd,
+  taxUsd,
+}: {
+  totalUsd: number;
+  taxUsd: number;
+}) {
+  const agentTotal = aiAgents.slice(0, 7).reduce((s, a) => s + a.price, 0);
 
-            <div className="space-y-6">
-              <Card>
-                <h3 className="mb-4 text-xl font-semibold">Sonny AI</h3>
-                {companyId ? (
-                  <SonnyChat company_id={companyId} />
-                ) : (
-                  <p className="text-slate-500">Create a company first.</p>
-                )}
-              </Card>
+  const rows = [
+    ["Office Rental", pricing.officeRental.usd, "monthly"],
+    ["AI Employees (7)", agentTotal, "monthly"],
+    ["Mailbox", pricing.mailbox.usd, "monthly"],
+    ["VoIP Number", pricing.voip.usd, "monthly"],
+    ["Meeting Rooms", 25, "hourly"],
+    ["CRM Software", pricing.crm.usd, "monthly"],
+    ["Microsoft 365", pricing.microsoft365.usd, "monthly"],
+    ["Taxes (5%)", taxUsd, "monthly"],
+  ];
 
-              <Card>
-                <h3 className="text-xl font-semibold">Hermes Agent</h3>
-                {hermes ? (
-                  <div className="mt-4 space-y-3">
-                    <p className="text-3xl font-bold">{hermes.score}%</p>
-                    <p className="text-slate-500 dark:text-slate-400">
-                      Compliance health score.
-                    </p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      Hermes is monitoring company documents, onboarding tasks,
-                      and compliance readiness.
-                    </p>
-                  </div>
-                ) : (
-                  <p className="mt-4 text-slate-500">Loading Hermes...</p>
-                )}
-              </Card>
+  return (
+    <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
+      <h3 className="text-xl font-bold">Monthly Summary</h3>
 
-              <Card>
-                <h3 className="text-xl font-semibold">System Health</h3>
-                <p className="mt-4 text-3xl font-bold">92%</p>
-                <p className="mt-1 text-slate-500 dark:text-slate-400">
-                  Platform running normally.
-                </p>
-              </Card>
-            </div>
-          </section>
-        </main>
+      <p className="text-sm text-slate-500 mt-6">Total</p>
+
+      <h2 className="text-4xl font-bold">{totalUsd.toFixed(0)} USD</h2>
+
+      <p className="text-slate-500">
+        {toAED(totalUsd).toLocaleString()} AED / month
+      </p>
+
+      <div className="mt-5">
+        <p className="text-slate-500 text-sm">Hook Up Fee</p>
+        <p className="font-bold">49.00 USD / {toAED(49)} AED</p>
+        <span className="inline-block mt-2 text-xs bg-violet-100 text-violet-700 px-3 py-1 rounded-full">
+          One-time
+        </span>
+      </div>
+
+      <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
+        {rows.map(([name, amount, type]) => (
+          <div
+            key={name as string}
+            className="grid grid-cols-[1fr_90px_70px] gap-2 text-sm items-center"
+          >
+            <span>{name}</span>
+            <span className="font-bold text-right">
+              {Number(amount).toFixed(2)} USD
+            </span>
+            <span className="font-bold text-right text-slate-500">
+              {toAED(Number(amount))} AED
+              {type === "hourly" ? "/hr" : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <button className="mt-6 w-full bg-violet-600 text-white py-3 rounded-xl font-bold">
+        View Invoice
+      </button>
+    </section>
+  );
+}
+
+function QuickActions() {
+  return (
+    <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
+      <h3 className="font-bold text-lg">Quick Actions</h3>
+      {[
+        "Add AI Employee",
+        "Book Meeting Room",
+        "Add CRM Users",
+        "Manage Microsoft 365",
+        "Forward Mail",
+        "Change VoIP Number",
+      ].map((item) => (
+        <div
+          key={item}
+          className="flex justify-between py-3 border-b border-slate-100 text-sm"
+        >
+          <span>{item}</span>
+          <span>›</span>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function HelpCard() {
+  return (
+    <section className="bg-violet-600 text-white rounded-3xl p-6 shadow-sm overflow-hidden">
+      <h3 className="text-xl font-bold">Need Help?</h3>
+      <p className="text-sm text-violet-100 mt-2">
+        Our support team is available 24/7.
+      </p>
+      <button className="mt-5 bg-white text-violet-700 px-5 py-3 rounded-xl font-bold">
+        Chat with Support
+      </button>
+    </section>
+  );
+}
+
+function Panel({ title, children }: { title: string; children: any }) {
+  return (
+    <section className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm">
+      <h3 className="font-bold text-lg mb-3">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function Mini({
+  title,
+  value,
+  icon,
+}: {
+  title: string;
+  value: string;
+  icon: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="h-10 w-10 rounded-2xl bg-violet-50 flex items-center justify-center">
+        {icon}
+      </div>
+      <div>
+        <p className="text-xs text-slate-500">{title}</p>
+        <p className="font-bold text-sm">{value}</p>
       </div>
     </div>
   );
 }
 
-function NavItem({
-  icon,
-  label,
-  href,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  href: string;
-}) {
-  return (
-    <a
-      href={href}
-      className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition hover:bg-slate-100 dark:hover:bg-slate-800"
-    >
-      {icon}
-      <span>{label}</span>
-    </a>
-  );
-}
-
-function Metric({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <p className="text-sm text-slate-500 dark:text-slate-400">{title}</p>
-      <h3 className="mt-2 text-2xl font-bold">{value}</h3>
-    </div>
-  );
-}
-
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      {children}
-    </div>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-      <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1 break-all font-semibold">{value}</p>
-    </div>
-  );
-}
-
-function Action({
+function Metric({
   icon,
   title,
-  status,
+  value,
+  compact = false,
 }: {
-  icon: React.ReactNode;
+  icon: string;
   title: string;
-  status: string;
+  value: string;
+  compact?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-      <div className="flex items-center gap-3">
-        {icon}
-        <span className="font-medium">{title}</span>
-      </div>
-
-      <span className="text-sm text-slate-500 dark:text-slate-400">
-        {status}
-      </span>
+    <div className="bg-slate-50 rounded-2xl p-4 min-w-0">
+      <div className="text-xl">{icon}</div>
+      <p
+        className={`font-bold mt-2 break-words ${
+          compact ? "text-lg" : "text-2xl"
+        }`}
+      >
+        {value}
+      </p>
+      <p className="text-[11px] text-slate-500 leading-tight">{title}</p>
     </div>
   );
 }

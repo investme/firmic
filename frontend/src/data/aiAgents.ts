@@ -1,0 +1,17 @@
+export const aiAgents = [
+  { name: "Receptionist AI", price: 49, desc: "Answers calls and greets clients." },
+  { name: "Sales AI", price: 79, desc: "Generates leads and books meetings." },
+  { name: "Support AI", price: 59, desc: "Handles customer questions." },
+  { name: "Executive Assistant AI", price: 69, desc: "Manages schedules and tasks." },
+  { name: "Finance AI", price: 59, desc: "Invoices and payment reminders." },
+  { name: "Legal AI", price: 49, desc: "Drafts basic agreements." },
+  { name: "Marketing AI", price: 59, desc: "Creates campaigns and content." },
+  { name: "HR AI", price: 49, desc: "Screens applicants." },
+  { name: "Operations AI", price: 59, desc: "Runs internal workflows." },
+  { name: "Research AI", price: 39, desc: "Researches markets and competitors." },
+  { name: "Social Media AI", price: 39, desc: "Creates and schedules posts." },
+  { name: "Appointment AI", price: 49, desc: "Books calls and meetings." },
+  { name: "Data Analyst AI", price: 59, desc: "Creates reports and insights." },
+  { name: "Recruitment AI", price: 49, desc: "Finds and filters candidates." },
+  { name: "Customer Success AI", price: 59, desc: "Follows up with clients." },
+];
