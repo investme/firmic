@@ -1,32 +1,92 @@
 import { useEffect, useMemo, useState } from "react";
-import { getDocuments } from "../services/api";
+import FirmicSidebar from "../components/FirmicSidebar";
+import {
+  getDocuments,
+  createDocument,
+  deleteDocument,
+} from "../services/api";
 
 export default function Documents() {
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [darkMode, setDarkMode] = useState(false);
+
+  const [name, setName] = useState("");
+  const [type, setType] = useState("General");
+  const [status, setStatus] = useState("pending");
 
   useEffect(() => {
-    const loadDocuments = async () => {
-      try {
-        const docs = await getDocuments();
-        setDocuments(docs);
-      } catch (err) {
-        console.error("Failed to load documents:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadDocuments();
   }, []);
 
+  async function loadDocuments() {
+    try {
+      setLoading(true);
+      const docs = await getDocuments();
+      setDocuments(docs);
+    } catch (err) {
+      console.error("Failed to load documents:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCreateDocument() {
+    try {
+      const companyId = localStorage.getItem("company_id");
+
+      if (!companyId) {
+        alert("Select or create a company first.");
+        return;
+      }
+
+      if (!name.trim()) {
+        alert("Document name is required.");
+        return;
+      }
+
+      setCreating(true);
+
+      await createDocument({
+        company_id: companyId,
+        name,
+        type,
+        status,
+      });
+
+      setName("");
+      setType("General");
+      setStatus("pending");
+
+      await loadDocuments();
+    } catch (err: any) {
+      alert(err.message || "Failed to create document");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDeleteDocument(documentId: string) {
+    if (!confirm("Delete this document?")) return;
+
+    try {
+      await deleteDocument(documentId);
+      await loadDocuments();
+    } catch (err: any) {
+      alert(err.message || "Failed to delete document");
+    }
+  }
+
   const filteredDocuments = useMemo(() => {
     return documents.filter((doc) => {
-      const searchText = `${doc.name} ${doc.company_id} ${doc.type}`.toLowerCase();
+      const searchText = `${doc.name || ""} ${doc.company_id || ""} ${
+        doc.type || ""
+      }`.toLowerCase();
+
       const matchesSearch = searchText.includes(search.toLowerCase());
+
       const matchesStatus =
         statusFilter === "all" || doc.status === statusFilter;
 
@@ -34,155 +94,281 @@ export default function Documents() {
     });
   }, [documents, search, statusFilter]);
 
+  const approvedCount = documents.filter(
+    (doc) => doc.status === "approved"
+  ).length;
+
+  const pendingCount = documents.filter(
+    (doc) => doc.status === "pending"
+  ).length;
+
+  const expiredCount = documents.filter(
+    (doc) => doc.status === "expired"
+  ).length;
+
   return (
-    <div className={`min-h-screen p-8 ${darkMode ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-900"}`}>
-      <div className="mx-auto max-w-7xl space-y-8">
-        <div className={`rounded-3xl border p-8 shadow-xl ${darkMode ? "border-white/10 bg-slate-900" : "border-slate-200 bg-white"}`}>
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm text-blue-500">Firmic Business OS</p>
+    <div className="min-h-screen bg-slate-50 flex">
+      <FirmicSidebar active="Documents" />
 
-              <h1 className="mt-3 text-4xl font-bold">
-                Documents Command Center
-              </h1>
+      <main className="flex-1 p-6 xl:p-8">
+        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-950">Documents</h1>
 
-              <p className="mt-3 max-w-2xl text-slate-500">
-                Manage company files, licenses, certificates, contracts, and compliance documents.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <a
-                href="/companies"
-                className="rounded-xl border px-5 py-3 font-medium hover:bg-slate-100"
-              >
-                Companies
-              </a>
-
-              <a
-                href="/create-company"
-                className="rounded-xl border px-5 py-3 font-medium hover:bg-slate-100"
-              >
-                + Create Company
-              </a>
-
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className="rounded-xl border px-5 py-3 font-medium"
-              >
-                {darkMode ? "☀️ Light" : "🌙 Dark"}
-              </button>
-            </div>
+            <p className="text-slate-500 mt-1">
+              Manage licenses, certificates, contracts, KYB files, and
+              compliance documents.
+            </p>
           </div>
-        </div>
 
-        <div className="grid gap-4 md:grid-cols-4">
-          <Stat title="Total Documents" value={documents.length} darkMode={darkMode} />
-          <Stat title="Approved" value={documents.filter((d) => d.status === "approved").length} darkMode={darkMode} />
-          <Stat title="Pending" value={documents.filter((d) => d.status === "pending").length} darkMode={darkMode} />
-          <Stat title="Expired" value={documents.filter((d) => d.status === "expired").length} darkMode={darkMode} />
-        </div>
-
-        <div className={`rounded-2xl border p-5 flex flex-col gap-4 md:flex-row ${darkMode ? "bg-white/5 border-white/10" : "bg-white border-slate-200"}`}>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search documents, company ID, or type..."
-            className={`w-full rounded-xl border px-4 py-3 outline-none ${darkMode ? "bg-slate-900 border-white/10 text-white" : "bg-white border-slate-300"}`}
-          />
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className={`rounded-xl border px-4 py-3 ${darkMode ? "bg-slate-900 border-white/10 text-white" : "bg-white border-slate-300"}`}
+          <button
+            onClick={loadDocuments}
+            className="border border-slate-200 bg-white px-5 py-3 rounded-xl font-bold"
           >
-            <option value="all">All Status</option>
-            <option value="approved">Approved</option>
-            <option value="pending">Pending</option>
-            <option value="expired">Expired</option>
-            <option value="rejected">Rejected</option>
-          </select>
-        </div>
+            Refresh Documents
+          </button>
+        </header>
 
-        {loading ? (
-          <EmptyBox text="Loading documents..." darkMode={darkMode} />
-        ) : filteredDocuments.length === 0 ? (
-          <EmptyBox text="No documents found." darkMode={darkMode} />
-        ) : (
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {filteredDocuments.map((doc) => (
-              <div
-                key={doc.id}
-                className={`rounded-2xl border p-6 shadow-lg ${darkMode ? "bg-slate-900 border-white/10" : "bg-white border-slate-200"}`}
-              >
-                <div className="flex justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-semibold">{doc.name}</h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Company ID: {doc.company_id}
-                    </p>
-                  </div>
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
+          <Stat title="Total Documents" value={String(documents.length)} icon="📄" />
+          <Stat title="Approved" value={String(approvedCount)} icon="✅" />
+          <Stat title="Pending" value={String(pendingCount)} icon="⏳" />
+          <Stat title="Expired" value={String(expiredCount)} icon="⚠️" />
+        </section>
 
-                  <StatusBadge status={doc.status} />
-                </div>
+        <section className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-8">
+          <div className="space-y-6">
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
+              <div className="flex flex-col md:flex-row gap-4">
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search documents, company ID, or type..."
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-violet-500"
+                />
 
-                <div className="mt-6 space-y-2 text-sm text-slate-500">
-                  <p>Type: {doc.type}</p>
-                  <p>Uploaded: {formatDate(doc.uploaded_at)}</p>
-                  <p className="break-all">Document ID: {doc.id}</p>
-                </div>
-
-                <div className="mt-5 flex gap-3">
-                  <button className="flex-1 rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
-                    View
-                  </button>
-
-                  <button className="rounded-xl border px-4 py-2">
-                    Download
-                  </button>
-                </div>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-violet-500"
+                >
+                  <option value="all">All Status</option>
+                  <option value="approved">Approved</option>
+                  <option value="pending">Pending</option>
+                  <option value="expired">Expired</option>
+                  <option value="rejected">Rejected</option>
+                </select>
               </div>
-            ))}
+            </div>
+
+            {loading && (
+              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm text-slate-500">
+                Loading documents from backend...
+              </div>
+            )}
+
+            {!loading && filteredDocuments.length === 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-3xl p-6 shadow-sm text-yellow-700">
+                No documents found.
+              </div>
+            )}
+
+            {!loading && filteredDocuments.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {filteredDocuments.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm"
+                  >
+                    <div className="flex justify-between gap-4">
+                      <div>
+                        <p className="text-sm text-violet-700 font-bold">
+                          Document
+                        </p>
+
+                        <h2 className="text-xl font-bold mt-2">{doc.name}</h2>
+
+                        <p className="mt-1 text-sm text-slate-500 break-all">
+                          Company ID: {doc.company_id}
+                        </p>
+                      </div>
+
+                      <StatusBadge status={doc.status || "pending"} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mt-5">
+                      <Mini title="Type" value={doc.type || "General"} />
+                      <Mini
+                        title="Uploaded"
+                        value={formatDate(doc.uploaded_at)}
+                      />
+                      <Mini title="Status" value={doc.status || "pending"} />
+                      <Mini title="File" value={doc.file_path ? "Attached" : "None"} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mt-5">
+                      <button className="bg-violet-600 text-white rounded-xl py-3 font-bold">
+                        View
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteDocument(doc.id)}
+                        className="border border-red-200 text-red-600 rounded-xl py-3 font-bold"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+
+          <div className="space-y-6">
+            <div className="bg-violet-600 text-white rounded-3xl p-6 shadow-sm">
+              <h2 className="text-xl font-bold">Document Intelligence</h2>
+
+              <p className="text-violet-100 text-sm mt-2">
+                Hermes uses company documents to calculate compliance readiness,
+                identify missing files, and recommend next actions.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 mt-5">
+                <DarkMini title="Docs" value={String(documents.length)} />
+                <DarkMini title="Pending" value={String(pendingCount)} />
+                <DarkMini title="Approved" value={String(approvedCount)} />
+                <DarkMini title="Expired" value={String(expiredCount)} />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+              <h2 className="text-xl font-bold">Add Document</h2>
+
+              <div className="space-y-4 mt-5">
+                <div>
+                  <label className="text-sm font-semibold">Document Name</label>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Trade License"
+                    className="w-full mt-2 border border-slate-200 rounded-xl p-3 outline-none focus:border-violet-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold">Type</label>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value)}
+                    className="w-full mt-2 border border-slate-200 rounded-xl p-3 outline-none focus:border-violet-500"
+                  >
+                    <option>General</option>
+                    <option>Trade License</option>
+                    <option>KYB</option>
+                    <option>Contract</option>
+                    <option>Invoice</option>
+                    <option>Compliance</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold">Status</label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                    className="w-full mt-2 border border-slate-200 rounded-xl p-3 outline-none focus:border-violet-500"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="expired">Expired</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleCreateDocument}
+                  disabled={creating}
+                  className="w-full bg-violet-600 text-white py-3 rounded-xl font-bold disabled:bg-slate-300"
+                >
+                  {creating ? "Creating..." : "Create Document"}
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+              <h2 className="text-xl font-bold">Recommended Documents</h2>
+
+              <div className="space-y-3 mt-5">
+                <Recommendation text="Trade License" />
+                <Recommendation text="Virtual Office Agreement" />
+                <Recommendation text="Beneficial Owner Declaration" />
+                <Recommendation text="KYB Document Package" />
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
 
-function Stat({ title, value, darkMode }: any) {
+function Stat({ title, value, icon }: any) {
   return (
-    <div className={`rounded-2xl border p-5 ${darkMode ? "bg-white/5 border-white/10" : "bg-white border-slate-200"}`}>
-      <p className="text-sm text-slate-500">{title}</p>
-      <p className="mt-2 text-3xl font-bold">{value}</p>
+    <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
+      <div className="text-3xl">{icon}</div>
+      <p className="text-sm text-slate-500 mt-3">{title}</p>
+      <p className="text-2xl font-bold mt-1">{value}</p>
     </div>
   );
 }
 
-function EmptyBox({ text, darkMode }: any) {
+function Mini({ title, value }: any) {
   return (
-    <div className={`rounded-2xl border p-8 ${darkMode ? "bg-white/5 border-white/10" : "bg-white border-slate-200"}`}>
-      {text}
+    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center">
+      <p className="text-xs text-slate-500">{title}</p>
+      <p className="font-bold text-sm mt-1">{value}</p>
+    </div>
+  );
+}
+
+function DarkMini({ title, value }: any) {
+  return (
+    <div className="bg-white/10 rounded-2xl p-4 text-center">
+      <p className="text-xs text-violet-100">{title}</p>
+      <p className="font-bold text-xl">{value}</p>
+    </div>
+  );
+}
+
+function Recommendation({ text }: any) {
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex justify-between items-center">
+      <span className="font-semibold">{text}</span>
+      <span className="text-violet-700 font-bold">Add</span>
     </div>
   );
 }
 
 function StatusBadge({ status }: any) {
   const styles: any = {
-    approved: "bg-green-500/10 text-green-500",
-    pending: "bg-yellow-500/10 text-yellow-500",
-    expired: "bg-red-500/10 text-red-500",
-    rejected: "bg-red-500/10 text-red-500",
+    approved: "bg-green-100 text-green-700",
+    pending: "bg-yellow-100 text-yellow-700",
+    expired: "bg-red-100 text-red-700",
+    rejected: "bg-red-100 text-red-700",
   };
 
   return (
-    <span className={`rounded-full px-3 py-1 text-xs ${styles[status] || "bg-blue-500/10 text-blue-500"}`}>
-      {status || "pending"}
+    <span
+      className={`px-3 py-1 rounded-full text-xs font-bold ${
+        styles[status] || "bg-violet-100 text-violet-700"
+      }`}
+    >
+      {status}
     </span>
   );
 }
 
 function formatDate(date: string) {
   if (!date) return "Unknown";
-  return new Date(date).toLocaleString();
+  return new Date(date).toLocaleDateString();
 }

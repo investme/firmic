@@ -1,13 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import FirmicSidebar from "../components/FirmicSidebar";
 import { aiAgents } from "../src/data/aiAgents";
 import { pricing, toAED } from "../src/data/pricing";
-import FirmicSidebar from "../components/FirmicSidebar";
+import { getOffices } from "../services/api";
+
+type Office = {
+  id: number;
+  office_code: string;
+  location?: string;
+  status: string;
+  monthly_price_usd?: number;
+};
 
 export default function Dashboard() {
+  const [office, setOffice] = useState<Office | null>(null);
+  const [loadingOffice, setLoadingOffice] = useState(true);
+
   const activeAgents = aiAgents.slice(0, 7);
+  const officePrice = office?.monthly_price_usd || pricing.officeRental.usd;
 
   const monthlyUsd =
-    pricing.officeRental.usd +
+    officePrice +
     pricing.mailbox.usd +
     pricing.voip.usd +
     pricing.zoom.usd +
@@ -18,23 +31,48 @@ export default function Dashboard() {
   const taxUsd = monthlyUsd * 0.05;
   const totalUsd = monthlyUsd + taxUsd;
 
+  useEffect(() => {
+    loadOffice();
+  }, []);
+
+  async function loadOffice() {
+    try {
+      setLoadingOffice(true);
+      const offices = await getOffices();
+
+      const rentedOffice = offices.find(
+        (item: Office) => item.status === "rented"
+      );
+
+      setOffice(rentedOffice || null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingOffice(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Dashboard" />
 
       <main className="flex-1 p-6 xl:p-8">
-        <Topbar />
+        <Topbar office={office} loadingOffice={loadingOffice} />
 
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-6">
           <div className="space-y-6">
-            <OfficeCard />
+            <OfficeCard office={office} loadingOffice={loadingOffice} />
             <AIWorkforce />
             <AddonGrid />
             <BottomGrid />
           </div>
 
           <div className="space-y-6">
-            <BillingSummary totalUsd={totalUsd} taxUsd={taxUsd} />
+            <BillingSummary
+              totalUsd={totalUsd}
+              taxUsd={taxUsd}
+              officePrice={officePrice}
+            />
             <QuickActions />
             <HelpCard />
           </div>
@@ -44,7 +82,15 @@ export default function Dashboard() {
   );
 }
 
-function Topbar() {
+function Topbar({
+  office,
+  loadingOffice,
+}: {
+  office: Office | null;
+  loadingOffice: boolean;
+}) {
+  const officeCode = office?.office_code || "No Office";
+
   return (
     <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
       <div>
@@ -66,50 +112,79 @@ function Topbar() {
         </a>
 
         <div className="bg-white border border-slate-200 rounded-2xl px-5 py-3 shadow-sm">
-          <p className="text-sm font-bold">Office A047</p>
-          <p className="text-xs text-slate-500">● Active</p>
+          <p className="text-sm font-bold">
+            {loadingOffice ? "Loading Office..." : `Office ${officeCode}`}
+          </p>
+          <p className="text-xs text-slate-500">
+            {office ? "● Active" : "No rented office yet"}
+          </p>
         </div>
       </div>
     </header>
   );
 }
 
-function OfficeCard() {
+function OfficeCard({
+  office,
+  loadingOffice,
+}: {
+  office: Office | null;
+  loadingOffice: boolean;
+}) {
+  const officeCode = office?.office_code || "Not Selected";
+  const officeLocation = office?.location || "Rent an office to activate Firmic";
+  const officePrice = office?.monthly_price_usd || pricing.officeRental.usd;
+
   return (
     <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
       <div className="flex justify-between items-start">
         <h3 className="text-xl font-bold">My Virtual Office</h3>
         <a
-          href="/my-office"
+          href={office ? "/my-office" : "/virtual-offices"}
           className="border border-slate-200 px-4 py-2 rounded-xl font-semibold"
         >
-          View Office Details
+          {office ? "View Office Details" : "Rent Office"}
         </a>
       </div>
 
-      <div className="mt-5 flex flex-col lg:flex-row gap-6 items-center lg:items-start">
-        <div className="w-full lg:w-56 h-36 rounded-2xl bg-gradient-to-br from-sky-100 to-violet-100 flex items-center justify-center text-6xl">
-          🏢
-        </div>
-
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold">Office A047</h2>
-            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold">
-              Active
-            </span>
+      {loadingOffice ? (
+        <div className="mt-5 text-slate-500">Loading office from backend...</div>
+      ) : (
+        <div className="mt-5 flex flex-col lg:flex-row gap-6 items-center lg:items-start">
+          <div className="w-full lg:w-56 h-36 rounded-2xl bg-gradient-to-br from-sky-100 to-violet-100 flex items-center justify-center text-6xl">
+            🏢
           </div>
 
-          <p className="text-slate-500 mt-2">📍 Business Bay, Dubai, UAE</p>
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold">Office {officeCode}</h2>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mt-6">
-            <Mini title="Mailbox" value="Active" icon="📬" />
-            <Mini title="VoIP Number" value="+971 4 XXX 047" icon="☎️" />
-            <Mini title="Office Plan" value="Premium" icon="⭐" />
-            <Mini title="Joined On" value="May 12, 2025" icon="📅" />
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  office
+                    ? "bg-green-100 text-green-700"
+                    : "bg-yellow-100 text-yellow-700"
+                }`}
+              >
+                {office ? "Active" : "Not Active"}
+              </span>
+            </div>
+
+            <p className="text-slate-500 mt-2">📍 {officeLocation}</p>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mt-6">
+              <Mini title="Mailbox" value="Active" icon="📬" />
+              <Mini title="VoIP Number" value="+971 4 XXX 047" icon="☎️" />
+              <Mini
+                title="Office Rental"
+                value={`$${officePrice}/mo`}
+                icon="💰"
+              />
+              <Mini title="Office Plan" value="Premium" icon="⭐" />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </section>
   );
 }
@@ -307,14 +382,16 @@ function BottomGrid() {
 function BillingSummary({
   totalUsd,
   taxUsd,
+  officePrice,
 }: {
   totalUsd: number;
   taxUsd: number;
+  officePrice: number;
 }) {
   const agentTotal = aiAgents.slice(0, 7).reduce((s, a) => s + a.price, 0);
 
   const rows = [
-    ["Office Rental", pricing.officeRental.usd, "monthly"],
+    ["Office Rental", officePrice, "monthly"],
     ["AI Employees (7)", agentTotal, "monthly"],
     ["Mailbox", pricing.mailbox.usd, "monthly"],
     ["VoIP Number", pricing.voip.usd, "monthly"],

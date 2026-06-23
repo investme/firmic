@@ -18,31 +18,37 @@ export default function FirmicSidebar({ active = "Dashboard" }: Props) {
     ["Reports", "/reports"],
     ["Integrations", "/integrations"],
     ["Sonny AI", "/sonny"],
+    ["Hermes", "/hermes"],
+    ["Company", "/company"],
+    ["Companies", "/companies"],
+    ["Documents", "/documents"],
+    ["Tasks", "/tasks"],
+    ["Create Company", "/create-company"],
   ];
 
   return (
-    <aside className="hidden xl:flex w-[240px] bg-slate-950 text-white min-h-screen flex-col">
-      <div className="p-5 border-b border-slate-900">
-        <div className="flex items-center gap-3">
-          <div className="h-12 w-12 rounded-2xl bg-violet-600 flex items-center justify-center text-xl">
+    <aside className="hidden xl:flex w-[220px] bg-slate-950 text-white min-h-screen flex-col">
+      <div className="p-3 border-b border-slate-900">
+        <div className="flex items-center gap-2">
+          <div className="h-9 w-9 rounded-xl bg-violet-600 flex items-center justify-center text-sm">
             ◆
           </div>
 
           <div>
-            <h1 className="text-3xl font-bold">Firmic</h1>
-            <p className="text-slate-400 text-sm">
-              The Shopify of Business Infrastructure.
+            <h1 className="text-2xl font-bold leading-tight">Firmic</h1>
+            <p className="text-slate-400 text-xs leading-tight">
+              Business Infrastructure.
             </p>
           </div>
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-2 space-y-0.5">
         {items.map(([name, href]) => (
           <a
             key={name}
             href={href}
-            className={`block px-5 py-4 rounded-2xl font-medium transition ${
+            className={`block px-4 py-2 rounded-lg text-sm font-medium transition ${
               active === name
                 ? "bg-gradient-to-r from-violet-700 to-fuchsia-500 text-white"
                 : "text-slate-300 hover:bg-slate-900"
@@ -52,20 +58,6 @@ export default function FirmicSidebar({ active = "Dashboard" }: Props) {
           </a>
         ))}
       </nav>
-
-      <div className="p-4 border-t border-slate-900">
-        <div className="rounded-3xl bg-slate-900 p-5">
-          <h3 className="font-bold">Upgrade Your Plan</h3>
-
-          <p className="text-xs text-slate-400 mt-2">
-            Unlock more AI employees and premium business services.
-          </p>
-
-          <button className="mt-4 w-full bg-violet-600 hover:bg-violet-700 py-3 rounded-xl font-bold">
-            Upgrade 🚀
-          </button>
-        </div>
-      </div>
     </aside>
   );
 }

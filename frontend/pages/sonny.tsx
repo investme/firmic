@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
+import { getSonny } from "../services/api";
 
 const agents = [
   ["Receptionist AI", "Active", "18 calls answered", "☎️"],
@@ -10,7 +12,7 @@ const agents = [
   ["Marketing AI", "Active", "2 campaigns published", "🎯"],
 ];
 
-const activity = [
+const fallbackActivity = [
   "10:42 · Receptionist AI answered a sales inquiry",
   "10:15 · Sales AI created a CRM lead",
   "09:58 · Mailbox AI scanned a new document",
@@ -19,19 +21,84 @@ const activity = [
 ];
 
 export default function SonnyAI() {
+  const [sonny, setSonny] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [command, setCommand] = useState("");
+
+  useEffect(() => {
+    loadSonny();
+  }, []);
+
+  async function loadSonny() {
+    try {
+      setLoading(true);
+
+      const companyId = localStorage.getItem("company_id");
+
+      if (!companyId) {
+        setSonny(null);
+        return;
+      }
+
+      const data = await getSonny(companyId);
+      setSonny(data);
+    } catch (err) {
+      console.error(err);
+      setSonny(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleCommand() {
+    if (!command.trim()) {
+      alert("Type a command for Sonny first.");
+      return;
+    }
+
+    alert(`Sonny received: ${command}`);
+    setCommand("");
+  }
+
+  const health = sonny?.health_score || sonny?.health || 96;
+  const workflows = sonny?.workflows || sonny?.workflow_count || 28;
+  const alerts = sonny?.alerts || sonny?.alert_count || 3;
+  const responseTime = sonny?.response_time || "1.2s";
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Sonny AI" />
 
       <main className="flex-1 p-6 xl:p-8">
-        <header>
-          <h1 className="text-3xl font-bold text-slate-950">
-            Sonny AI Control Center
-          </h1>
-          <p className="text-slate-500 mt-1">
-            Monitor, command, and coordinate your AI workforce from one place.
-          </p>
+        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-950">
+              Sonny AI Control Center
+            </h1>
+            <p className="text-slate-500 mt-1">
+              Monitor, command, and coordinate your AI workforce from one place.
+            </p>
+          </div>
+
+          <button
+            onClick={loadSonny}
+            className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold"
+          >
+            Refresh Sonny
+          </button>
         </header>
+
+        {loading && (
+          <div className="mt-8 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm text-slate-500">
+            Loading Sonny from backend...
+          </div>
+        )}
+
+        {!loading && !sonny && (
+          <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 shadow-sm text-yellow-700">
+            Sonny backend data not found yet. Showing demo operating data.
+          </div>
+        )}
 
         <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
           <Stat title="Active AI Agents" value="7" icon="🤖" />
@@ -47,20 +114,37 @@ export default function SonnyAI() {
 
               <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-5">
                 <textarea
+                  value={command}
+                  onChange={(e) => setCommand(e.target.value)}
                   className="w-full bg-transparent outline-none min-h-[120px]"
                   placeholder="Ask Sonny anything about your company..."
                 />
 
-                <button className="mt-4 bg-violet-600 text-white px-6 py-3 rounded-xl font-bold">
+                <button
+                  onClick={handleCommand}
+                  className="mt-4 bg-violet-600 text-white px-6 py-3 rounded-xl font-bold"
+                >
                   Send Command
                 </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
-                <Prompt text="Summarize today’s company activity" />
-                <Prompt text="Show CRM pipeline health" />
-                <Prompt text="Book a meeting room tomorrow" />
-                <Prompt text="Recommend my next AI hire" />
+                <Prompt
+                  text="Summarize today’s company activity"
+                  onClick={() => setCommand("Summarize today’s company activity")}
+                />
+                <Prompt
+                  text="Show CRM pipeline health"
+                  onClick={() => setCommand("Show CRM pipeline health")}
+                />
+                <Prompt
+                  text="Book a meeting room tomorrow"
+                  onClick={() => setCommand("Book a meeting room tomorrow")}
+                />
+                <Prompt
+                  text="Recommend my next AI hire"
+                  onClick={() => setCommand("Recommend my next AI hire")}
+                />
               </div>
             </div>
 
@@ -102,10 +186,10 @@ export default function SonnyAI() {
               </p>
 
               <div className="grid grid-cols-2 gap-3 mt-5">
-                <Mini title="Health" value="96%" />
-                <Mini title="Response" value="1.2s" />
-                <Mini title="Workflows" value="28" />
-                <Mini title="Alerts" value="3" />
+                <Mini title="Health" value={`${health}%`} />
+                <Mini title="Response" value={String(responseTime)} />
+                <Mini title="Workflows" value={String(workflows)} />
+                <Mini title="Alerts" value={String(alerts)} />
               </div>
             </div>
 
@@ -113,7 +197,7 @@ export default function SonnyAI() {
               <h2 className="text-xl font-bold">Live Activity</h2>
 
               <div className="mt-5 space-y-3">
-                {activity.map((item) => (
+                {fallbackActivity.map((item) => (
                   <div
                     key={item}
                     className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-semibold"
@@ -151,9 +235,12 @@ function Stat({ title, value, icon }: any) {
   );
 }
 
-function Prompt({ text }: any) {
+function Prompt({ text, onClick }: any) {
   return (
-    <button className="text-left bg-white border border-slate-200 rounded-2xl p-4 font-semibold hover:border-violet-500">
+    <button
+      onClick={onClick}
+      className="text-left bg-white border border-slate-200 rounded-2xl p-4 font-semibold hover:border-violet-500"
+    >
       {text}
     </button>
   );

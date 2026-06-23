@@ -55,7 +55,6 @@ export default function VirtualOffices() {
       });
 
       alert("Office rented successfully.");
-
       await loadOffices();
     } catch (err: any) {
       alert(err.message || "Failed to rent office");
@@ -63,6 +62,10 @@ export default function VirtualOffices() {
       setRentingId(null);
     }
   }
+
+  const availableOffices = offices
+    .filter((office) => office.status === "available")
+    .slice(0, 40);
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -90,6 +93,7 @@ export default function VirtualOffices() {
 
         <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
           <Stat title="Total Offices" value="1,000" icon="🏢" />
+
           <Stat
             title="Available"
             value={String(
@@ -97,6 +101,7 @@ export default function VirtualOffices() {
             )}
             icon="✅"
           />
+
           <Stat
             title="Rented"
             value={String(
@@ -104,6 +109,7 @@ export default function VirtualOffices() {
             )}
             icon="🔒"
           />
+
           <Stat title="Starting Price" value="$99/mo" icon="💰" />
         </section>
 
@@ -121,8 +127,7 @@ export default function VirtualOffices() {
 
         {!loading && !error && (
           <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-8">
-            {offices.slice(0, 40).map((office) => {
-              const available = office.status === "available";
+            {availableOffices.map((office) => {
               const isRenting = rentingId === office.id;
 
               return (
@@ -145,22 +150,18 @@ export default function VirtualOffices() {
                       </p>
                     </div>
 
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-bold ${
-                        available
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {available ? "Available" : "Rented"}
+                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                      Available
                     </span>
                   </div>
 
                   <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-4">
                     <p className="text-sm text-slate-500">Monthly Rental</p>
+
                     <p className="font-bold">
                       ${office.monthly_price_usd}/mo
                     </p>
+
                     <p className="font-bold text-slate-500">
                       AED {toAED(office.monthly_price_usd)}/mo
                     </p>
@@ -175,18 +176,10 @@ export default function VirtualOffices() {
 
                   <button
                     onClick={() => handleRentOffice(office.id)}
-                    disabled={!available || isRenting}
-                    className={`w-full mt-5 py-3 rounded-xl font-bold ${
-                      available
-                        ? "bg-violet-600 text-white"
-                        : "bg-slate-200 text-slate-500 cursor-not-allowed"
-                    }`}
+                    disabled={isRenting}
+                    className="w-full mt-5 py-3 rounded-xl font-bold bg-violet-600 text-white disabled:bg-slate-300 disabled:text-slate-500"
                   >
-                    {isRenting
-                      ? "Renting..."
-                      : available
-                      ? "Rent Office"
-                      : "Already Rented"}
+                    {isRenting ? "Renting..." : "Rent Office"}
                   </button>
                 </div>
               );

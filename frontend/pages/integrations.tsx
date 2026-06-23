@@ -1,6 +1,7 @@
+import { useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 
-const integrations = [
+const initialIntegrations = [
   {
     name: "OpenAI",
     status: "Connected",
@@ -64,73 +65,92 @@ const integrations = [
 ];
 
 export default function Integrations() {
+  const [integrations, setIntegrations] = useState(initialIntegrations);
+  const [notice, setNotice] = useState("");
+
+  const connectedCount = integrations.filter(
+    (item) => item.status === "Connected"
+  ).length;
+
+  const availableCount = integrations.filter(
+    (item) => item.status !== "Connected"
+  ).length;
+
+  function showNotice(message: string) {
+    setNotice(message);
+    setTimeout(() => setNotice(""), 3000);
+  }
+
+  function connectIntegration(name: string) {
+    setIntegrations((current) =>
+      current.map((item) =>
+        item.name === name ? { ...item, status: "Connected" } : item
+      )
+    );
+
+    showNotice(`${name} connected successfully.`);
+  }
+
+  function manageIntegration(name: string) {
+    showNotice(`${name} integration is active and ready to manage.`);
+  }
+
+  function handleIntegrationClick(item: any) {
+    if (item.status === "Connected") {
+      manageIntegration(item.name);
+    } else {
+      connectIntegration(item.name);
+    }
+  }
+
+  function connectRecommended(name: string) {
+    connectIntegration(name);
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Integrations" />
 
       <main className="flex-1 p-6 xl:p-8">
-
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">
-              Integrations
-            </h1>
+            <h1 className="text-3xl font-bold">Integrations</h1>
 
             <p className="text-slate-500 mt-1">
               Connect Firmic with your existing business stack.
             </p>
           </div>
 
-          <button className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold">
+          <button
+            onClick={() => showNotice("Marketplace browsing is enabled for this MVP.")}
+            className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold"
+          >
             Browse Marketplace
           </button>
         </div>
 
-        {/* Stats */}
+        {notice && (
+          <div className="mt-6 bg-green-50 border border-green-200 text-green-700 rounded-2xl p-4 font-bold">
+            {notice}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
-
-          <Stat
-            title="Connected"
-            value="6"
-            icon="🔗"
-          />
-
-          <Stat
-            title="Available"
-            value="25"
-            icon="⚡"
-          />
-
-          <Stat
-            title="Sync Health"
-            value="99%"
-            icon="✅"
-          />
-
-          <Stat
-            title="Last Sync"
-            value="2 Min"
-            icon="🔄"
-          />
-
+          <Stat title="Connected" value={String(connectedCount)} icon="🔗" />
+          <Stat title="Available" value={String(availableCount)} icon="⚡" />
+          <Stat title="Sync Health" value="99%" icon="✅" />
+          <Stat title="Last Sync" value="2 Min" icon="🔄" />
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6 mt-8">
-
-          {/* Integrations Grid */}
-
           <div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-
               {integrations.map((item) => (
                 <div
                   key={item.name}
                   className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm"
                 >
                   <div className="flex justify-between items-center">
-
                     <div className="h-14 w-14 rounded-2xl bg-violet-100 flex items-center justify-center text-2xl">
                       ⚙️
                     </div>
@@ -144,97 +164,81 @@ export default function Integrations() {
                     >
                       {item.status}
                     </span>
-
                   </div>
 
-                  <h3 className="text-xl font-bold mt-5">
-                    {item.name}
-                  </h3>
+                  <h3 className="text-xl font-bold mt-5">{item.name}</h3>
 
-                  <p className="text-slate-500 text-sm mt-2">
+                  <p className="text-slate-500 text-sm mt-2 min-h-[40px]">
                     {item.desc}
                   </p>
 
                   <button
+                    onClick={() => handleIntegrationClick(item)}
                     className={`w-full mt-6 py-3 rounded-xl font-bold ${
                       item.status === "Connected"
-                        ? "border border-slate-200"
+                        ? "border border-slate-200 bg-white"
                         : "bg-violet-600 text-white"
                     }`}
                   >
-                    {item.status === "Connected"
-                      ? "Manage"
-                      : "Connect"}
+                    {item.status === "Connected" ? "Manage" : "Connect"}
                   </button>
-
                 </div>
               ))}
-
             </div>
-
           </div>
 
-          {/* Right Panel */}
-
           <div className="space-y-6">
-
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-
-              <h2 className="text-xl font-bold">
-                Integration Health
-              </h2>
+              <h2 className="text-xl font-bold">Integration Health</h2>
 
               <div className="space-y-4 mt-5">
+                {integrations
+                  .filter((item) => item.status === "Connected")
+                  .slice(0, 6)
+                  .map((item) => (
+                    <Health
+                      key={item.name}
+                      name={item.name}
+                      status="Healthy"
+                      color="green"
+                    />
+                  ))}
 
-                <Health
-                  name="OpenAI"
-                  status="Healthy"
-                  color="green"
-                />
-
-                <Health
-                  name="Microsoft 365"
-                  status="Healthy"
-                  color="green"
-                />
-
-                <Health
-                  name="Zoom"
-                  status="Healthy"
-                  color="green"
-                />
-
-                <Health
-                  name="Slack"
-                  status="Warning"
-                  color="yellow"
-                />
-
+                {connectedCount === 0 && (
+                  <p className="text-sm text-slate-500">
+                    No connected integrations yet.
+                  </p>
+                )}
               </div>
-
             </div>
 
             <div className="bg-violet-600 text-white rounded-3xl p-6 shadow-sm">
-
-              <h2 className="text-xl font-bold">
-                Recommended
-              </h2>
+              <h2 className="text-xl font-bold">Recommended</h2>
 
               <div className="space-y-3 mt-5">
+                <Recommendation
+                  text="Connect HubSpot CRM"
+                  onClick={() => connectRecommended("HubSpot")}
+                />
 
-                <Recommendation text="Connect HubSpot CRM" />
-                <Recommendation text="Connect Slack" />
-                <Recommendation text="Connect QuickBooks" />
-                <Recommendation text="Connect Google Workspace" />
+                <Recommendation
+                  text="Connect Slack"
+                  onClick={() => connectRecommended("Slack")}
+                />
 
+                <Recommendation
+                  text="Connect QuickBooks"
+                  onClick={() => connectRecommended("QuickBooks")}
+                />
+
+                <Recommendation
+                  text="Connect Google Workspace"
+                  onClick={() => connectRecommended("Google Workspace")}
+                />
               </div>
-
             </div>
-
           </div>
-
         </div>
-
       </main>
     </div>
   );
@@ -286,12 +290,18 @@ function Health({
 
 function Recommendation({
   text,
+  onClick,
 }: {
   text: string;
+  onClick: () => void;
 }) {
   return (
-    <div className="bg-white/10 rounded-xl p-3 font-medium">
-      ✓ {text}
-    </div>
+    <button
+      onClick={onClick}
+      className="w-full bg-white/10 rounded-xl p-3 font-medium text-left flex justify-between items-center"
+    >
+      <span>✓ {text}</span>
+      <span className="font-bold">Connect</span>
+    </button>
   );
 }
