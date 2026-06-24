@@ -5,7 +5,7 @@ import {
   createTask,
   updateTaskStatus,
   deleteTask,
-} from "../services/api";
+} from "../services/taskApi";
 
 export default function Tasks() {
   const [tasks, setTasks] = useState<any[]>([]);

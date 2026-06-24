@@ -4,7 +4,7 @@ import {
   getDocuments,
   createDocument,
   deleteDocument,
-} from "../services/api";
+} from "../services/documentApi";
 
 export default function Documents() {
   const [documents, setDocuments] = useState<any[]>([]);

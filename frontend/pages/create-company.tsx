@@ -1,6 +1,6 @@
 import { useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
-import { createCompany } from "../services/api";
+import { createCompany } from "../services/companyApi";
 
 export default function CreateCompany() {
   const [name, setName] = useState("");

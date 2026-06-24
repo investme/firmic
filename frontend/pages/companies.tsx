@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
-import { getCompanies } from "../services/api";
+import { getCompanies } from "../services/companyApi";
 
 export default function Companies() {
   const [companies, setCompanies] = useState<any[]>([]);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
-import { getOffices, rentOffice } from "../services/api";
+import { getOffices, rentOffice } from "../services/officeApi";
 
 type Office = {
   id: number;
@@ -49,10 +49,18 @@ export default function VirtualOffices() {
         return;
       }
 
-      await rentOffice({
-        office_id: officeId,
-        company_id: companyId,
-      });
+const selectedOffice = offices.find((office) => office.id === officeId);
+
+if (!selectedOffice) {
+  alert("Office not found.");
+  return;
+}
+
+await rentOffice({
+  office_id: officeId,
+  office_code: selectedOffice.office_code,
+  company_id: companyId,
+});
 
       alert("Office rented successfully.");
       await loadOffices();

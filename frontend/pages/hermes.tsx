@@ -1,44 +1,17 @@
 import { useEffect, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
-import { getHermes } from "../services/api";
-
-const requirements = [
-  {
-    name: "Trade License",
-    status: "Complete",
-    owner: "Hermes",
-    icon: "📄",
-  },
-  {
-    name: "Office Lease / Virtual Office Agreement",
-    status: "Complete",
-    owner: "Hermes",
-    icon: "🏢",
-  },
-  {
-    name: "Beneficial Owner Declaration",
-    status: "Review",
-    owner: "Legal AI",
-    icon: "👤",
-  },
-  {
-    name: "KYC / KYB Documents",
-    status: "Pending",
-    owner: "Hermes",
-    icon: "🛡️",
-  },
-];
-
-const alerts = [
-  "Beneficial owner declaration needs review",
-  "KYB document package is missing one file",
-  "Virtual office agreement renewal due in 28 days",
-  "Compliance score improved by 12% this week",
-];
+import { getHermes } from "../services/hermesApi";
+import { getCompanyDocuments } from "../services/documentApi";
+import { getCompanyTasks } from "../services/taskApi";
+import { getProgress } from "../services/sonnyApi";
 
 export default function HermesCompliance() {
   const [hermes, setHermes] = useState<any>(null);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [progress, setProgress] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     loadHermes();
@@ -52,11 +25,24 @@ export default function HermesCompliance() {
 
       if (!companyId) {
         setHermes(null);
+        setDocuments([]);
+        setTasks([]);
+        setProgress(null);
         return;
       }
 
-      const data = await getHermes(companyId);
-      setHermes(data);
+      const [hermesData, documentData, taskData, progressData] =
+        await Promise.all([
+          getHermes(companyId),
+          getCompanyDocuments(companyId),
+          getCompanyTasks(companyId),
+          getProgress(companyId),
+        ]);
+
+      setHermes(hermesData);
+      setDocuments(documentData);
+      setTasks(taskData);
+      setProgress(progressData);
     } catch (err) {
       console.error(err);
       setHermes(null);
@@ -65,9 +51,92 @@ export default function HermesCompliance() {
     }
   }
 
-  const score = hermes?.score || hermes?.compliance_score || 78;
-  const risk = hermes?.risk_level || "Medium";
-  const status = hermes?.status || "Monitoring";
+  function showNotice(message: string) {
+    setNotice(message);
+    setTimeout(() => setNotice(""), 3000);
+  }
+
+  const hasTradeLicense = documents.some((doc) =>
+    `${doc.name || ""} ${doc.type || ""}`.toLowerCase().includes("trade")
+  );
+
+  const hasKYB = documents.some((doc) =>
+    `${doc.name || ""} ${doc.type || ""}`.toLowerCase().includes("kyb")
+  );
+
+  const hasContract = documents.some((doc) =>
+    `${doc.name || ""} ${doc.type || ""}`.toLowerCase().includes("contract")
+  );
+
+  const approvedDocs = documents.filter(
+    (doc) => doc.status === "approved"
+  ).length;
+
+  const completedTasks = tasks.filter(
+    (task) => task.status === "completed"
+  ).length;
+
+  const pendingTasks = tasks.length - completedTasks;
+
+  const dynamicRequirements = [
+    {
+      name: "Trade License",
+      status: hasTradeLicense ? "Complete" : "Pending",
+      owner: "Hermes",
+      icon: "📄",
+    },
+    {
+      name: "Office Lease / Virtual Office Agreement",
+      status: "Complete",
+      owner: "Hermes",
+      icon: "🏢",
+    },
+    {
+      name: "Beneficial Owner Declaration",
+      status: hasContract ? "Review" : "Pending",
+      owner: "Legal AI",
+      icon: "👤",
+    },
+    {
+      name: "KYC / KYB Documents",
+      status: hasKYB ? "Complete" : "Pending",
+      owner: "Hermes",
+      icon: "🛡️",
+    },
+  ];
+
+  const completedRequirements = dynamicRequirements.filter(
+    (item) => item.status === "Complete"
+  ).length;
+
+  const fallbackScore = Math.round(
+    (completedRequirements / dynamicRequirements.length) * 100
+  );
+
+  const score =
+    hermes?.score ||
+    hermes?.compliance_score ||
+    fallbackScore;
+
+  const risk =
+    score >= 80 ? "Low" : score >= 50 ? "Medium" : "High";
+
+  const status =
+    hermes?.status ||
+    (score >= 80 ? "Ready" : "Monitoring");
+
+  const dynamicAlerts = [
+    !hasTradeLicense ? "Trade license document is missing" : "",
+    !hasKYB ? "KYB document package is missing" : "",
+    pendingTasks > 0 ? `${pendingTasks} compliance-related tasks still pending` : "",
+    score < 70 ? "Compliance score needs improvement before production launch" : "",
+  ].filter(Boolean);
+
+  const openAlerts = dynamicAlerts.length;
+
+  function handleAction(action: string) {
+    showNotice(`${action} action queued for Hermes.`);
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -80,7 +149,8 @@ export default function HermesCompliance() {
               Hermes Compliance Center
             </h1>
             <p className="text-slate-500 mt-1">
-              Monitor company compliance, KYB, documents, risk alerts, and regulatory readiness.
+              Monitor company compliance, KYB, documents, risk alerts, and
+              regulatory readiness.
             </p>
           </div>
 
@@ -92,6 +162,12 @@ export default function HermesCompliance() {
           </button>
         </header>
 
+        {notice && (
+          <div className="mt-6 bg-green-50 border border-green-200 text-green-700 rounded-2xl p-4 font-bold">
+            {notice}
+          </div>
+        )}
+
         {loading && (
           <div className="mt-8 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm text-slate-500">
             Loading Hermes from backend...
@@ -100,7 +176,8 @@ export default function HermesCompliance() {
 
         {!loading && !hermes && (
           <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 shadow-sm text-yellow-700">
-            Hermes backend data not found yet. Showing demo compliance data.
+            Hermes backend data not found yet. Using company documents and
+            tasks to estimate compliance.
           </div>
         )}
 
@@ -108,7 +185,7 @@ export default function HermesCompliance() {
           <Stat title="Compliance Score" value={`${score}%`} icon="🛡️" />
           <Stat title="Risk Level" value={risk} icon="⚠️" />
           <Stat title="Status" value={status} icon="✅" />
-          <Stat title="Open Alerts" value="3" icon="🔔" />
+          <Stat title="Open Alerts" value={String(openAlerts)} icon="🔔" />
         </section>
 
         <section className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-8">
@@ -126,7 +203,8 @@ export default function HermesCompliance() {
                   <div>
                     <p className="font-bold">Overall Compliance Progress</p>
                     <p className="text-sm text-slate-500">
-                      Hermes is monitoring your company formation, virtual office, and KYB stack.
+                      Hermes is monitoring {documents.length} documents,{" "}
+                      {tasks.length} tasks, and company readiness.
                     </p>
                   </div>
 
@@ -146,7 +224,7 @@ export default function HermesCompliance() {
               <h2 className="text-xl font-bold">Compliance Requirements</h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
-                {requirements.map((item) => (
+                {dynamicRequirements.map((item) => (
                   <div
                     key={item.name}
                     className="bg-slate-50 border border-slate-200 rounded-2xl p-4"
@@ -176,14 +254,20 @@ export default function HermesCompliance() {
               <h2 className="text-xl font-bold">Hermes Activity</h2>
 
               <div className="mt-5 space-y-3">
-                {alerts.map((item) => (
-                  <div
-                    key={item}
-                    className="bg-slate-50 border border-slate-200 rounded-2xl p-4 font-semibold"
-                  >
-                    {item}
+                {dynamicAlerts.length === 0 ? (
+                  <div className="bg-green-50 border border-green-200 text-green-700 rounded-2xl p-4 font-semibold">
+                    No major compliance alerts. Hermes is monitoring normally.
                   </div>
-                ))}
+                ) : (
+                  dynamicAlerts.map((item) => (
+                    <div
+                      key={item}
+                      className="bg-slate-50 border border-slate-200 rounded-2xl p-4 font-semibold"
+                    >
+                      {item}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -193,15 +277,15 @@ export default function HermesCompliance() {
               <h2 className="text-xl font-bold">Hermes Overview</h2>
 
               <p className="text-violet-100 text-sm mt-2">
-                Hermes protects your company by monitoring compliance gaps, document readiness,
-                risk exposure, and regulatory obligations.
+                Hermes protects your company by monitoring compliance gaps,
+                document readiness, risk exposure, and regulatory obligations.
               </p>
 
               <div className="grid grid-cols-2 gap-3 mt-5">
-                <Mini title="KYB" value="72%" />
-                <Mini title="Docs" value="8/10" />
+                <Mini title="KYB" value={hasKYB ? "Ready" : "Missing"} />
+                <Mini title="Docs" value={`${approvedDocs}/${documents.length}`} />
                 <Mini title="Risk" value={risk} />
-                <Mini title="Alerts" value="3" />
+                <Mini title="Tasks" value={String(pendingTasks)} />
               </div>
             </div>
 
@@ -209,9 +293,18 @@ export default function HermesCompliance() {
               <h2 className="text-xl font-bold">Risk Notes</h2>
 
               <div className="mt-5 space-y-3">
-                <Risk text="Missing KYB document may delay onboarding." />
-                <Risk text="Beneficial owner declaration requires human review." />
-                <Risk text="Virtual office renewal should be completed before expiry." />
+                {!hasKYB && (
+                  <Risk text="Missing KYB document may delay onboarding." />
+                )}
+                {!hasTradeLicense && (
+                  <Risk text="Trade license document is not uploaded yet." />
+                )}
+                {pendingTasks > 0 && (
+                  <Risk text={`${pendingTasks} tasks should be completed to improve readiness.`} />
+                )}
+                {score >= 80 && (
+                  <Risk text="Compliance posture is strong. Continue monitoring." />
+                )}
               </div>
             </div>
 
@@ -219,10 +312,24 @@ export default function HermesCompliance() {
               <h2 className="text-xl font-bold">Recommended Actions</h2>
 
               <div className="mt-5 space-y-3">
-                <Action text="Upload KYB Documents" />
-                <Action text="Review Beneficial Owner Declaration" />
-                <Action text="Generate Compliance Report" />
-                <Action text="Schedule Legal AI Review" />
+                <Action
+                  text="Upload KYB Documents"
+                  onClick={() => handleAction("Upload KYB Documents")}
+                />
+                <Action
+                  text="Review Beneficial Owner Declaration"
+                  onClick={() =>
+                    handleAction("Review Beneficial Owner Declaration")
+                  }
+                />
+                <Action
+                  text="Generate Compliance Report"
+                  onClick={() => handleAction("Generate Compliance Report")}
+                />
+                <Action
+                  text="Schedule Legal AI Review"
+                  onClick={() => handleAction("Schedule Legal AI Review")}
+                />
               </div>
             </div>
           </div>
@@ -274,11 +381,13 @@ function Risk({ text }: any) {
   );
 }
 
-function Action({ text }: any) {
+function Action({ text, onClick }: any) {
   return (
     <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex justify-between items-center">
       <span className="font-semibold">{text}</span>
-      <button className="text-violet-700 font-bold">Apply</button>
+      <button onClick={onClick} className="text-violet-700 font-bold">
+        Apply
+      </button>
     </div>
   );
 }

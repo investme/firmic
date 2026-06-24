@@ -1,16 +1,21 @@
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
+import { getCompanies } from "../services/companyApi";
+
 import {
-  getCompanies,
   getCompanyDocuments,
+} from "../services/documentApi";
+
+import {
   getCompanyTasks,
+  updateTaskStatus,
+} from "../services/taskApi";
+
+import {
   getSonny,
   getProgress,
-  getHermes,
-  getOffices,
-  updateTaskStatus,
-} from "../services/api";
+} from "../services/sonnyApi";
 
 export default function CompanyControlCenter() {
   const router = useRouter();

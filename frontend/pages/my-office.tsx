@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import { pricing, toAED } from "../src/data/pricing";
-import { getOffices } from "../services/api";
+import { getOffices } from "../services/officeApi";
 
 type Office = {
   id: number;

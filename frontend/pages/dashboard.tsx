@@ -2,7 +2,16 @@ import { useEffect, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import { aiAgents } from "../src/data/aiAgents";
 import { pricing, toAED } from "../src/data/pricing";
-import { getOffices } from "../services/api";
+import { getOffices } from "../services/officeApi";
+
+import {
+  getSonny,
+  getProgress,
+} from "../services/sonnyApi";
+
+import {
+  getHermes,
+} from "../services/hermesApi";
 
 type Office = {
   id: number;
