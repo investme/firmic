@@ -1,5 +1,6 @@
 import { useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 const users = [
   {
@@ -79,6 +80,7 @@ export default function Microsoft365() {
   const [selectedUser, setSelectedUser] = useState(users[0]);
 
   return (
+     <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Microsoft 365" />
 
@@ -257,6 +259,7 @@ export default function Microsoft365() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

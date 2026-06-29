@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import { pricing, toAED } from "../src/data/pricing";
 import { getOffices } from "../services/officeApi";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 type Office = {
   id: number;
@@ -52,6 +53,7 @@ export default function MyOffice() {
   const officePrice = office?.monthly_price_usd || pricing.officeRental.usd;
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="My Office" />
 
@@ -249,6 +251,7 @@ export default function MyOffice() {
         )}
       </main>
     </div>
+   </ProtectedRoute> 
   );
 }
 

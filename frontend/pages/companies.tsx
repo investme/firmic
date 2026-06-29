@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import { getCompanies } from "../services/companyApi";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 export default function Companies() {
   const [companies, setCompanies] = useState<any[]>([]);
@@ -61,6 +62,7 @@ export default function Companies() {
   ).length;
 
   return (
+     <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Companies" />
 
@@ -202,6 +204,7 @@ export default function Companies() {
         )}
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

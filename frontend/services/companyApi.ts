@@ -1,14 +1,24 @@
 import { API_URL } from "./config";
 
+function getAuthHeaders() {
+  const token = localStorage.getItem("firmic_token");
+
+  if (!token) {
+    throw new Error("Not authenticated. Please log in first.");
+  }
+
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 export async function createCompany(data: {
   name: string;
-  user_id: string;
 }) {
   const res = await fetch(`${API_URL}/api/company/create`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -22,7 +32,9 @@ export async function createCompany(data: {
 }
 
 export async function getCompanies() {
-  const res = await fetch(`${API_URL}/api/company/list`);
+  const res = await fetch(`${API_URL}/api/company/list`, {
+    headers: getAuthHeaders(),
+  });
 
   if (!res.ok) {
     throw new Error("Failed to load companies");

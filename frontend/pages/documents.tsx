@@ -5,6 +5,7 @@ import {
   createDocument,
   deleteDocument,
 } from "../services/documentApi";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 export default function Documents() {
   const [documents, setDocuments] = useState<any[]>([]);
@@ -107,6 +108,7 @@ export default function Documents() {
   ).length;
 
   return (
+     <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Documents" />
 
@@ -309,6 +311,7 @@ export default function Documents() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

@@ -1,23 +1,25 @@
 import { useState } from "react";
-import { loginUser } from "../services/authApi";
+import { registerUser } from "../services/authApi";
 
-export default function Login() {
+export default function Register() {
+  const [fullName, setFullName] = useState("Hussein Matar");
   const [email, setEmail] = useState("hussein@firmic.io");
   const [password, setPassword] = useState("password123");
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin() {
+  async function handleRegister() {
     try {
       setLoading(true);
 
-      await loginUser({
+      await registerUser({
+        full_name: fullName,
         email,
         password,
       });
 
       window.location.href = "/dashboard";
     } catch (err: any) {
-      alert(err.message || "Login failed");
+      alert(err.message || "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -31,14 +33,24 @@ export default function Login() {
             ◆
           </div>
 
-          <h1 className="text-3xl font-bold mt-5">Login to Firmic</h1>
+          <h1 className="text-3xl font-bold mt-5">Create Firmic Account</h1>
 
           <p className="text-slate-500 mt-2">
-            Access your AI-native business operating system.
+            Start building your AI-native business infrastructure.
           </p>
         </div>
 
         <div className="space-y-5 mt-8">
+          <div>
+            <label className="text-sm font-semibold">Full Name</label>
+            <input
+              className="w-full mt-2 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-violet-500"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Your name"
+            />
+          </div>
+
           <div>
             <label className="text-sm font-semibold">Email</label>
             <input
@@ -61,17 +73,17 @@ export default function Login() {
           </div>
 
           <button
-            onClick={handleLogin}
-            disabled={loading || !email || !password}
+            onClick={handleRegister}
+            disabled={loading || !fullName || !email || !password}
             className="w-full bg-violet-600 text-white py-4 rounded-xl font-bold disabled:bg-slate-300"
           >
-            {loading ? "Logging in..." : "Login"}
+            {loading ? "Creating account..." : "Create Account"}
           </button>
 
           <p className="text-center text-sm text-slate-500">
-            New to Firmic?{" "}
-            <a href="/register" className="text-violet-700 font-bold">
-              Create account
+            Already have an account?{" "}
+            <a href="/login" className="text-violet-700 font-bold">
+              Login
             </a>
           </p>
         </div>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 const leads = [
   {
@@ -59,6 +60,7 @@ export default function CRM() {
     .reduce((sum, lead) => sum + lead.value, 0);
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="CRM" />
 
@@ -191,6 +193,7 @@ export default function CRM() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

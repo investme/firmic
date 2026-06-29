@@ -1,6 +1,7 @@
 import { useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import { toAED } from "../src/data/pricing";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 const rooms = [
   {
@@ -41,6 +42,7 @@ export default function MeetingRooms() {
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Meeting Rooms" />
 
@@ -174,6 +176,7 @@ export default function MeetingRooms() {
         </div>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

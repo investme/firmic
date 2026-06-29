@@ -3,15 +3,9 @@ import FirmicSidebar from "../components/FirmicSidebar";
 import { aiAgents } from "../src/data/aiAgents";
 import { pricing, toAED } from "../src/data/pricing";
 import { getOffices } from "../services/officeApi";
+import ProtectedRoute from "../components/ProtectedRoute";
 
-import {
-  getSonny,
-  getProgress,
-} from "../services/sonnyApi";
 
-import {
-  getHermes,
-} from "../services/hermesApi";
 
 type Office = {
   id: number;
@@ -47,6 +41,7 @@ export default function Dashboard() {
   async function loadOffice() {
     try {
       setLoadingOffice(true);
+
       const offices = await getOffices();
 
       const rentedOffice = offices.find(
@@ -62,32 +57,34 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      <FirmicSidebar active="Dashboard" />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-slate-50 flex">
+        <FirmicSidebar active="Dashboard" />
 
-      <main className="flex-1 p-6 xl:p-8">
-        <Topbar office={office} loadingOffice={loadingOffice} />
+        <main className="flex-1 p-6 xl:p-8">
+          <Topbar office={office} loadingOffice={loadingOffice} />
 
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-6">
-          <div className="space-y-6">
-            <OfficeCard office={office} loadingOffice={loadingOffice} />
-            <AIWorkforce />
-            <AddonGrid />
-            <BottomGrid />
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-6">
+            <div className="space-y-6">
+              <OfficeCard office={office} loadingOffice={loadingOffice} />
+              <AIWorkforce />
+              <AddonGrid />
+              <BottomGrid />
+            </div>
+
+            <div className="space-y-6">
+              <BillingSummary
+                totalUsd={totalUsd}
+                taxUsd={taxUsd}
+                officePrice={officePrice}
+              />
+              <QuickActions />
+              <HelpCard />
+            </div>
           </div>
-
-          <div className="space-y-6">
-            <BillingSummary
-              totalUsd={totalUsd}
-              taxUsd={taxUsd}
-              officePrice={officePrice}
-            />
-            <QuickActions />
-            <HelpCard />
-          </div>
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </ProtectedRoute>
   );
 }
 

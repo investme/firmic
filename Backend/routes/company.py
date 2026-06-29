@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from schemas.company import CompanyCreate
 from models.company import Company
 from services.workflow_engine import run_company_workflow
+from auth import get_token_payload
 import uuid
 import threading
 
@@ -19,10 +20,22 @@ def get_db():
 
 
 @router.post("/create")
-def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
+def create_company(
+    payload: CompanyCreate,
+    token: dict = Depends(get_token_payload),
+    db: Session = Depends(get_db),
+):
+    user_id = token.get("sub")
+
+    if not user_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized",
+        )
+
     company = Company(
         id=str(uuid.uuid4()),
-        user_id=payload.user_id,
+        user_id=str(user_id),
         name=payload.name,
         status="initiated",
     )
@@ -49,8 +62,23 @@ def create_company(payload: CompanyCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/list")
-def list_companies(db: Session = Depends(get_db)):
-    companies = db.query(Company).all()
+def list_companies(
+    token: dict = Depends(get_token_payload),
+    db: Session = Depends(get_db),
+):
+    user_id = token.get("sub")
+
+    if not user_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized",
+        )
+
+    companies = (
+        db.query(Company)
+        .filter(Company.user_id == str(user_id))
+        .all()
+    )
 
     return [
         {

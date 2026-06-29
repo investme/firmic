@@ -2,6 +2,7 @@ import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import { getCompanies } from "../services/companyApi";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 import {
   getCompanyDocuments,
@@ -118,6 +119,7 @@ export default function CompanyControlCenter() {
   const officeLocation = office?.location || "No office selected";
 
   return (
+     <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Company" />
 
@@ -301,6 +303,7 @@ export default function CompanyControlCenter() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

@@ -6,6 +6,7 @@ import {
   updateTaskStatus,
   deleteTask,
 } from "../services/taskApi";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 export default function Tasks() {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -78,6 +79,7 @@ export default function Tasks() {
   const pending = tasks.length - completed;
 
   return (
+     <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Tasks" />
 
@@ -192,6 +194,7 @@ export default function Tasks() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

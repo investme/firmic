@@ -1,11 +1,12 @@
 import { useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import { createCompany } from "../services/companyApi";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 export default function CreateCompany() {
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("Technology");
-  const [jurisdiction, setJurisdiction] = useState("Dubai");
+  const [jurisdiction, setJurisdiction] = useState("Abu Dhabi");
   const [plan, setPlan] = useState("Premium");
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +21,6 @@ export default function CreateCompany() {
 
       const res = await createCompany({
         name,
-        user_id: "demo-user",
       });
 
       const companyId = res?.company?.id || res?.id;
@@ -43,6 +43,7 @@ export default function CreateCompany() {
   }
 
   return (
+     <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Create Company" />
 
@@ -100,18 +101,37 @@ export default function CreateCompany() {
               </div>
 
               <div>
-                <label className="text-sm font-semibold">Jurisdiction</label>
-                <select
-                  value={jurisdiction}
-                  onChange={(e) => setJurisdiction(e.target.value)}
-                  className="w-full mt-2 border border-slate-200 rounded-xl px-5 py-4 outline-none focus:border-violet-500"
-                >
-                  <option>Dubai</option>
-                  <option>RAK</option>
-                  <option>Qatar</option>
-                  <option>UAE Mainland</option>
-                </select>
-              </div>
+               <label className="text-sm font-semibold">Select Jurisdiction</label>
+              <select
+                value={jurisdiction}
+                onChange={(e) => setJurisdiction(e.target.value)}
+                className="w-full mt-2 border border-slate-200 rounded-xl px-5 py-4 outline-none focus:border-violet-500"
+              >
+                <option value="Abu Dhabi">🇦🇪 Abu Dhabi</option>
+                <option value="Dubai">🇦🇪 Dubai</option>
+                <option value="Ras Al Khaimah">🇦🇪 Ras Al Khaimah</option>
+                <option value="UAE Mainland">🇦🇪 UAE Mainland</option>
+                <option value="Qatar">🇶🇦 Qatar</option>
+                <option value="Saudi Arabia" disabled>
+                  🇸🇦 Saudi Arabia (Coming Soon)
+                </option>
+                <option value="Bahrain" disabled>
+                  🇧🇭 Bahrain (Coming Soon)
+                </option>
+                <option value="Oman" disabled>
+                  🇴🇲 Oman (Coming Soon)
+                </option>
+                <option value="Singapore" disabled>
+                  🇸🇬 Singapore (Coming Soon)
+                </option>
+                <option value="United Kingdom" disabled>
+                  🇬🇧 United Kingdom (Coming Soon)
+                </option>
+                <option value="United States" disabled>
+                  🇺🇸 United States (Coming Soon)
+                </option>
+              </select>
+            </div>
 
               <div>
                 <label className="text-sm font-semibold">Plan</label>
@@ -178,6 +198,7 @@ export default function CreateCompany() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

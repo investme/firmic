@@ -1,0 +1,215 @@
+Describe in 280 characters what problem you are solving and how *
+
+Traditional providers offer office infrastructure. Firmic provides AI-powered operational infrastructure including virtual offices, communications, software, compliance, reporting, and AI employees through a single platform, enabling companies to launch, operate, and scale from day one.
+
+
+
+What are you building and how is it different than what is already out there? *
+Solution and unique value proposition. If relevant, please list and describe any IP that is associated with your company
+
+Firmic is the Operating System for AI-Native Companies. We provide AI powered operational infrastructure that enables businesses to launch, operate, and scale from a single platform.
+
+Traditional providers such as Regus and Servcorp offer office infrastructure. Firmic goes beyond this by combining virtual offices, communications, compliance, document management, reporting, software integrations, and an AI workforce into one unified operating system.
+
+Through Firmic, a company can create a workspace, rent a virtual office, manage documents and tasks, monitor compliance, generate reports, connect business software, and deploy AI employees from day one.
+
+Our long term vision is to build a coordinated AI workforce managed through Sonny, our AI operations orchestrator, and Hermes, our compliance and governance engine. These systems will coordinate specialized AI agents across operations, sales, support, finance, legal, compliance, and administration.
+
+Our intellectual property is centered around the Firmic platform architecture, including the AI workforce orchestration layer, compliance intelligence workflows, business infrastructure management system, and the integration framework that connects virtual office services with AI driven business operations.
+
+
+
+What makes your team special and how are you best positioned to solve this problem?
+You can share your team's background, and inspiration behind your startup
+Firmic was born from a simple observation: starting and operating a company remains fragmented, expensive, and operationally complex. Entrepreneurs often spend significant time coordinating office providers, compliance requirements, communications, software tools, and administrative workflows instead of focusing on growth.
+
+As the founder, I have spent years building and studying technology, startups, business infrastructure, and AI driven systems. Through that experience, I identified an opportunity to rethink how modern companies are launched and operated. Rather than providing another isolated software tool, Firmic aims to become the operating system that brings together business infrastructure, compliance, communications, software, and AI workforce management into a single platform.
+
+What positions us uniquely is that we are not approaching the problem from a traditional office services perspective or a standalone software perspective. We are combining both. Traditional providers offer infrastructure, while software providers offer individual tools. Firmic connects these worlds through AI powered operational infrastructure.
+
+We have already built a functioning MVP that includes company workspaces, virtual offices, document management, task management, reporting, compliance monitoring through Hermes, and operational coordination through Sonny AI. This hands on execution and deep focus on the problem gives us a strong foundation to continue building the future of AI native business infrastructure.
+
+
+
+
+Who is responsible for building your product? *
+(e.g., an in-house CTO, internal tech team, or external tech team)
+The product is currently being built in house by the founder. I am responsible for the product vision, architecture, business strategy, and overall development of the platform.
+
+Firmic's MVP has been developed through a founder led approach, covering frontend development, backend architecture, workflow design, AI systems integration, and product management.
+
+As the company grows, we plan to expand the team by bringing on dedicated engineering, AI, product, and operations talent. However, at this stage, product development, platform architecture, and execution remain founder driven, enabling rapid iteration and close alignment between customer needs and product development.
+
+
+
+
+
+
+Who are the (co-)founders and what are their roles? Please add all of their Linked In URLs. *
+Please list down all (co-)founders, their full names, roles, nationalities, and each of their Linked In profiles
+Hussein Matar
+Role: Founder & CEO
+Nationality: Canadian/Lebanese
+LinkedIn: www.linkedin.com/in/ellianaxhang9899
+
+Responsibilities:
+
+* Product Vision
+* Business Strategy
+* Platform Architecture
+* AI Product Development
+* Operations & Partnerships
+
+
+
+
+
+
+What is the 'Why Now' for your business? *
+Why is this the right time for you to solve this problem using this solution, and why is this a good time for you to be in Abu Dhabi and the MENA region
+The timing for Firmic is driven by the convergence of three major trends. First, AI systems are rapidly evolving from productivity tools into capable digital workers that can perform operational tasks across sales, support, compliance, administration, and business operations. Second, businesses are increasingly remote-first and digital-first, creating demand for infrastructure that can be accessed and managed from anywhere. Third, company formation, compliance, communications, and business services are becoming increasingly digitized.
+
+Despite these shifts, entrepreneurs still rely on fragmented providers for virtual offices, compliance, software, communications, and operations. We believe the next generation of companies will launch with AI employees from day one and will require a unified operating system rather than a collection of disconnected services.
+
+Abu Dhabi and the wider MENA region are uniquely positioned for this transformation. Governments across the region are actively investing in AI, digital transformation, entrepreneurship, and business friendly regulatory environments. Hub71 and Abu Dhabi have established themselves as global leaders in supporting AI driven innovation and technology startups.
+
+Firmic aligns closely with this vision by enabling entrepreneurs to launch, operate, and scale companies through a single platform. As we expand, we also see significant opportunities to integrate with regulated company formation providers, compliance services, and business infrastructure partners across the UAE and the broader MENA region, making Abu Dhabi an ideal base for growth.
+
+
+
+
+
+How much have you raised to date? (in USD)*
+eg. $1,000,000.00
+
+
+
+
+
+
+
+
+
+Who are some notable investors? *
+Please specify any institutional investors on your cap table, and the amounts invested by each
+Firmic has not raised any external funding to date. The company has been bootstrapped by the founder, and there are currently no institutional investors or external investors on the cap table.
+
+
+
+
+
+
+
+
+Have you gone through any incubator or accelerator program(s), if so which one(s)?
+No. Firmic has not previously participated in any incubator or accelerator program.
+
+The company has been developed independently through a founder led, bootstrapped approach, resulting in a functioning MVP that includes virtual office infrastructure, company management, compliance monitoring, reporting, and AI powered operational workflows.
+
+
+
+
+
+
+
+What are your plans for Abu Dhabi and Hub71 specifically? *
+Describe what you plan to achieve in your first 3 months at Hub71, and how you plan to achieve it
+During our first three months at Hub71, our primary objective would be to transition Firmic from a completed MVP into a market ready platform while validating demand with founders, startups, and SMEs across the UAE and MENA region.
+
+Our key priorities would be:
+
+1. Customer Discovery and Validation:
+Work closely with Hub71 founders, startups, and ecosystem partners to validate the Firmic value proposition, gather user feedback, and identify the highest priority operational pain points that businesses face when launching and managing companies.
+
+2. Product Enhancement: 
+Use feedback from early users to strengthen the platform, including authentication, multi-tenant security, workflow automation, and the expansion of our AI workforce architecture. We also plan to further develop Sonny (operations orchestration) and Hermes (compliance intelligence).
+
+3. Strategic Partnerships: 
+Establish relationships with virtual office providers, compliance specialists, company formation providers, and business service partners across Abu Dhabi and the UAE. Our goal is to integrate regulated business infrastructure services into the Firmic platform.
+
+4. Pilot Customers: 
+Onboard an initial group of pilot companies to validate product market fit, measure engagement, and refine our business model.
+
+5. Fundraising Readiness: 
+Leverage Hub71's mentorship, network, and investor ecosystem to prepare Firmic for future fundraising by strengthening our goto market strategy, growth plan, and operational metrics.
+
+Abu Dhabi is an ideal environment for Firmic because of its leadership in AI, digital transformation, entrepreneurship, and innovation. We believe Hub71 provides the ecosystem, mentorship, partnerships, and strategic support necessary to accelerate the development of the operating system for AI native companies.
+
+
+
+
+Next Session: Finalize Firmic Deployment
+
+We'll treat it like a production launch checklist.
+
+Phase 1 — Production Infrastructure
+Deploy the FastAPI backend
+Deploy the React/Next.js frontend
+Configure firmic.io
+Configure SSL (HTTPS)
+Configure production environment variables
+Set up production database
+Verify CORS
+Run end-to-end tests
+
+Phase 2 — Production Quality
+Final UI polish
+Loading states
+Error handling
+Empty states
+Mobile responsiveness
+Performance optimization
+
+Phase 3 — Security
+Authentication
+User accounts
+Multi-tenant architecture
+Company isolation
+Role-based permissions
+Production secrets
+
+Phase 4 — Hub71 Demo Build
+
+We'll prepare the exact flow for your demo:
+
+Landing page
+Create Company
+Rent Virtual Office
+Company Control Center
+AI Workforce
+Sonny AI
+Hermes
+Reports
+Integrations
+
+Everything will flow smoothly without any dead ends.
+
+Phase 5 — Investor Readiness
+Final Pitch Deck
+Business Plan
+One-pager
+Product screenshots
+Demo script
+User manual
+Hub71 submission review
+
+Phase 6 — Production Release
+
+We'll verify that every module is production-ready:
+
+Dashboard
+Virtual Offices
+Company
+Documents
+Tasks
+Messages
+Reports
+Integrations
+Sonny
+Hermes
+Billing
+CRM
+Mailbox
+VoIP
+Microsoft 365
+Meeting Rooms

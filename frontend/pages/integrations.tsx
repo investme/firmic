@@ -1,5 +1,6 @@
 import { useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 const initialIntegrations = [
   {
@@ -108,6 +109,7 @@ export default function Integrations() {
   }
 
   return (
+     <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Integrations" />
 
@@ -241,6 +243,7 @@ export default function Integrations() {
         </div>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

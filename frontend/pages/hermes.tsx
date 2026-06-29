@@ -4,6 +4,7 @@ import { getHermes } from "../services/hermesApi";
 import { getCompanyDocuments } from "../services/documentApi";
 import { getCompanyTasks } from "../services/taskApi";
 import { getProgress } from "../services/sonnyApi";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 export default function HermesCompliance() {
   const [hermes, setHermes] = useState<any>(null);
@@ -139,6 +140,7 @@ export default function HermesCompliance() {
   }
 
   return (
+     <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Hermes" />
 
@@ -336,6 +338,7 @@ export default function HermesCompliance() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

@@ -3,6 +3,7 @@ import FirmicSidebar from "../components/FirmicSidebar";
 import { getSonny, getProgress } from "../services/sonnyApi";
 import { getCompanyTasks, createTask } from "../services/taskApi";
 import { getCompanyDocuments } from "../services/documentApi";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 const agents = [
   ["Receptionist AI", "Active", "Calls and inquiries", "☎️"],
@@ -152,6 +153,7 @@ export default function SonnyAI() {
   ];
 
   return (
+     <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Sonny AI" />
 
@@ -318,6 +320,7 @@ export default function SonnyAI() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

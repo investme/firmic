@@ -1,5 +1,6 @@
 import { useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 const mailItems = [
   {
@@ -44,6 +45,7 @@ export default function Mailbox() {
   const [selectedMail, setSelectedMail] = useState(mailItems[0]);
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Mailbox" />
 
@@ -174,6 +176,7 @@ export default function Mailbox() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

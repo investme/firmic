@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import { getOffices, rentOffice } from "../services/officeApi";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 type Office = {
   id: number;
@@ -76,7 +77,8 @@ await rentOffice({
     .slice(0, 40);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <ProtectedRoute>
+     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Virtual Offices" />
 
       <main className="flex-1 p-6 xl:p-8">
@@ -196,7 +198,8 @@ await rentOffice({
         )}
       </main>
     </div>
-  );
+  </ProtectedRoute>
+ );
 }
 
 function Stat({

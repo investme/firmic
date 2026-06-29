@@ -1,5 +1,6 @@
 import { useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 const messages = [
   {
@@ -76,6 +77,7 @@ export default function Messages() {
   ).length;
 
   return (
+     <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Messages" />
 
@@ -201,6 +203,7 @@ export default function Messages() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

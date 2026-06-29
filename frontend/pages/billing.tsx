@@ -1,6 +1,7 @@
 import { aiAgents } from "../src/data/aiAgents";
 import FirmicSidebar from "../components/FirmicSidebar";
 import { pricing, toAED } from "../src/data/pricing";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 const activeAgents = aiAgents.slice(0, 7);
 
@@ -22,6 +23,7 @@ export default function Billing() {
   const total = subtotal + tax;
 
   return (
+     <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="Billing & Invoices" />
 
@@ -147,6 +149,7 @@ export default function Billing() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

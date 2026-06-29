@@ -2,6 +2,7 @@ import { useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import { aiAgents } from "../src/data/aiAgents";
 import { toAED } from "../src/data/pricing";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 export default function AIWorkforcePage() {
   const [selectedAgents, setSelectedAgents] = useState<string[]>(
@@ -21,6 +22,7 @@ export default function AIWorkforcePage() {
     .reduce((sum, agent) => sum + agent.price, 0);
 
   return (
+    <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
       <FirmicSidebar active="AI Workforce" />
 
@@ -126,6 +128,7 @@ export default function AIWorkforcePage() {
         </section>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }
 

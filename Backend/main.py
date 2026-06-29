@@ -11,6 +11,7 @@ from routes import sonny
 from routes import workflow
 from routes import progress
 from routes import hermes
+from routes import auth
 
 from api.offices import router as offices_router
 
@@ -57,6 +58,13 @@ app.include_router(sonny.router, prefix="/api/sonny")
 app.include_router(workflow.router, prefix="/api/workflow")
 app.include_router(progress.router, prefix="/api/progress")
 app.include_router(hermes.router, prefix="/api/hermes")
+app.include_router(
+    auth.router,
+    prefix="/api/auth",
+    tags=["Authentication"],
+)
+app.include_router(company.router, prefix="/api/company")
+app.include_router(document.router, prefix="/api/document")
 app.include_router(offices_router)
 
 @app.get("/")
@@ -69,4 +77,9 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "app": "Firmic Backend",
+        "status": "running",
+        "version": "1.1.0",
+        "authentication": "enabled",
+    }
