@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
 from models.company import Company, Document, Task
+from auth import get_token_payload
 
 router = APIRouter()
 
@@ -15,12 +16,30 @@ def get_db():
         db.close()
 
 
-@router.get("/company/{company_id}")
-def sonny_company_brief(company_id: str, db: Session = Depends(get_db)):
-    company = db.query(Company).filter(Company.id == company_id).first()
+def verify_company_access(company_id: str, user_id: str, db: Session):
+    company = (
+        db.query(Company)
+        .filter(
+            Company.id == company_id,
+            Company.user_id == str(user_id),
+        )
+        .first()
+    )
 
     if not company:
-        return {"error": "Company not found"}
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return company
+
+
+@router.get("/company/{company_id}")
+def sonny_company_brief(
+    company_id: str,
+    token: dict = Depends(get_token_payload),
+    db: Session = Depends(get_db),
+):
+    user_id = token.get("sub")
+    company = verify_company_access(company_id, user_id, db)
 
     documents = db.query(Document).filter(Document.company_id == company_id).all()
     tasks = db.query(Task).filter(Task.company_id == company_id).all()
@@ -33,7 +52,9 @@ def sonny_company_brief(company_id: str, db: Session = Depends(get_db)):
 
     if len(documents) == 0:
         alerts.append("No documents uploaded for this virtual office.")
-        recommendations.append("Upload the company trade license or incorporation document.")
+        recommendations.append(
+            "Upload the company trade license or incorporation document."
+        )
 
     if len(pending_tasks) > 0:
         alerts.append(f"{len(pending_tasks)} task(s) are still pending.")

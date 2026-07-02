@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
-from models.company import Task
+from models.company import Company, Task
+from auth import get_token_payload
 
 router = APIRouter()
 
@@ -15,14 +16,37 @@ def get_db():
         db.close()
 
 
+def verify_company_access(company_id: str, user_id: str, db: Session):
+    company = (
+        db.query(Company)
+        .filter(
+            Company.id == company_id,
+            Company.user_id == str(user_id),
+        )
+        .first()
+    )
+
+    if not company:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return company
+
+
 @router.get("/company/{company_id}")
 def company_progress(
     company_id: str,
-    db: Session = Depends(get_db)
+    token: dict = Depends(get_token_payload),
+    db: Session = Depends(get_db),
 ):
-    tasks = db.query(Task).filter(
-        Task.company_id == company_id
-    ).all()
+    user_id = token.get("sub")
+
+    verify_company_access(company_id, user_id, db)
+
+    tasks = (
+        db.query(Task)
+        .filter(Task.company_id == company_id)
+        .all()
+    )
 
     total_tasks = len(tasks)
 

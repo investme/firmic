@@ -49,7 +49,7 @@ export default function MyOffice() {
   }
 
   const officeCode = office?.office_code || "A047";
-  const officeLocation = office?.location || "Business Bay, Dubai, UAE";
+  const officeLocation = office?.location || "Hub71, Abu Dhba, UAE";
   const officePrice = office?.monthly_price_usd || pricing.officeRental.usd;
 
   return (
@@ -180,7 +180,7 @@ export default function MyOffice() {
 
               <Service
                 title="VoIP Number"
-                desc="Dubai business number answered by AI receptionist."
+                desc="Abu Dhabi business number answered by AI receptionist."
                 usd={pricing.voip.usd}
                 icon="☎️"
               />

@@ -4,12 +4,15 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from firmic_models import Office
+from models.company import Company
+from auth import get_token_payload
 
 router = APIRouter(prefix="/api/offices", tags=["Offices"])
 
 
 class RentOfficeRequest(BaseModel):
     office_code: str
+    company_id: str
 
 
 @router.get("")
@@ -37,7 +40,25 @@ def get_offices(db: Session = Depends(get_db)):
 
 
 @router.post("/rent")
-def rent_office(payload: RentOfficeRequest, db: Session = Depends(get_db)):
+def rent_office(
+    payload: RentOfficeRequest,
+    token: dict = Depends(get_token_payload),
+    db: Session = Depends(get_db),
+):
+    user_id = token.get("sub")
+
+    company = (
+        db.query(Company)
+        .filter(
+            Company.id == payload.company_id,
+            Company.user_id == str(user_id),
+        )
+        .first()
+    )
+
+    if not company:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     office = (
         db.query(Office)
         .filter(Office.office_code == payload.office_code)
@@ -58,4 +79,5 @@ def rent_office(payload: RentOfficeRequest, db: Session = Depends(get_db)):
     return {
         "message": "Office rented successfully",
         "office": office,
+        "company_id": payload.company_id,
     }

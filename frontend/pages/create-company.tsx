@@ -3,6 +3,7 @@ import FirmicSidebar from "../components/FirmicSidebar";
 import { createCompany } from "../services/companyApi";
 import ProtectedRoute from "../components/ProtectedRoute";
 
+
 export default function CreateCompany() {
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("Technology");

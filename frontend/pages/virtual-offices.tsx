@@ -58,7 +58,6 @@ if (!selectedOffice) {
 }
 
 await rentOffice({
-  office_id: officeId,
   office_code: selectedOffice.office_code,
   company_id: companyId,
 });
@@ -89,7 +88,7 @@ await rentOffice({
             </h1>
 
             <p className="text-slate-500 mt-1">
-              Rent a Dubai virtual office and activate business infrastructure.
+              Rent an Abu Dhabi virtual office and activate business infrastructure.
             </p>
           </div>
 

@@ -1,5 +1,14 @@
 import { API_URL } from "./config";
 
+function getAuthHeaders() {
+  const token = localStorage.getItem("firmic_token");
+
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 export async function getOffices() {
   const res = await fetch(`${API_URL}/api/offices`);
 
@@ -11,15 +20,12 @@ export async function getOffices() {
 }
 
 export async function rentOffice(data: {
-  office_id: number;
   office_code: string;
   company_id: string;
 }) {
   const res = await fetch(`${API_URL}/api/offices/rent`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
 
