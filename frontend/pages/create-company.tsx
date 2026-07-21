@@ -2,6 +2,7 @@ import { useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import { createCompany } from "../services/companyApi";
 import ProtectedRoute from "../components/ProtectedRoute";
+import { saveActiveWorkspace } from "../src/utils/workspaceContext";
 
 
 export default function CreateCompany() {
@@ -32,7 +33,21 @@ export default function CreateCompany() {
         return;
       }
 
-      localStorage.setItem("company_id", String(companyId));
+      const savedWorkspace = saveActiveWorkspace({
+        id: String(companyId),
+        name: res?.company?.name || name.trim(),
+        industry,
+        jurisdiction,
+        plan,
+        status: res?.company?.status || "initiated",
+        headquarters: null,
+      });
+
+      if (!savedWorkspace) {
+        throw new Error(
+          "The company was created, but the workspace could not be activated."
+        );
+      }
 
       window.location.href = `/company?id=${companyId}`;
     } catch (err) {
@@ -46,7 +61,7 @@ export default function CreateCompany() {
   return (
      <ProtectedRoute>
     <div className="min-h-screen bg-slate-50 flex">
-      <FirmicSidebar active="Create Company" />
+      <FirmicSidebar />
 
       <main className="flex-1 p-6 xl:p-8">
         <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">

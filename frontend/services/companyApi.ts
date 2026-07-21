@@ -1,8 +1,11 @@
 import { API_URL } from "./config";
 
 function getAuthHeaders() {
-  const token = localStorage.getItem("firmic_token");
+  if (typeof window === "undefined") {
+    throw new Error("Authentication is only available in the browser.");
+  }
 
+  const token = localStorage.getItem("firmic_token");
   if (!token) {
     throw new Error("Not authenticated. Please log in first.");
   }
@@ -13,32 +16,64 @@ function getAuthHeaders() {
   };
 }
 
-export async function createCompany(data: {
-  name: string;
-}) {
-  const res = await fetch(`${API_URL}/api/company/create`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify(data),
-  });
+async function parseResponse(
+  response: Response,
+  fallbackMessage: string
+) {
+  const text = await response.text();
 
-  const text = await res.text();
+  if (!response.ok) {
+    let message = text || fallbackMessage;
 
-  if (!res.ok) {
-    throw new Error(text || "Failed to create company");
+    try {
+      const payload = text ? JSON.parse(text) : null;
+      message = payload?.detail || message;
+    } catch {
+      // Preserve plain response text.
+    }
+
+    throw new Error(message);
   }
 
   return text ? JSON.parse(text) : null;
 }
 
-export async function getCompanies() {
-  const res = await fetch(`${API_URL}/api/company/list`, {
+export async function createCompany(data: { name: string }) {
+  const response = await fetch(`${API_URL}/api/company/create`, {
+    method: "POST",
     headers: getAuthHeaders(),
+    body: JSON.stringify(data),
   });
 
-  if (!res.ok) {
-    throw new Error("Failed to load companies");
-  }
+  return parseResponse(response, "Failed to create company");
+}
 
-  return res.json();
+export async function getCompanies() {
+  const response = await fetch(`${API_URL}/api/company/list`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  });
+
+  return parseResponse(response, "Failed to load companies");
+}
+
+export async function getCompany(companyId: string) {
+  const response = await fetch(`${API_URL}/api/company/${companyId}`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  });
+
+  return parseResponse(response, "Failed to load company");
+}
+
+export async function terminateCompany(companyId: string) {
+  const response = await fetch(
+    `${API_URL}/api/company/${companyId}/terminate`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }
+  );
+
+  return parseResponse(response, "Failed to terminate company");
 }

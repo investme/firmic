@@ -8,7 +8,7 @@ import MeetingRooms from "./pages/MeetingRooms";
 import CRM from "./pages/CRM";
 import Microsoft365 from "./pages/Microsoft365";
 import Billing from "./pages/Billing";
-import Settings from "./pages/Settings";
+import Settings from "./pages/settings";
 import LandingPage from "./pages/LandingPage";
 import VirtualOffices from "./pages/VirtualOffices";
 import ConfigureOffice from "./pages/ConfigureOffice";

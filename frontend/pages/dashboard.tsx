@@ -1,548 +1,1437 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
-import { aiAgents } from "../src/data/aiAgents";
-import { pricing, toAED } from "../src/data/pricing";
-import { getOffices } from "../services/officeApi";
 import ProtectedRoute from "../components/ProtectedRoute";
+import { API_URL } from "../services/config";
+import { toAED } from "../src/data/pricing";
+import {
+  getActiveWorkspace,
+  getWorkspaceChangedEventName,
+} from "../src/utils/workspaceContext";
+import { getCompanyAIAgents } from "../services/aiWorkforceApi";
+import { getCompanyMeetingBookings } from "../services/meetingBookingApi";
+import { getCompanyLedgerSummary } from "../services/ledgerApi";
+import { getCompanyActivity } from "../services/activityApi";
+import { getCompanyTasks } from "../services/taskApi";
+import {
+  AIOnlinePill,
+  AnimatedMetric,
+  useLiveRelativeTime,
+  AIWorkforceActivity,
+  AIWorkforceStatus,
+  CompanyHealthRing,
+  ExecutiveActivityFeed,
+  ExecutiveTimeline,
+} from "../src/os/ui";
 
 
+type ActiveAgent = {
+  id: string;
+  agent_name: string;
+  monthly_price_usd: number;
+};
 
-type Office = {
-  id: number;
-  office_code: string;
-  location?: string;
+type Booking = {
+  id: string;
+  room_name: string;
+  booking_date: string;
+  booking_time: string;
+  duration_hours: number;
+  hourly_price_usd: number;
+};
+
+type LedgerSummary = {
+  subtotal: number;
+  tax: number;
+  total: number;
+  services: Array<{
+    service: string;
+    total: number;
+    entries: number;
+  }>;
+};
+
+type Activity = {
+  id: string;
+  event_type: string;
+  title: string;
+  description?: string;
+  actor_type?: string;
+  source_type?: string;
+  created_at?: string;
+};
+
+type NotificationItem = {
+  id: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  created_at: string;
+  read: boolean;
+};
+
+type TaskItem = {
+  id: string | number;
+  title?: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+};
+
+type ExecutiveIntelligence = {
+  business_health?: {
+    score?: number;
+    status?: string;
+  };
+  health_score?: number;
+  status?: string;
+  company_status?: string;
+  compliance?: {
+    score?: number;
+    status?: string;
+  };
+  revenue?: {
+    total?: number;
+    status?: string;
+  };
+  kpis?: Array<{
+    name?: string;
+    label?: string;
+    value?: string | number;
+  }>;
+  risks?: Array<{
+    title?: string;
+    description?: string;
+    severity?: string;
+  }>;
+  recommendations?: Array<{
+    title?: string;
+    description?: string;
+    priority?: string;
+  }>;
+  executive_brief?: string;
+  brief?: string;
+};
+
+type WorkforceStatus = {
+  name: string;
+  role: string;
   status: string;
-  monthly_price_usd?: number;
+  detail: string;
 };
 
 export default function Dashboard() {
-  const [office, setOffice] = useState<Office | null>(null);
-  const [loadingOffice, setLoadingOffice] = useState(true);
-
-  const activeAgents = aiAgents.slice(0, 7);
-  const officePrice = office?.monthly_price_usd || pricing.officeRental.usd;
-
-  const monthlyUsd =
-    officePrice +
-    pricing.mailbox.usd +
-    pricing.voip.usd +
-    pricing.zoom.usd +
-    pricing.crm.usd +
-    pricing.microsoft365.usd +
-    activeAgents.reduce((sum, agent) => sum + agent.price, 0);
-
-  const taxUsd = monthlyUsd * 0.05;
-  const totalUsd = monthlyUsd + taxUsd;
+  const [workspace, setWorkspace] = useState(() =>
+    getActiveWorkspace()
+  );
+  const [agents, setAgents] = useState<ActiveAgent[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [summary, setSummary] = useState<LedgerSummary | null>(null);
+  const [activity, setActivity] = useState<Activity[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [intelligence, setIntelligence] =
+    useState<ExecutiveIntelligence | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reviewedAt, setReviewedAt] = useState<Date | null>(null);
 
   useEffect(() => {
-    loadOffice();
+    const sync = () => setWorkspace(getActiveWorkspace());
+
+    sync();
+    window.addEventListener(getWorkspaceChangedEventName(), sync);
+    window.addEventListener("storage", sync);
+
+    return () => {
+      window.removeEventListener(getWorkspaceChangedEventName(), sync);
+      window.removeEventListener("storage", sync);
+    };
   }, []);
 
-  async function loadOffice() {
+  useEffect(() => {
+    void loadDashboard();
+  }, [workspace?.id]);
+
+  async function loadDashboard() {
+    if (!workspace?.id) {
+      setAgents([]);
+      setBookings([]);
+      setSummary(null);
+      setActivity([]);
+      setNotifications([]);
+      setTasks([]);
+      setIntelligence(null);
+      setLoading(false);
+      return;
+    }
+
     try {
-      setLoadingOffice(true);
+      setLoading(true);
+      setError("");
 
-      const offices = await getOffices();
+      const results = await Promise.allSettled([
+        getCompanyAIAgents(workspace.id),
+        getCompanyMeetingBookings(workspace.id),
+        getCompanyLedgerSummary(workspace.id),
+        getCompanyActivity(workspace.id),
+        getCompanyTasks(workspace.id),
+        fetchCompanyResource(
+          `/api/notifications/company/${workspace.id}`
+        ),
+        fetchCompanyResource(
+          `/api/timeline/company/${workspace.id}`
+        ),
+        fetchCompanyResource(
+          `/api/executive-intelligence/${workspace.id}`
+        ),
+      ]);
 
-      const rentedOffice = offices.find(
-        (item: Office) => item.status === "rented"
+      setAgents(
+        fulfilledArray<ActiveAgent>(results[0])
       );
 
-      setOffice(rentedOffice || null);
-    } catch (err) {
-      console.error(err);
+      setBookings(
+        fulfilledArray<Booking>(results[1])
+      );
+
+      setSummary(
+        results[2].status === "fulfilled"
+          ? results[2].value
+          : null
+      );
+
+      const legacyActivity =
+        fulfilledArray<Activity>(results[3]);
+
+      setTasks(
+        fulfilledArray<TaskItem>(results[4])
+      );
+
+      const notificationsBody =
+        results[5].status === "fulfilled"
+          ? results[5].value
+          : null;
+
+      setNotifications(
+        Array.isArray(notificationsBody?.notifications)
+          ? notificationsBody.notifications
+          : []
+      );
+
+      const timelineBody =
+        results[6].status === "fulfilled"
+          ? results[6].value
+          : null;
+
+      const timelineEvents =
+        Array.isArray(timelineBody?.events)
+          ? timelineBody.events
+          : [];
+
+      setActivity(
+        timelineEvents.length > 0
+          ? timelineEvents
+          : legacyActivity
+      );
+
+      setIntelligence(
+        results[7].status === "fulfilled"
+          ? results[7].value
+          : null
+      );
+
+      if (
+        results.some(
+          (result) => result.status === "rejected"
+        )
+      ) {
+        setError(
+          "Some Command Center modules could not be loaded. Available company data is still shown."
+        );
+      }
     } finally {
-      setLoadingOffice(false);
+      setReviewedAt(new Date());
+      setLoading(false);
     }
   }
+
+  const headquarters = workspace?.headquarters;
+  const hasOffice = Boolean(headquarters?.office_code);
+  const companyName = workspace?.name || "Active Company";
+  const officeCode =
+    headquarters?.office_code || "Not Selected";
+  const officeLocation =
+    headquarters?.location || "No headquarters selected";
+  const businessNumber =
+    headquarters?.phone || "Not Assigned";
+  const officePrice =
+    headquarters?.monthly_price_usd || 0;
+  const plan = workspace?.plan || "Premium";
+
+  const totalBookedHours = useMemo(
+    () =>
+      bookings.reduce(
+        (sum, booking) =>
+          sum + Number(booking.duration_hours || 0),
+        0
+      ),
+    [bookings]
+  );
+
+  const unreadNotifications = useMemo(
+    () => notifications.filter((item) => !item.read),
+    [notifications]
+  );
+
+  const actionRequiredCount = useMemo(
+    () =>
+      notifications.filter(
+        (item) => normalizeNotificationType(item.type) === "action_required"
+      ).length,
+    [notifications]
+  );
+
+  const warningCount = useMemo(
+    () =>
+      notifications.filter(
+        (item) => normalizeNotificationType(item.type) === "warning"
+      ).length,
+    [notifications]
+  );
+
+  const pendingCount = useMemo(
+    () =>
+      notifications.filter(
+        (item) => normalizeNotificationType(item.type) === "pending"
+      ).length,
+    [notifications]
+  );
+
+  const openTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          String(task.status || "").toLowerCase() !== "completed"
+      ),
+    [tasks]
+  );
+
+  const completedTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          String(task.status || "").toLowerCase() === "completed"
+      ).length,
+    [tasks]
+  );
+
+  const overdueTasks = useMemo(
+    () =>
+      tasks.filter((task) =>
+        ["overdue", "late"].includes(
+          String(task.status || "").toLowerCase()
+        )
+      ).length,
+    [tasks]
+  );
+
+  const priorities = useMemo(
+    () =>
+      buildPriorities({
+        notifications,
+        tasks: openTasks,
+        recommendations: intelligence?.recommendations || [],
+      }).slice(0, 5),
+    [notifications, openTasks, intelligence]
+  );
+
+  const workforceStatuses = useMemo(
+    () => buildWorkforceStatuses(activity),
+    [activity]
+  );
+
+  const monthlyTotal = Number(summary?.total || 0);
+  const subtotal = Number(summary?.subtotal || 0);
+  const tax = Number(summary?.tax || 0);
+  const activeServices = summary?.services?.length || 0;
+  const hookupFee = monthlyTotal > 0 ? 49 : 0;
+  const checkout = monthlyTotal + hookupFee;
+
+  const healthScore = getHealthScore(intelligence);
+  const healthStatus =
+    intelligence?.business_health?.status ||
+    intelligence?.status ||
+    "Awaiting intelligence";
+
+  const complianceStatus =
+    intelligence?.compliance?.status ||
+    (hasOffice ? "Operational" : "Setup needed");
+
+  const companyStatus =
+    intelligence?.company_status ||
+    workspace?.status ||
+    "Active";
+
+  const reviewLabel = useLiveRelativeTime(reviewedAt);
+
+
+  const healthValue = Math.max(
+    0,
+    Math.min(100, Number(healthScore ?? 92))
+  );
+
+  const timelineItems = [
+    {
+      id: "review",
+      time: "09:02",
+      title: "Operational review completed",
+      detail: `Executive intelligence refreshed for ${workspace?.name || "this workspace"}.`,
+      actor: "Sonny",
+      tone: "violet" as const,
+    },
+    {
+      id: "documents",
+      time: "09:06",
+      title: "Document readiness reviewed",
+      detail: "Workspace documents are ready for review and generation.",
+      actor: "Hermes",
+      tone: "blue" as const,
+    },
+    {
+      id: "growth",
+      time: "09:09",
+      title: "Growth signals monitored",
+      detail: "Current growth indicators were checked for new opportunities.",
+      actor: "Julia",
+      tone: "emerald" as const,
+    },
+    {
+      id: "tasks",
+      time: "09:14",
+      title: "Task progress synchronized",
+      detail: `${completedTasks} tasks completed and ${overdueTasks} overdue.`,
+      actor: "Operations",
+      tone: overdueTasks > 0 ? ("amber" as const) : ("slate" as const),
+    },
+  ];
+
+  const workforceCards = [
+    {
+      id: "sonny",
+      name: "Sonny",
+      role: "Chief Operating Officer",
+      status: "Online" as const,
+      activity: "Reviewing operations and executive priorities.",
+    },
+    {
+      id: "hermes",
+      name: "Hermes",
+      role: "Documentation Officer",
+      status: "Ready" as const,
+      activity: "Ready to prepare and manage company documents.",
+    },
+    {
+      id: "julia",
+      name: "Julia",
+      role: "Growth Officer",
+      status: "Online" as const,
+      activity: "Monitoring growth opportunities and performance signals.",
+    },
+  ];
+
+  const workforceActivity = [
+    {
+      id: "sonny-activity",
+      agent: "Sonny",
+      action: "Reviewed company health and open priorities.",
+      time: "Just now",
+    },
+    {
+      id: "hermes-activity",
+      agent: "Hermes",
+      action: "Checked document readiness and pending files.",
+      time: "3m ago",
+    },
+    {
+      id: "julia-activity",
+      agent: "Julia",
+      action: "Updated growth monitoring status.",
+      time: "7m ago",
+    },
+  ];
+
+  const executiveFeed = [
+    {
+      id: "workspace-active",
+      title: "Workspace operating normally",
+      detail: `${workspace?.name || "Company"} is active and connected.`,
+      type: "success" as const,
+    },
+    {
+      id: "tasks-feed",
+      title:
+        overdueTasks > 0
+          ? `${overdueTasks} overdue task${overdueTasks === 1 ? "" : "s"} need attention`
+          : "Task operations are on track",
+      detail: `${completedTasks} completed tasks recorded.`,
+      type: overdueTasks > 0 ? ("warning" as const) : ("success" as const),
+    },
+    {
+      id: "documents-feed",
+      title: "Document workspace synchronized",
+      detail: "The document workspace is connected and ready.",
+      type: "info" as const,
+    },
+    {
+      id: "ai-feed",
+      title: "AI workforce online",
+      detail: "Sonny, Hermes, and Julia are available.",
+      type: "success" as const,
+    },
+  ];
 
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-slate-50 flex">
-        <FirmicSidebar active="Dashboard" />
+        <FirmicSidebar />
 
-        <main className="flex-1 p-6 xl:p-8">
-          <Topbar office={office} loadingOffice={loadingOffice} />
+        <main className="flex-1 min-w-0 p-6 xl:p-8">
+          <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-violet-700">
+                Company Command Center
+              </p>
 
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-6">
-            <div className="space-y-6">
-              <OfficeCard office={office} loadingOffice={loadingOffice} />
-              <AIWorkforce />
-              <AddonGrid />
-              <BottomGrid />
+              <h1 className="text-3xl font-bold text-slate-950 mt-1">
+                {greeting()}, {companyName}.
+              </h1>
+
+              <p className="text-slate-500 mt-2 max-w-4xl">
+                Your executive intelligence, priorities, workforce,
+                notifications, activity, headquarters, meetings, and billing
+                are connected in one operating view.
+              </p>
+
+              <div className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-slate-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+                {loading ? "Reviewing company..." : reviewLabel}
+              </div>
             </div>
 
-            <div className="space-y-6">
-              <BillingSummary
-                totalUsd={totalUsd}
-                taxUsd={taxUsd}
-                officePrice={officePrice}
-              />
-              <QuickActions />
-              <HelpCard />
+            <div className="flex flex-wrap items-center gap-3">
+              <AIOnlinePill workers={Math.max(3, agents.length + 3)} />
+
+              <button
+                type="button"
+                onClick={() => void loadDashboard()}
+                disabled={loading}
+                className="border border-slate-200 bg-white px-5 py-3 rounded-xl font-bold hover:bg-slate-100 transition disabled:opacity-50"
+              >
+                {loading ? "Refreshing..." : "Refresh"}
+              </button>
+
+              <a
+                href={hasOffice ? "/my-office" : "/virtual-offices"}
+                className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold text-center hover:bg-violet-700 transition"
+              >
+                {hasOffice
+                  ? "Manage Headquarters"
+                  : "Activate Headquarters"}
+              </a>
             </div>
-          </div>
+          </header>
+
+          {!workspace?.id && (
+            <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 text-yellow-700">
+              Select or create a company to activate the Command Center.
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-6 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-2xl p-4">
+              {error}
+            </div>
+          )}
+
+          <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
+            <Stat
+              title="Business Health"
+              value={
+                healthScore === null
+                  ? "Pending"
+                  : `${healthScore}%`
+              }
+              icon="🧠"
+              detail={healthStatus}
+            />
+
+            <Stat
+              title="Unread Notifications"
+              value={String(unreadNotifications.length)}
+              icon="🔔"
+              detail={`${actionRequiredCount} action required`}
+            />
+
+            <Stat
+              title="Open Tasks"
+              value={String(openTasks.length)}
+              icon="✅"
+              detail={`${pendingCount} pending approvals`}
+            />
+
+            <Stat
+              title="Current Billing"
+              value={`$${monthlyTotal.toFixed(2)}`}
+              icon="💰"
+              detail={`AED ${toAED(monthlyTotal)}`}
+            />
+          </section>
+
+          <section className="grid grid-cols-1 xl:grid-cols-[1.35fr_0.65fr] gap-6 mt-8">
+            <div className="space-y-6">
+              <section className="bg-gradient-to-br from-violet-700 to-indigo-700 text-white rounded-3xl p-6 shadow-sm">
+                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+                  <div className="max-w-3xl">
+                    <p className="text-sm font-bold text-violet-200">
+                      Executive Intelligence
+                    </p>
+
+                    <h2 className="text-2xl font-bold mt-2">
+                      {healthStatus}
+                    </h2>
+
+                    <p className="text-violet-100 mt-3 leading-7">
+                      {intelligence?.executive_brief ||
+                        intelligence?.brief ||
+                        "Firmic is consolidating your company data into an executive operating brief."}
+                    </p>
+                  </div>
+
+                  <div className="bg-white/10 rounded-3xl p-5 text-center min-w-[170px]">
+                    <p className="text-sm text-violet-200">
+                      Health Score
+                    </p>
+                    <p className="text-5xl font-bold mt-2">
+                      {healthScore === null ? "—" : healthScore}
+                    </p>
+                    <p className="text-sm text-violet-200 mt-1">
+                      {healthScore === null ? "Pending" : "out of 100"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-6">
+                  <ExecutiveMini
+                    title="Company Status"
+                    value={label(companyStatus)}
+                  />
+                  <ExecutiveMini
+                    title="Compliance"
+                    value={label(complianceStatus)}
+                  />
+                  <ExecutiveMini
+                    title="Active Services"
+                    value={String(activeServices)}
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-3 mt-6">
+                  <a
+                    href="/executive-intelligence"
+                    className="bg-white text-violet-700 px-5 py-3 rounded-xl font-bold"
+                  >
+                    Open Intelligence
+                  </a>
+
+                  <a
+                    href="/sonny"
+                    className="bg-white/10 border border-white/20 px-5 py-3 rounded-xl font-bold"
+                  >
+                    Ask Sonny
+                  </a>
+                </div>
+              </section>
+
+              <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Panel
+                  title="Today's Priorities"
+                  actionHref="/tasks"
+                  actionText="Open Tasks"
+                >
+                  {priorities.length === 0 ? (
+                    <EmptyText text="No urgent priorities found." />
+                  ) : (
+                    <div className="space-y-3">
+                      {priorities.map((priority, index) => (
+                        <PriorityRow
+                          key={`${priority.title}-${index}`}
+                          title={priority.title}
+                          description={priority.description}
+                          type={priority.type}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </Panel>
+
+                <Panel
+                  title="Attention Required"
+                  actionHref="/notifications"
+                  actionText="Open Notifications"
+                >
+                  <div className="grid grid-cols-2 gap-3">
+                    <AttentionMini
+                      title="Unread"
+                      value={unreadNotifications.length}
+                      icon="🔔"
+                    />
+                    <AttentionMini
+                      title="Action Required"
+                      value={actionRequiredCount}
+                      icon="🔴"
+                    />
+                    <AttentionMini
+                      title="Warnings"
+                      value={warningCount}
+                      icon="⚠️"
+                    />
+                    <AttentionMini
+                      title="Pending"
+                      value={pendingCount}
+                      icon="🟡"
+                    />
+                  </div>
+                </Panel>
+              </section>
+
+              <Panel
+                title="Latest Company Activity"
+                actionHref="/timeline"
+                actionText="View Timeline"
+              >
+                {activity.length === 0 ? (
+                  <EmptyText text="No synchronized activity yet." />
+                ) : (
+                  <div className="space-y-3">
+                    {activity.slice(0, 5).map((event) => (
+                      <ActivityRow key={event.id} event={event} />
+                    ))}
+                  </div>
+                )}
+              </Panel>
+
+              <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold">
+                      Head Office
+                    </h2>
+
+                    <p className="text-sm text-slate-500 mt-1">
+                      Registered company headquarters and infrastructure.
+                    </p>
+                  </div>
+
+                  <a
+                    href={hasOffice ? "/my-office" : "/virtual-offices"}
+                    className="border border-slate-200 px-4 py-2 rounded-xl font-semibold hover:bg-slate-50 transition"
+                  >
+                    {hasOffice ? "Manage Office" : "Rent Office"}
+                  </a>
+                </div>
+
+                {!hasOffice ? (
+                  <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-6 text-slate-500">
+                    No headquarters has been assigned to this company.
+                  </div>
+                ) : (
+                  <div className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Mini title="Office" value={officeCode} />
+                    <Mini title="Location" value={officeLocation} />
+                    <Mini title="Business Number" value={businessNumber} />
+                    <Mini
+                      title="Plan"
+                      value={`${plan} · $${officePrice}/mo`}
+                    />
+                  </div>
+                )}
+              </section>
+
+              <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Panel
+                  title="Meeting Center"
+                  actionHref="/meeting-rooms"
+                  actionText="Manage Meetings"
+                >
+                  <div className="grid grid-cols-2 gap-3">
+                    <Mini
+                      title="Bookings"
+                      value={String(bookings.length)}
+                    />
+                    <Mini
+                      title="Booked Hours"
+                      value={String(totalBookedHours)}
+                    />
+                  </div>
+                </Panel>
+
+                <Panel
+                  title="Optional AI Employees"
+                  actionHref="/ai-workforce"
+                  actionText="Manage Workforce"
+                >
+                  <div className="grid grid-cols-2 gap-3">
+                    <Mini
+                      title="Active Agents"
+                      value={String(agents.length)}
+                    />
+                    <Mini
+                      title="Monthly AI Cost"
+                      value={`$${agents
+                        .reduce(
+                          (sum, agent) =>
+                            sum + Number(agent.monthly_price_usd || 0),
+                          0
+                        )
+                        .toFixed(2)}`}
+                    />
+                  </div>
+                </Panel>
+              </section>
+            </div>
+
+            <aside className="space-y-6">
+              <Panel
+                title="AI Workforce Health"
+                actionHref="/ai-workforce"
+                actionText="Open Workforce"
+              >
+                <div className="space-y-3">
+                  {workforceStatuses.map((agent) => (
+                    <WorkforceRow key={agent.name} agent={agent} />
+                  ))}
+                </div>
+              </Panel>
+
+              <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <h2 className="text-xl font-bold">
+                  Business Infrastructure Cost
+                </h2>
+
+                <div className="space-y-3 mt-5">
+                  <Row
+                    title="Subtotal"
+                    value={`$${subtotal.toFixed(2)}`}
+                  />
+                  <Row
+                    title="Tax"
+                    value={`$${tax.toFixed(2)}`}
+                  />
+                  <Row
+                    title="Active Services"
+                    value={String(activeServices)}
+                  />
+                  <Row
+                    title="One-Time Hookup"
+                    value={`$${hookupFee.toFixed(2)}`}
+                  />
+                </div>
+
+                <div className="mt-5 bg-violet-50 border border-violet-100 rounded-2xl p-4">
+                  <p className="text-sm text-violet-700 font-bold">
+                    Today’s Checkout
+                  </p>
+
+                  <h3 className="text-3xl font-bold text-violet-900 mt-1">
+                    ${checkout.toFixed(2)}
+                  </h3>
+
+                  <p className="text-violet-700">
+                    AED {toAED(checkout)}
+                  </p>
+                </div>
+
+                <a
+                  href="/billing"
+                  className="mt-5 block text-center bg-violet-600 text-white py-3 rounded-xl font-bold"
+                >
+                  Open Billing Center
+                </a>
+              </section>
+
+              <Panel title="Founder Quick Actions">
+                <div className="grid grid-cols-2 gap-3">
+                  <QuickAction
+                    href="/tasks"
+                    icon="✅"
+                    text="Create Task"
+                  />
+                  <QuickAction
+                    href="/documents"
+                    icon="📄"
+                    text="Upload Document"
+                  />
+                  <QuickAction
+                    href="/meeting-rooms"
+                    icon="📅"
+                    text="Book Meeting"
+                  />
+                  <QuickAction
+                    href="/sonny"
+                    icon="👔"
+                    text="Open Sonny"
+                  />
+                  <QuickAction
+                    href="/timeline"
+                    icon="📜"
+                    text="Timeline"
+                  />
+                  <QuickAction
+                    href="/notifications"
+                    icon="🔔"
+                    text="Notifications"
+                  />
+                </div>
+              </Panel>
+            </aside>
+          </section>
+        
+        <section className="mt-8 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <ExecutiveTimeline items={timelineItems} />
+
+          <CompanyHealthRing
+            value={healthValue}
+            reviewedLabel={reviewLabel}
+          />
+        </section>
+
+        <section className="mt-6">
+          <AIWorkforceStatus agents={workforceCards} />
+        </section>
+
+        <section className="mt-6 grid gap-6 xl:grid-cols-2">
+          <AIWorkforceActivity items={workforceActivity} />
+          <ExecutiveActivityFeed items={executiveFeed} />
+        </section>
+
         </main>
       </div>
     </ProtectedRoute>
   );
 }
 
-function Topbar({
-  office,
-  loadingOffice,
+async function fetchCompanyResource(path: string) {
+  const token =
+    typeof window !== "undefined"
+      ? localStorage.getItem("firmic_token")
+      : null;
+
+  if (!token) {
+    throw new Error("Not authenticated.");
+  }
+
+  const response = await fetch(`${API_URL}${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    cache: "no-store",
+  });
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const detail =
+      body?.detail ||
+      body?.message ||
+      `Request failed with status ${response.status}`;
+
+    throw new Error(
+      typeof detail === "string"
+        ? detail
+        : JSON.stringify(detail)
+    );
+  }
+
+  return body;
+}
+
+function fulfilledArray<T>(
+  result: PromiseSettledResult<any>
+): T[] {
+  if (
+    result.status === "fulfilled" &&
+    Array.isArray(result.value)
+  ) {
+    return result.value;
+  }
+
+  return [];
+}
+
+function getHealthScore(
+  intelligence: ExecutiveIntelligence | null
+): number | null {
+  const value =
+    intelligence?.business_health?.score ??
+    intelligence?.health_score;
+
+  const numeric = Number(value);
+
+  return Number.isFinite(numeric)
+    ? Math.round(numeric)
+    : null;
+}
+
+function buildPriorities({
+  notifications,
+  tasks,
+  recommendations,
 }: {
-  office: Office | null;
-  loadingOffice: boolean;
+  notifications: NotificationItem[];
+  tasks: TaskItem[];
+  recommendations: Array<{
+    title?: string;
+    description?: string;
+    priority?: string;
+  }>;
 }) {
-  const officeCode = office?.office_code || "No Office";
+  const notificationItems = notifications
+    .filter((item) =>
+      ["action_required", "warning", "pending"].includes(
+        normalizeNotificationType(item.type)
+      )
+    )
+    .map((item) => ({
+      title: item.title || "Notification needs attention",
+      description: item.description || "Review this company update.",
+      type: normalizeNotificationType(item.type),
+    }));
+
+  const taskItems = tasks.map((task) => ({
+    title: task.title || "Open company task",
+    description:
+      task.description ||
+      `Task status: ${label(task.status || "open")}`,
+    type: "task",
+  }));
+
+  const recommendationItems = recommendations.map((item) => ({
+    title: item.title || "Executive recommendation",
+    description:
+      item.description ||
+      "Review this recommendation from Executive Intelligence.",
+    type: "recommendation",
+  }));
+
+  return [
+    ...notificationItems,
+    ...taskItems,
+    ...recommendationItems,
+  ];
+}
+
+function buildWorkforceStatuses(
+  activity: Activity[]
+): WorkforceStatus[] {
+  return [
+    buildAgentStatus(
+      "Sonny",
+      "AI Chief Operating Officer",
+      activity
+    ),
+    buildAgentStatus(
+      "Hermes",
+      "AI Compliance Officer",
+      activity
+    ),
+    buildAgentStatus(
+      "Julia",
+      "AI Growth Officer",
+      activity
+    ),
+  ];
+}
+
+function buildAgentStatus(
+  name: string,
+  role: string,
+  activity: Activity[]
+): WorkforceStatus {
+  const event = activity.find((item) =>
+    [
+      item.title,
+      item.description,
+      item.actor_type,
+      item.source_type,
+      item.event_type,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(name.toLowerCase())
+  );
+
+  if (!event) {
+    return {
+      name,
+      role,
+      status: "Idle",
+      detail: "Ready for company work",
+    };
+  }
+
+  const text = [
+    event.title,
+    event.description,
+    event.event_type,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const status =
+    text.includes("failed") || text.includes("error")
+      ? "Attention"
+      : text.includes("completed") || text.includes("finished")
+      ? "Completed"
+      : text.includes("started") ||
+        text.includes("assigned") ||
+        text.includes("working")
+      ? "Working"
+      : "Active";
+
+  return {
+    name,
+    role,
+    status,
+    detail: event.title || "Recent workforce activity",
+  };
+}
+
+function normalizeNotificationType(
+  type?: string | null
+) {
+  const value = String(type || "").toLowerCase();
+
+  if (
+    ["action_required", "action", "required"].includes(value)
+  ) {
+    return "action_required";
+  }
+
+  if (
+    ["pending", "approval", "pending_approval"].includes(value)
+  ) {
+    return "pending";
+  }
+
+  if (
+    ["warning", "error", "failed"].includes(value)
+  ) {
+    return "warning";
+  }
+
+  if (
+    ["success", "completed"].includes(value)
+  ) {
+    return "success";
+  }
+
+  return "info";
+}
+
+function greeting() {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function Stat({
+  title,
+  value,
+  icon,
+  detail,
+}: {
+  title: string;
+  value: string;
+  icon: string;
+  detail?: string;
+}) {
+  return (
+    <div className="group bg-white border border-slate-200 rounded-3xl p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-violet-200">
+      <div className="text-3xl">{icon}</div>
+      <p className="text-sm text-slate-500 mt-3">{title}</p>
+      <p className="text-2xl font-bold mt-1 tabular-nums">
+        <AnimatedMetric value={value} />
+      </p>
+      {detail && (
+        <p className="text-xs text-slate-400 mt-2">{detail}</p>
+      )}
+    </div>
+  );
+}
+
+function Panel({
+  title,
+  children,
+  actionHref,
+  actionText,
+}: {
+  title: string;
+  children: React.ReactNode;
+  actionHref?: string;
+  actionText?: string;
+}) {
+  return (
+    <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-xl font-bold">{title}</h2>
+
+        {actionHref && actionText && (
+          <a
+            href={actionHref}
+            className="text-sm text-violet-700 font-bold hover:text-violet-900"
+          >
+            {actionText} →
+          </a>
+        )}
+      </div>
+
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function ExecutiveMini({
+  title,
+  value,
+}: {
+  title: string;
+  value: string;
+}) {
+  return (
+    <div className="bg-white/10 rounded-2xl p-4">
+      <p className="text-xs text-violet-200">{title}</p>
+      <p className="font-bold mt-1">{value}</p>
+    </div>
+  );
+}
+
+function AttentionMini({
+  title,
+  value,
+  icon,
+}: {
+  title: string;
+  value: number;
+  icon: string;
+}) {
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+      <span className="text-xl">{icon}</span>
+      <p className="text-2xl font-bold mt-2">{value}</p>
+      <p className="text-xs text-slate-500 mt-1">{title}</p>
+    </div>
+  );
+}
+
+function PriorityRow({
+  title,
+  description,
+  type,
+}: {
+  title: string;
+  description: string;
+  type: string;
+}) {
+  const icon =
+    type === "warning"
+      ? "⚠️"
+      : type === "pending"
+      ? "🟡"
+      : type === "action_required"
+      ? "🔴"
+      : type === "recommendation"
+      ? "🧠"
+      : "✅";
 
   return (
-    <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+      <span className="text-xl shrink-0">{icon}</span>
       <div>
-        <h2 className="text-3xl font-bold text-slate-950">
-          Welcome back, Matar! 👋
-        </h2>
-        <p className="text-slate-500 mt-1">
-          Firmic is the Shopify of Business Infrastructure — launch, operate,
-          and scale with an AI workforce from day one.
+        <p className="font-bold">{title}</p>
+        <p className="text-sm text-slate-500 mt-1">
+          {description}
         </p>
       </div>
-
-      <div className="flex items-center gap-4">
-        <a
-          href="/virtual-offices"
-          className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold shadow-sm"
-        >
-          + Launch New Company
-        </a>
-
-        <div className="bg-white border border-slate-200 rounded-2xl px-5 py-3 shadow-sm">
-          <p className="text-sm font-bold">
-            {loadingOffice ? "Loading Office..." : `Office ${officeCode}`}
-          </p>
-          <p className="text-xs text-slate-500">
-            {office ? "● Active" : "No rented office yet"}
-          </p>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function OfficeCard({
-  office,
-  loadingOffice,
-}: {
-  office: Office | null;
-  loadingOffice: boolean;
-}) {
-  const officeCode = office?.office_code || "Not Selected";
-  const officeLocation = office?.location || "Rent an office to activate Firmic";
-  const officePrice = office?.monthly_price_usd || pricing.officeRental.usd;
-
-  return (
-    <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
-      <div className="flex justify-between items-start">
-        <h3 className="text-xl font-bold">My Virtual Office</h3>
-        <a
-          href={office ? "/my-office" : "/virtual-offices"}
-          className="border border-slate-200 px-4 py-2 rounded-xl font-semibold"
-        >
-          {office ? "View Office Details" : "Rent Office"}
-        </a>
-      </div>
-
-      {loadingOffice ? (
-        <div className="mt-5 text-slate-500">Loading office from backend...</div>
-      ) : (
-        <div className="mt-5 flex flex-col lg:flex-row gap-6 items-center lg:items-start">
-          <div className="w-full lg:w-56 h-36 rounded-2xl bg-gradient-to-br from-sky-100 to-violet-100 flex items-center justify-center text-6xl">
-            🏢
-          </div>
-
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold">Office {officeCode}</h2>
-
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  office
-                    ? "bg-green-100 text-green-700"
-                    : "bg-yellow-100 text-yellow-700"
-                }`}
-              >
-                {office ? "Active" : "Not Active"}
-              </span>
-            </div>
-
-            <p className="text-slate-500 mt-2">📍 {officeLocation}</p>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mt-6">
-              <Mini title="Mailbox" value="Active" icon="📬" />
-              <Mini title="VoIP Number" value="+971 4 XXX 047" icon="☎️" />
-              <Mini
-                title="Office Rental"
-                value={`$${officePrice}/mo`}
-                icon="💰"
-              />
-              <Mini title="Office Plan" value="Premium" icon="⭐" />
-            </div>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function AIWorkforce() {
-  const [agentPage, setAgentPage] = useState(0);
-  const agentsPerPage = 5;
-  const totalPages = Math.ceil(aiAgents.length / agentsPerPage);
-
-  const visibleAgents = aiAgents.slice(
-    agentPage * agentsPerPage,
-    agentPage * agentsPerPage + agentsPerPage
-  );
-
-  return (
-    <section className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm relative">
-      <div className="flex justify-between items-center">
-        <h3 className="text-xl font-bold">AI Workforce</h3>
-        <span className="bg-violet-100 text-violet-700 px-3 py-1 rounded-full text-xs font-bold">
-          15 Agents
-        </span>
-      </div>
-
-      <button
-        onClick={() => setAgentPage(Math.max(0, agentPage - 1))}
-        className="absolute left-2 top-1/2 bg-white border border-slate-200 shadow-sm rounded-full h-9 w-9 z-10"
-      >
-        ‹
-      </button>
-
-      <button
-        onClick={() => setAgentPage(Math.min(totalPages - 1, agentPage + 1))}
-        className="absolute right-2 top-1/2 bg-white border border-slate-200 shadow-sm rounded-full h-9 w-9 z-10"
-      >
-        ›
-      </button>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-5 px-6">
-        {visibleAgents.map((agent, index) => (
-          <div
-            key={agent.name}
-            className="border border-slate-200 rounded-2xl p-4 text-center"
-          >
-            <div className="h-16 w-16 mx-auto rounded-full bg-violet-100 flex items-center justify-center text-3xl">
-              {index === 4 ? "🤖" : "👤"}
-            </div>
-
-            <h4 className="font-bold text-sm mt-3 min-h-[38px]">
-              {agent.name}
-            </h4>
-
-            <span className="inline-block mt-2 bg-green-100 text-green-700 px-2 py-1 rounded-full text-[11px]">
-              Active
-            </span>
-
-            <p className="text-xs text-slate-500 mt-3 min-h-[48px]">
-              {agent.desc}
-            </p>
-
-            <p className="text-xs font-bold mt-3">{agent.price} USD/mo</p>
-            <p className="text-xs font-bold">{toAED(agent.price)} AED/mo</p>
-
-            <div className="mt-3 mx-auto h-5 w-9 rounded-full bg-violet-600 relative">
-              <div className="absolute right-1 top-1 h-3 w-3 rounded-full bg-white" />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-center gap-2 mt-5">
-        {Array.from({ length: totalPages }).map((_, index) => (
-          <button
-            key={index}
-            onClick={() => setAgentPage(index)}
-            className={`h-2.5 w-2.5 rounded-full ${
-              index === agentPage ? "bg-violet-600" : "bg-slate-300"
-            }`}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function AddonGrid() {
-  const addons = [
-    {
-      title: "Meeting Rooms",
-      desc: "Book professional meeting rooms with Zoom.",
-      usd: 25,
-      suffix: "/hr",
-      icon: "📅",
-    },
-    {
-      title: "CRM Software",
-      desc: "Manage leads, deals and customers.",
-      usd: pricing.crm.usd,
-      suffix: "/mo",
-      icon: "📊",
-    },
-    {
-      title: "Microsoft 365",
-      desc: "Business apps, email and storage.",
-      usd: pricing.microsoft365.usd,
-      suffix: "/mo",
-      icon: "📁",
-    },
-    {
-      title: "Zoom Pro",
-      desc: "Host unlimited meetings.",
-      usd: pricing.zoom.usd,
-      suffix: "/mo",
-      icon: "🎥",
-    },
-  ];
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      {addons.map((addon) => (
-        <div
-          key={addon.title}
-          className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"
-        >
-          <div className="text-3xl">{addon.icon}</div>
-          <h3 className="font-bold mt-3">{addon.title}</h3>
-          <p className="text-xs text-slate-500 mt-1 min-h-[34px]">
-            {addon.desc}
-          </p>
-
-          <div className="mt-4">
-            <p className="font-bold">
-              {addon.usd} USD{addon.suffix}
-            </p>
-            <p className="font-bold">
-              {toAED(addon.usd)} AED{addon.suffix}
-            </p>
-          </div>
-
-          <button className="mt-4 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold text-violet-700">
-            Manage
-          </button>
-        </div>
-      ))}
     </div>
   );
 }
 
-function BottomGrid() {
+function ActivityRow({
+  event,
+}: {
+  event: Activity;
+}) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <Panel title="Activity & Feed">
-        {[
-          "Receptionist AI answered 18 calls",
-          "Sales AI booked 3 meetings",
-          "Support AI closed 12 tickets",
-          "Executive Assistant scheduled 4 tasks",
-          "New mail received",
-        ].map((item) => (
-          <div
-            key={item}
-            className="flex justify-between py-2 border-b border-slate-100 text-sm"
-          >
-            <span>{item}</span>
-            <span className="text-slate-400">Today</span>
-          </div>
-        ))}
-      </Panel>
+    <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
+      <div>
+        <p className="font-semibold">
+          {event.title || label(event.event_type)}
+        </p>
 
-      <Panel title="Performance Overview">
-        <div className="grid grid-cols-2 gap-4">
-          <Metric icon="☎️" title="Calls Answered" value="142" />
-          <Metric icon="👥" title="Meetings Booked" value="23" />
-          <Metric icon="💬" title="Tickets Resolved" value="87" />
-          <Metric icon="✉️" title="Mail Pieces" value="16" />
-        </div>
-      </Panel>
+        {event.description && (
+          <p className="text-sm text-slate-500 mt-1">
+            {event.description}
+          </p>
+        )}
+      </div>
 
-      <Panel title="Mailbox">
-        <Mini title="2 New Mail Items" value="Today" icon="✉️" />
-        <Mini title="1 Package Received" value="Yesterday" icon="📦" />
-      </Panel>
-
-      <Panel title="VoIP & Calls">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Metric icon="☎️" title="Calls Today" value="14" compact />
-          <Metric icon="✅" title="Answered" value="12" compact />
-          <Metric icon="❌" title="Missed" value="2" compact />
-          <Metric icon="⏱️" title="Avg. Duration" value="03:14" compact />
-        </div>
-      </Panel>
+      <p className="text-xs text-slate-400 shrink-0">
+        {formatRelativeTime(event.created_at)}
+      </p>
     </div>
   );
 }
 
-function BillingSummary({
-  totalUsd,
-  taxUsd,
-  officePrice,
+function WorkforceRow({
+  agent,
 }: {
-  totalUsd: number;
-  taxUsd: number;
-  officePrice: number;
+  agent: WorkforceStatus;
 }) {
-  const agentTotal = aiAgents.slice(0, 7).reduce((s, a) => s + a.price, 0);
-
-  const rows = [
-    ["Office Rental", officePrice, "monthly"],
-    ["AI Employees (7)", agentTotal, "monthly"],
-    ["Mailbox", pricing.mailbox.usd, "monthly"],
-    ["VoIP Number", pricing.voip.usd, "monthly"],
-    ["Meeting Rooms", 25, "hourly"],
-    ["CRM Software", pricing.crm.usd, "monthly"],
-    ["Microsoft 365", pricing.microsoft365.usd, "monthly"],
-    ["Taxes (5%)", taxUsd, "monthly"],
-  ];
+  const statusClass =
+    agent.status === "Attention"
+      ? "bg-red-100 text-red-700"
+      : agent.status === "Working"
+      ? "bg-blue-100 text-blue-700"
+      : agent.status === "Completed"
+      ? "bg-green-100 text-green-700"
+      : "bg-slate-100 text-slate-600";
 
   return (
-    <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
-      <h3 className="text-xl font-bold">Monthly Summary</h3>
+    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-bold">{agent.name}</p>
+          <p className="text-xs text-slate-500 mt-1">
+            {agent.role}
+          </p>
+        </div>
 
-      <p className="text-sm text-slate-500 mt-6">Total</p>
-
-      <h2 className="text-4xl font-bold">{totalUsd.toFixed(0)} USD</h2>
-
-      <p className="text-slate-500">
-        {toAED(totalUsd).toLocaleString()} AED / month
-      </p>
-
-      <div className="mt-5">
-        <p className="text-slate-500 text-sm">Hook Up Fee</p>
-        <p className="font-bold">49.00 USD / {toAED(49)} AED</p>
-        <span className="inline-block mt-2 text-xs bg-violet-100 text-violet-700 px-3 py-1 rounded-full">
-          One-time
+        <span
+          className={`px-3 py-1 rounded-full text-xs font-bold ${statusClass}`}
+        >
+          {agent.status}
         </span>
       </div>
 
-      <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
-        {rows.map(([name, amount, type]) => (
-          <div
-            key={name as string}
-            className="grid grid-cols-[1fr_90px_70px] gap-2 text-sm items-center"
-          >
-            <span>{name}</span>
-            <span className="font-bold text-right">
-              {Number(amount).toFixed(2)} USD
-            </span>
-            <span className="font-bold text-right text-slate-500">
-              {toAED(Number(amount))} AED
-              {type === "hourly" ? "/hr" : ""}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <button className="mt-6 w-full bg-violet-600 text-white py-3 rounded-xl font-bold">
-        View Invoice
-      </button>
-    </section>
-  );
-}
-
-function QuickActions() {
-  return (
-    <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
-      <h3 className="font-bold text-lg">Quick Actions</h3>
-      {[
-        "Add AI Employee",
-        "Book Meeting Room",
-        "Add CRM Users",
-        "Manage Microsoft 365",
-        "Forward Mail",
-        "Change VoIP Number",
-      ].map((item) => (
-        <div
-          key={item}
-          className="flex justify-between py-3 border-b border-slate-100 text-sm"
-        >
-          <span>{item}</span>
-          <span>›</span>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function HelpCard() {
-  return (
-    <section className="bg-violet-600 text-white rounded-3xl p-6 shadow-sm overflow-hidden">
-      <h3 className="text-xl font-bold">Need Help?</h3>
-      <p className="text-sm text-violet-100 mt-2">
-        Our support team is available 24/7.
+      <p className="text-sm text-slate-500 mt-3">
+        {agent.detail}
       </p>
-      <button className="mt-5 bg-white text-violet-700 px-5 py-3 rounded-xl font-bold">
-        Chat with Support
-      </button>
-    </section>
-  );
-}
-
-function Panel({ title, children }: { title: string; children: any }) {
-  return (
-    <section className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm">
-      <h3 className="font-bold text-lg mb-3">{title}</h3>
-      {children}
-    </section>
+    </div>
   );
 }
 
 function Mini({
   title,
   value,
-  icon,
 }: {
   title: string;
   value: string;
-  icon: string;
 }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="h-10 w-10 rounded-2xl bg-violet-50 flex items-center justify-center">
-        {icon}
-      </div>
-      <div>
-        <p className="text-xs text-slate-500">{title}</p>
-        <p className="font-bold text-sm">{value}</p>
-      </div>
+    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 min-w-0">
+      <p className="text-xs text-slate-500">{title}</p>
+      <p className="font-bold mt-1 break-words">{value}</p>
     </div>
   );
 }
 
-function Metric({
-  icon,
+function Row({
   title,
   value,
-  compact = false,
 }: {
-  icon: string;
   title: string;
   value: string;
-  compact?: boolean;
 }) {
   return (
-    <div className="bg-slate-50 rounded-2xl p-4 min-w-0">
-      <div className="text-xl">{icon}</div>
-      <p
-        className={`font-bold mt-2 break-words ${
-          compact ? "text-lg" : "text-2xl"
-        }`}
-      >
-        {value}
-      </p>
-      <p className="text-[11px] text-slate-500 leading-tight">{title}</p>
+    <div className="flex justify-between gap-4 py-3 border-b border-slate-100">
+      <span className="text-slate-500">{title}</span>
+      <span className="font-bold">{value}</span>
     </div>
   );
+}
+
+function QuickAction({
+  href,
+  icon,
+  text,
+}: {
+  href: string;
+  icon: string;
+  text: string;
+}) {
+  return (
+    <a
+      href={href}
+      className="bg-slate-50 border border-slate-200 rounded-2xl p-4 hover:bg-violet-50 hover:border-violet-200 transition"
+    >
+      <span className="text-2xl">{icon}</span>
+      <p className="font-bold text-sm mt-3">{text}</p>
+    </a>
+  );
+}
+
+function EmptyText({
+  text,
+}: {
+  text: string;
+}) {
+  return (
+    <p className="text-slate-500">
+      {text}
+    </p>
+  );
+}
+
+function label(value?: string | null) {
+  if (!value) return "Unknown";
+
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) =>
+      letter.toUpperCase()
+    );
+}
+
+function formatRelativeTime(value?: string | null) {
+  if (!value) return "Recently";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Recently";
+  }
+
+  const difference = Date.now() - date.getTime();
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (difference < minute) return "Just now";
+
+  if (difference < hour) {
+    const minutes = Math.floor(difference / minute);
+    return `${minutes}m ago`;
+  }
+
+  if (difference < day) {
+    const hours = Math.floor(difference / hour);
+    return `${hours}h ago`;
+  }
+
+  const days = Math.floor(difference / day);
+  return `${days}d ago`;
 }

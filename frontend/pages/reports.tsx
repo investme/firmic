@@ -1,26 +1,31 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import ProtectedRoute from "../components/ProtectedRoute";
+import { aiAgents } from "../src/data/aiAgents";
+import { pricing, toAED } from "../src/data/pricing";
+import { getActiveWorkspace } from "../src/utils/workspaceContext";
+
+const STORAGE_KEY = "selected_ai_agents";
 
 const reportTypes = [
   {
-    title: "Company Health Report",
-    desc: "Overall business readiness, office status, documents, tasks, and operational health.",
+    title: "Company Operating Report",
+    desc: "Overall business readiness, headquarters status, documents, tasks, and operating health.",
     icon: "📊",
   },
   {
-    title: "Compliance Report",
-    desc: "Hermes compliance score, KYB status, missing documents, and risk notes.",
+    title: "Hermes Compliance Report",
+    desc: "Compliance score, KYB status, missing documents, risk notes, and recommended fixes.",
     icon: "🛡️",
   },
   {
     title: "AI Workforce Report",
-    desc: "Sonny performance, AI employee activity, tasks completed, and productivity.",
+    desc: "Sonny performance, AI employee activity, completed tasks, calls, and productivity.",
     icon: "🤖",
   },
   {
     title: "Financial Report",
-    desc: "Billing summary, subscriptions, monthly spend, taxes, and service usage.",
+    desc: "Billing summary, subscriptions, monthly spend, taxes, usage, and service charges.",
     icon: "💰",
   },
 ];
@@ -33,51 +38,57 @@ type ReportItem = {
   content: string;
 };
 
-const initialReports: ReportItem[] = [
-  {
-    id: 1,
-    name: "Company Health Report",
-    date: "Jun 23, 2026",
-    type: "TXT",
-    content:
-      "Firmic Company Health Report\n\nCompany progress: 72%\nCompliance score: 40%\nAI workforce: 7 active agents\nMonthly spend: $723\n\nSummary: Company is operational, but compliance readiness needs improvement.",
-  },
-  {
-    id: 2,
-    name: "Compliance Report",
-    date: "Jun 22, 2026",
-    type: "TXT",
-    content:
-      "Firmic Compliance Report\n\nHermes score: 40%\nRisk level: Medium\nMissing items: KYB package, beneficial owner review\n\nRecommendation: Upload missing KYB documents and complete owner declaration.",
-  },
-  {
-    id: 3,
-    name: "AI Workforce Report",
-    date: "Jun 21, 2026",
-    type: "TXT",
-    content:
-      "Firmic AI Workforce Report\n\nActive AI agents: 7\nTasks today: 184\nCalls answered: 142\nUtilization: 91%\n\nSummary: Sonny workforce is active and operating normally.",
-  },
-  {
-    id: 4,
-    name: "Financial Report",
-    date: "Jun 20, 2026",
-    type: "TXT",
-    content:
-      "Firmic Financial Report\n\nMonthly spend: $723\nOffice rental: $99\nAI workforce: $423\nMailbox + VoIP: $48\nTaxes: 5%\n\nSummary: Subscription stack is active and predictable.",
-  },
-];
-
 export default function Reports() {
-  const [reports, setReports] = useState<ReportItem[]>(initialReports);
+  const [reports, setReports] = useState<ReportItem[]>([]);
+  const [selectedAgents, setSelectedAgents] = useState<string[]>(
+    aiAgents.slice(0, 7).map((agent) => agent.name)
+  );
   const [activity, setActivity] = useState<string[]>([
     "Hermes generated compliance summary",
-    "Sonny created company health snapshot",
-    "Billing engine calculated monthly spend",
-    "Documents module updated report inputs",
+    "Sonny created company operating snapshot",
+    "Billing Center calculated monthly spend",
+    "Document Vault updated report inputs",
   ]);
   const [automationEnabled, setAutomationEnabled] = useState(false);
   const [notice, setNotice] = useState("");
+
+  const workspace = getActiveWorkspace();
+  const headquarters = workspace?.headquarters;
+
+  const companyName = workspace?.name || "Active Company";
+  const officeCode = headquarters?.office_code || "A001";
+  const officeLocation =
+  headquarters?.location || "Hub71, Abu Dhabi, United Arab Emirates";
+  const plan = workspace?.plan || "Premium";
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+
+    if (saved) {
+      try {
+        setSelectedAgents(JSON.parse(saved));
+      } catch {
+        setSelectedAgents(aiAgents.slice(0, 7).map((agent) => agent.name));
+      }
+    }
+  }, []);
+
+  const activeAgents = aiAgents.filter((agent) =>
+    selectedAgents.includes(agent.name)
+  );
+
+  const aiTotal = activeAgents.reduce((sum, agent) => sum + agent.price, 0);
+  const monthlySubtotal =
+    pricing.officeRental.usd +
+    aiTotal +
+    pricing.mailbox.usd +
+    pricing.voip.usd +
+    pricing.crm.usd +
+    pricing.microsoft365.usd +
+    pricing.zoom.usd;
+
+  const monthlyTax = monthlySubtotal * 0.05;
+  const monthlyTotal = monthlySubtotal + monthlyTax;
 
   function todayLabel() {
     return new Date().toLocaleDateString("en-US", {
@@ -87,29 +98,87 @@ export default function Reports() {
     });
   }
 
+  function showNotice(message: string) {
+    setNotice(message);
+    setTimeout(() => setNotice(""), 3000);
+  }
+
   function buildReportContent(name: string) {
-    return `Firmic ${name}
+    return `==================================================
+                 FIRMIC ${name.toUpperCase()}
+==================================================
 
-Generated: ${new Date().toLocaleString()}
+Generated:
+${new Date().toLocaleString()}
 
-Company Snapshot
-- Company progress: 72%
-- Compliance score: 40%
-- AI workforce: 7 active agents
-- Monthly spend: $723
-- Sonny status: Active
-- Hermes status: Monitoring
-- Documents: 1 approved
-- Tasks: 5 total
+Company:
+${companyName}
 
-Executive Summary
-Firmic is monitoring operations, compliance, documents, billing, office infrastructure, and AI workforce activity.
+Plan:
+${plan}
 
-Recommended Next Actions
+Headquarters:
+${officeCode}
+
+Location:
+${officeLocation}
+
+--------------------------------------------------
+COMPANY SNAPSHOT
+--------------------------------------------------
+
+Company Progress:
+72%
+
+Compliance Score:
+40%
+
+AI Workforce:
+${activeAgents.length} active agents
+
+Monthly Spend:
+$${monthlyTotal.toFixed(2)}
+AED ${toAED(monthlyTotal)}
+
+Sonny Status:
+Active
+
+Hermes Status:
+Monitoring
+
+Documents:
+1 approved
+
+Tasks:
+5 total
+
+--------------------------------------------------
+AI WORKFORCE
+--------------------------------------------------
+
+${activeAgents.map((agent) => `- ${agent.name}: $${agent.price}/mo`).join("\n")}
+
+--------------------------------------------------
+EXECUTIVE SUMMARY
+--------------------------------------------------
+
+Firmic is monitoring operations, compliance, documents, billing,
+headquarters infrastructure, communications, and AI workforce activity for
+${companyName}.
+
+--------------------------------------------------
+RECOMMENDED NEXT ACTIONS
+--------------------------------------------------
+
 1. Improve Hermes compliance score.
 2. Upload missing KYB documents.
 3. Complete pending onboarding tasks.
-4. Generate weekly reports.
+4. Review billing and infrastructure services.
+5. Generate weekly operating reports.
+
+==================================================
+Generated by Firmic Reports Center
+==================================================
 `;
   }
 
@@ -123,13 +192,9 @@ Recommended Next Actions
     };
 
     setReports((current) => [newReport, ...current]);
+    setActivity((current) => [`${name} generated for ${companyName}`, ...current]);
 
-    setActivity((current) => [
-      `${name} generated successfully`,
-      ...current,
-    ]);
-
-    alert(`${name} generated successfully.`);
+    showNotice(`${name} generated successfully.`);
   }
 
   function downloadReport(report: ReportItem) {
@@ -141,14 +206,17 @@ Recommended Next Actions
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = `${report.name.replaceAll(" ", "_")}.txt`;
+    link.download = `${companyName.replace(/\s+/g, "_")}_${report.name.replace(
+      /\s+/g,
+      "_"
+    )}.txt`;
+
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
-    setNotice(`${report.name} downloaded successfully.`);
-    setTimeout(() => setNotice(""), 3000);
+    showNotice(`${report.name} downloaded successfully.`);
   }
 
   function downloadLatestByName(name: string) {
@@ -172,7 +240,21 @@ Recommended Next Actions
   }
 
   function generateMainReport() {
-    generateReport("Company Health Report");
+    const newReport: ReportItem = {
+      id: Date.now(),
+      name: "Company Operating Report",
+      date: todayLabel(),
+      type: "TXT",
+      content: buildReportContent("Company Operating Report"),
+    };
+
+    setReports((current) => [newReport, ...current]);
+    setActivity((current) => [
+      `Company Operating Report generated for ${companyName}`,
+      ...current,
+    ]);
+
+    downloadReport(newReport);
   }
 
   function toggleAutomation() {
@@ -187,193 +269,235 @@ Recommended Next Actions
   }
 
   return (
-     <ProtectedRoute>
-    <div className="min-h-screen bg-slate-50 flex">
-      <FirmicSidebar active="Reports" />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-slate-50 flex">
+        <FirmicSidebar />
 
-      <main className="flex-1 p-6 xl:p-8">
-        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-950">Reports</h1>
-            <p className="text-slate-500 mt-1">
-              Generate company intelligence reports for operations, compliance,
-              AI workforce, and billing.
-            </p>
-          </div>
-
-          <button
-            onClick={generateMainReport}
-            className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold"
-          >
-            Generate Report
-          </button>
-        </header>
-        {notice && (
-            <div className="mt-6 bg-green-50 border border-green-200 text-green-700 rounded-2xl p-4 font-bold">
-          {notice}
-  </div>
-)}
-
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
-          <Stat title="Compliance Score" value="40%" icon="🛡️" />
-          <Stat title="Company Progress" value="72%" icon="📈" />
-          <Stat title="AI Workforce" value="7 Active" icon="🤖" />
-          <Stat title="Monthly Spend" value="$723" icon="💰" />
-        </section>
-
-        <section className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-8">
-          <div className="space-y-6">
-            <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-              <h2 className="text-xl font-bold">Report Types</h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
-                {reportTypes.map((report) => (
-                  <div
-                    key={report.title}
-                    className="bg-slate-50 border border-slate-200 rounded-3xl p-5"
-                  >
-                    <div className="text-4xl">{report.icon}</div>
-
-                    <h3 className="text-xl font-bold mt-4">{report.title}</h3>
-
-                    <p className="text-sm text-slate-500 mt-2 min-h-[66px]">
-                      {report.desc}
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-3 mt-5">
-                      <button
-                        onClick={() => generateReport(report.title)}
-                        className="bg-violet-600 text-white rounded-xl py-3 font-bold"
-                      >
-                        Generate
-                      </button>
-
-                      <button
-                        onClick={() => downloadLatestByName(report.title)}
-                        className="border border-slate-200 bg-white rounded-xl py-3 font-bold"
-                      >
-                        Download
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-              <h2 className="text-xl font-bold">Recent Reports</h2>
-
-              <div className="mt-5 space-y-3">
-                {reports.map((report) => (
-                  <div
-                    key={report.id}
-                    className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-[1fr_130px_80px_110px] gap-3 items-center"
-                  >
-                    <div>
-                      <p className="font-bold">{report.name}</p>
-                      <p className="text-sm text-slate-500">
-                        Generated report
-                      </p>
-                    </div>
-
-                    <p className="text-sm text-slate-500">{report.date}</p>
-
-                    <span className="bg-violet-100 text-violet-700 px-3 py-1 rounded-full text-xs font-bold w-fit">
-                      {report.type}
-                    </span>
-
-                    <button
-                      onClick={() => downloadReport(report)}
-                      className="border border-slate-200 bg-white rounded-xl py-2 font-bold"
-                    >
-                      Download
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-              <h2 className="text-xl font-bold">Operational Activity</h2>
-
-              <div className="mt-5 space-y-3">
-                {activity.map((item, index) => (
-                  <Activity key={`${item}-${index}`} text={item} />
-                ))}
-              </div>
-            </section>
-          </div>
-
-          <div className="space-y-6">
-            <div className="bg-violet-600 text-white rounded-3xl p-6 shadow-sm">
-              <h2 className="text-xl font-bold">Firmic Intelligence</h2>
-
-              <p className="text-violet-100 text-sm mt-2">
-                Reports combine company data from Sonny, Hermes, documents,
-                billing, office infrastructure, and AI workforce activity.
+        <main className="flex-1 p-6 xl:p-8">
+          <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-violet-700">
+                Reports Center
               </p>
 
-              <div className="grid grid-cols-2 gap-3 mt-5">
-                <DarkMini title="Reports" value={String(reports.length)} />
-                <DarkMini title="Compliance" value="40%" />
-                <DarkMini title="AI Agents" value="7" />
-                <DarkMini title="Spend" value="$723" />
-              </div>
+              <h1 className="text-3xl font-bold text-slate-950 mt-1">
+                Reports for {companyName}.
+              </h1>
+
+              <p className="text-slate-500 mt-2 max-w-3xl">
+                Create reports for operations, compliance, AI workforce,
+                billing, documents, headquarters infrastructure, and investor
+                readiness.
+              </p>
             </div>
 
-            <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-              <h2 className="text-xl font-bold">Recommended Reports</h2>
+            <button
+              onClick={generateMainReport}
+              className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-violet-700 transition"
+            >
+              Generate Operating Report
+            </button>
+          </header>
 
-              <div className="space-y-3 mt-5">
-                <Recommendation
-                  text="Generate Hub71 Readiness Report"
-                  onClick={() => generateReport("Hub71 Readiness Report")}
-                />
-                <Recommendation
-                  text="Generate Compliance Improvement Plan"
-                  onClick={() => generateReport("Compliance Improvement Plan")}
-                />
-                <Recommendation
-                  text="Generate AI Workforce Productivity Report"
-                  onClick={() =>
-                    generateReport("AI Workforce Productivity Report")
-                  }
-                />
-                <Recommendation
-                  text="Generate Investor Demo Report"
-                  onClick={() => generateReport("Investor Demo Report")}
-                />
-              </div>
-            </section>
+          {notice && (
+            <div className="mt-6 bg-green-50 border border-green-200 text-green-700 rounded-2xl p-4 font-bold">
+              {notice}
+            </div>
+          )}
 
-            <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-              <h2 className="text-xl font-bold">Report Automation</h2>
+          <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm mt-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Mini title="Company" value={companyName} />
+              <Mini title="Plan" value={plan} />
+              <Mini title="Headquarters" value={officeCode} />
+              <Mini title="Location" value={officeLocation} />
+            </div>
+          </section>
 
-              <p className="text-sm text-slate-500 mt-2">
-                Schedule weekly reports for founders, operators, investors, and
-                compliance reviewers.
-              </p>
+          <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
+            <Stat title="Compliance Score" value="40%" icon="🛡️" />
+            <Stat title="Company Progress" value="72%" icon="📈" />
+            <Stat
+              title="AI Workforce"
+              value={`${activeAgents.length} Active`}
+              icon="🤖"
+            />
+            <Stat
+              title="Monthly Spend"
+              value={`$${monthlyTotal.toFixed(0)}`}
+              icon="💰"
+            />
+          </section>
 
-              <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                <p className="text-sm text-slate-500">Status</p>
-                <p className="font-bold">
-                  {automationEnabled ? "Weekly automation enabled" : "Not configured"}
+          <section className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-8">
+            <div className="space-y-6">
+              <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <h2 className="text-xl font-bold">Report Types</h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
+                  {reportTypes.map((report) => (
+                    <div
+                      key={report.title}
+                      className="bg-slate-50 border border-slate-200 rounded-3xl p-5 flex flex-col h-full"
+                    >
+                      <div className="flex-1">
+                        <div className="text-4xl">{report.icon}</div>
+
+                        <h3 className="text-xl font-bold mt-4">
+                          {report.title}
+                        </h3>
+
+                        <p className="text-sm text-slate-500 mt-2 min-h-[66px]">
+                          {report.desc}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 mt-5">
+                        <button
+                          onClick={() => generateReport(report.title)}
+                          className="bg-violet-600 text-white rounded-xl py-3 font-bold hover:bg-violet-700 transition"
+                        >
+                          Generate
+                        </button>
+
+                        <button
+                          onClick={() => downloadLatestByName(report.title)}
+                          className="border border-slate-200 bg-white rounded-xl py-3 font-bold hover:bg-slate-50 transition"
+                        >
+                          Download
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <h2 className="text-xl font-bold">Recent Reports</h2>
+
+                {reports.length === 0 ? (
+                  <div className="mt-5 bg-yellow-50 border border-yellow-200 rounded-2xl p-5 text-yellow-700">
+                    No reports generated yet. Generate an operating report to
+                    create the first downloadable report.
+                  </div>
+                ) : (
+                  <div className="mt-5 space-y-3">
+                    {reports.map((report) => (
+                      <div
+                        key={report.id}
+                        className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-[1fr_130px_80px_110px] gap-3 items-center"
+                      >
+                        <div>
+                          <p className="font-bold">{report.name}</p>
+                          <p className="text-sm text-slate-500">
+                            {companyName}
+                          </p>
+                        </div>
+
+                        <p className="text-sm text-slate-500">{report.date}</p>
+
+                        <span className="bg-violet-100 text-violet-700 px-3 py-1 rounded-full text-xs font-bold w-fit">
+                          {report.type}
+                        </span>
+
+                        <button
+                          onClick={() => downloadReport(report)}
+                          className="border border-slate-200 bg-white rounded-xl py-2 font-bold hover:bg-slate-50 transition"
+                        >
+                          Download
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <h2 className="text-xl font-bold">Operational Activity</h2>
+
+                <div className="mt-5 space-y-3">
+                  {activity.map((item, index) => (
+                    <Activity key={`${item}-${index}`} text={item} />
+                  ))}
+                </div>
+              </section>
+            </div>
+
+            <div className="space-y-6">
+              <div className="bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-3xl p-6 shadow-sm">
+                <h2 className="text-xl font-bold">Firmic Intelligence</h2>
+
+                <p className="text-violet-100 text-sm mt-2">
+                  Reports combine company data from Sonny, Hermes, Document
+                  Vault, Billing Center, headquarters, communications, and AI
+                  workforce activity.
                 </p>
+
+                <div className="grid grid-cols-2 gap-3 mt-5">
+                  <DarkMini title="Reports" value={String(reports.length)} />
+                  <DarkMini title="Compliance" value="40%" />
+                  <DarkMini title="AI Agents" value={String(activeAgents.length)} />
+                  <DarkMini title="Spend" value={`$${monthlyTotal.toFixed(0)}`} />
+                </div>
               </div>
 
-              <button
-                onClick={toggleAutomation}
-                className="mt-5 w-full bg-violet-600 text-white rounded-xl py-3 font-bold"
-              >
-                {automationEnabled
-                  ? "Disable Automation"
-                  : "Configure Automation"}
-              </button>
-            </section>
-          </div>
-        </section>
-      </main>
-    </div>
+              <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <h2 className="text-xl font-bold">Recommended Reports</h2>
+
+                <div className="space-y-3 mt-5">
+                  <Recommendation
+                    text="Generate Hub71 Readiness Report"
+                    onClick={() => generateReport("Hub71 Readiness Report")}
+                  />
+                  <Recommendation
+                    text="Generate Compliance Improvement Plan"
+                    onClick={() =>
+                      generateReport("Compliance Improvement Plan")
+                    }
+                  />
+                  <Recommendation
+                    text="Generate AI Workforce Productivity Report"
+                    onClick={() =>
+                      generateReport("AI Workforce Productivity Report")
+                    }
+                  />
+                  <Recommendation
+                    text="Generate Investor Demo Report"
+                    onClick={() => generateReport("Investor Demo Report")}
+                  />
+                </div>
+              </section>
+
+              <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <h2 className="text-xl font-bold">Report Automation</h2>
+
+                <p className="text-sm text-slate-500 mt-2">
+                  Schedule weekly reports for founders, operators, investors,
+                  and compliance reviewers.
+                </p>
+
+                <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                  <p className="text-sm text-slate-500">Status</p>
+                  <p className="font-bold">
+                    {automationEnabled
+                      ? "Weekly automation enabled"
+                      : "Not configured"}
+                  </p>
+                </div>
+
+                <button
+                  onClick={toggleAutomation}
+                  className="mt-5 w-full bg-violet-600 text-white rounded-xl py-3 font-bold hover:bg-violet-700 transition"
+                >
+                  {automationEnabled
+                    ? "Disable Automation"
+                    : "Configure Automation"}
+                </button>
+              </section>
+            </div>
+          </section>
+        </main>
+      </div>
     </ProtectedRoute>
   );
 }
@@ -384,6 +508,15 @@ function Stat({ title, value, icon }: any) {
       <div className="text-3xl">{icon}</div>
       <p className="text-sm text-slate-500 mt-3">{title}</p>
       <p className="text-2xl font-bold mt-1">{value}</p>
+    </div>
+  );
+}
+
+function Mini({ title, value }: any) {
+  return (
+    <div className="bg-slate-50 rounded-2xl p-4 text-center overflow-hidden">
+      <p className="text-xs text-slate-500">{title}</p>
+      <p className="font-bold text-xl mt-1 truncate">{value}</p>
     </div>
   );
 }
@@ -409,7 +542,7 @@ function Recommendation({ text, onClick }: any) {
   return (
     <button
       onClick={onClick}
-      className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 flex justify-between items-center text-left"
+      className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 flex justify-between items-center text-left hover:bg-white transition"
     >
       <span className="font-semibold">{text}</span>
       <span className="text-violet-700 font-bold">Generate</span>

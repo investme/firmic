@@ -1,218 +1,50 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import ProtectedRoute from "../components/ProtectedRoute";
+import { getActiveWorkspace, getWorkspaceChangedEventName } from "../src/utils/workspaceContext";
+import { readCompanyStorage } from "../src/utils/companyStorage";
 
-const calls = [
-  {
-    id: 1,
-    caller: "+971 50 123 8841",
-    status: "Answered",
-    handledBy: "Receptionist AI",
-    duration: "04:12",
-    type: "Sales Inquiry",
-    transcript:
-      "Caller asked about virtual office pricing and AI receptionist services.",
-    time: "10:42 AM",
-  },
-  {
-    id: 2,
-    caller: "+971 55 441 9022",
-    status: "Qualified",
-    handledBy: "Sales AI",
-    duration: "07:08",
-    type: "New Lead",
-    transcript:
-      "Caller is interested in renting Office A052 and adding CRM software.",
-    time: "10:15 AM",
-  },
-  {
-    id: 3,
-    caller: "+971 52 808 1188",
-    status: "Missed",
-    handledBy: "Call Routing",
-    duration: "00:00",
-    type: "Missed Call",
-    transcript: "No transcript available. Caller did not leave a message.",
-    time: "09:58 AM",
-  },
-  {
-    id: 4,
-    caller: "+971 58 332 1209",
-    status: "Answered",
-    handledBy: "Receptionist AI",
-    duration: "03:14",
-    type: "Support",
-    transcript:
-      "Caller requested mailbox forwarding and asked about package handling.",
-    time: "09:30 AM",
-  },
-];
+type CallRecord = { id: string; caller: string; status: string; handledBy: string; durationSeconds: number; type: string; transcript: string; time: string };
 
 export default function VoipCalls() {
-  const [selectedCall, setSelectedCall] = useState(calls[0]);
+  const [workspace, setWorkspace] = useState(() => getActiveWorkspace());
+  const [calls, setCalls] = useState<CallRecord[]>([]);
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const sync = () => setWorkspace(getActiveWorkspace());
+    sync();
+    window.addEventListener(getWorkspaceChangedEventName(), sync);
+    window.addEventListener("firmic-company-data-changed", sync);
+    window.addEventListener("storage", sync);
+    return () => { window.removeEventListener(getWorkspaceChangedEventName(), sync); window.removeEventListener("firmic-company-data-changed", sync); window.removeEventListener("storage", sync); };
+  }, []);
+
+  useEffect(() => {
+    if (!workspace?.id) { setCalls([]); setSelectedCallId(null); return; }
+    const stored = readCompanyStorage<CallRecord[]>("call_records", []);
+    setCalls(stored); setSelectedCallId(stored[0]?.id || null);
+  }, [workspace?.id]);
+
+  const hq = workspace?.headquarters;
+  const companyName = workspace?.name || "Active Company";
+  const selected = calls.find((c) => c.id === selectedCallId) || null;
+  const answered = calls.filter((c) => c.status === "Answered" || c.status === "Qualified").length;
+  const missed = calls.filter((c) => c.status === "Missed").length;
+  const avg = useMemo(() => calls.length ? formatDuration(Math.round(calls.reduce((s, c) => s + c.durationSeconds, 0) / calls.length)) : "00:00", [calls]);
 
   return (
     <ProtectedRoute>
-    <div className="min-h-screen bg-slate-50 flex">
-      <FirmicSidebar active="VoIP & Calls" />
-
-      <main className="flex-1 p-6 xl:p-8">
-        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-950">VoIP & Calls</h1>
-            <p className="text-slate-500 mt-1">
-              Manage your Dubai business number, AI receptionist, call routing,
-              and transcripts.
-            </p>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-2xl px-5 py-3 shadow-sm">
-            <p className="text-sm text-slate-500">Dubai Business Number</p>
-            <p className="font-bold">+971 4 XXX 047</p>
-          </div>
-        </header>
-
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
-          <Stat title="Calls Today" value="14" icon="☎️" />
-          <Stat title="Answered by AI" value="12" icon="✅" />
-          <Stat title="Missed Calls" value="2" icon="❌" />
-          <Stat title="Avg. Duration" value="03:14" icon="⏱️" />
-        </section>
-
-        <section className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-8">
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold">Recent Calls</h2>
-              <button className="bg-violet-600 text-white px-4 py-2 rounded-xl font-bold text-sm">
-                Change Number
-              </button>
-            </div>
-
-            <div className="mt-5 space-y-3">
-              {calls.map((call) => (
-                <button
-                  key={call.id}
-                  onClick={() => setSelectedCall(call)}
-                  className={`w-full text-left rounded-2xl border p-4 transition ${
-                    selectedCall.id === call.id
-                      ? "border-violet-500 bg-violet-50"
-                      : "border-slate-200 bg-slate-50 hover:bg-white"
-                  }`}
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
-                    <div>
-                      <p className="font-bold">{call.caller}</p>
-                      <p className="text-xs text-slate-500">{call.time}</p>
-                    </div>
-
-                    <Badge status={call.status} />
-
-                    <p className="text-sm text-slate-600">{call.handledBy}</p>
-
-                    <p className="text-sm font-bold">{call.duration}</p>
-
-                    <p className="text-sm text-slate-500">{call.type}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-              <h2 className="text-xl font-bold">AI Receptionist</h2>
-
-              <div className="mt-5 flex items-center gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-violet-100 flex items-center justify-center text-3xl">
-                  🤖
-                </div>
-
-                <div>
-                  <p className="font-bold">Receptionist AI</p>
-                  <p className="text-sm text-green-600 font-semibold">
-                    Online · Handling calls
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 mt-5">
-                <Mini title="Answered" value="12" />
-                <Mini title="Leads Routed" value="4" />
-                <Mini title="Voicemails" value="2" />
-                <Mini title="Satisfaction" value="96%" />
-              </div>
-
-              <button className="mt-5 w-full bg-violet-600 text-white py-3 rounded-xl font-bold">
-                Configure AI Receptionist
-              </button>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-              <h2 className="text-xl font-bold">Call Transcript</h2>
-
-              <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                <p className="text-sm text-slate-500">Selected Call</p>
-                <p className="font-bold mt-1">{selectedCall.caller}</p>
-                <p className="text-sm text-slate-600 mt-4">
-                  {selectedCall.transcript}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 mt-5">
-                <button className="border border-slate-200 py-3 rounded-xl font-bold">
-                  Download
-                </button>
-                <button className="bg-violet-600 text-white py-3 rounded-xl font-bold">
-                  Create Lead
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
+      <div className="min-h-screen bg-slate-50 flex"><FirmicSidebar />
+        <main className="flex-1 p-6 xl:p-8">
+          <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4"><div><p className="text-sm font-bold text-violet-700">Business Communications</p><h1 className="text-3xl font-bold mt-1">Calls and AI reception for {companyName}.</h1><p className="text-slate-500 mt-2">Only calls received for this company appear here.</p></div><div className="bg-white border border-slate-200 rounded-2xl px-5 py-3 shadow-sm"><p className="text-sm text-slate-500">Business Number</p><p className="font-bold">{hq?.phone || "Not Assigned"}</p><p className="text-xs text-slate-500">{hq?.location || "No headquarters selected"}</p></div></header>
+          {!hq?.office_code && <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 text-yellow-700">Activate a Headquarters before enabling Business Communications.</div>}
+          <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8"><Stat title="Calls Today" value={String(calls.length)} icon="☎️" /><Stat title="Answered by AI" value={String(answered)} icon="✅" /><Stat title="Missed Calls" value={String(missed)} icon="❌" /><Stat title="Avg. Duration" value={avg} icon="⏱️" /></section>
+          <section className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-8"><div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm"><h2 className="text-xl font-bold">Recent Calls</h2>{calls.length === 0 ? <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-6 text-slate-500">No calls have been received for {companyName}.</div> : <div className="mt-5 space-y-3">{calls.map((c) => <button key={c.id} onClick={() => setSelectedCallId(c.id)} className={`w-full text-left rounded-2xl border p-4 ${selectedCallId === c.id ? "border-violet-500 bg-violet-50" : "border-slate-200 bg-slate-50"}`}><div className="grid grid-cols-1 md:grid-cols-5 gap-3"><p className="font-bold">{c.caller}</p><p>{c.status}</p><p>{c.handledBy}</p><p className="font-bold">{formatDuration(c.durationSeconds)}</p><p>{c.type}</p></div></button>)}</div>}</div><div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm"><h2 className="text-xl font-bold">Call Transcript</h2>{selected ? <div className="mt-5 bg-slate-50 rounded-2xl p-5"><p className="font-bold">{selected.caller}</p><p className="text-sm text-slate-600 mt-4">{selected.transcript || "No transcript available."}</p></div> : <p className="mt-5 text-slate-500">No call selected.</p>}</div></section>
+        </main>
+      </div>
     </ProtectedRoute>
   );
 }
-
-function Stat({
-  title,
-  value,
-  icon,
-}: {
-  title: string;
-  value: string;
-  icon: string;
-}) {
-  return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
-      <div className="text-3xl">{icon}</div>
-      <p className="text-sm text-slate-500 mt-3">{title}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
-    </div>
-  );
-}
-
-function Mini({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="bg-slate-50 rounded-2xl p-3 text-center">
-      <p className="text-xs text-slate-500">{title}</p>
-      <p className="font-bold">{value}</p>
-    </div>
-  );
-}
-
-function Badge({ status }: { status: string }) {
-  const styles =
-    status === "Answered"
-      ? "bg-green-100 text-green-700"
-      : status === "Qualified"
-      ? "bg-violet-100 text-violet-700"
-      : "bg-red-100 text-red-700";
-
-  return (
-    <span className={`w-fit px-3 py-1 rounded-full text-xs font-bold ${styles}`}>
-      {status}
-    </span>
-  );
-}
+function formatDuration(seconds: number) { const m = Math.floor(seconds / 60); const s = seconds % 60; return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`; }
+function Stat({ title, value, icon }: { title: string; value: string; icon: string }) { return <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm"><div className="text-3xl">{icon}</div><p className="text-sm text-slate-500 mt-3">{title}</p><p className="text-2xl font-bold mt-1">{value}</p></div>; }
