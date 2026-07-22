@@ -7,7 +7,7 @@ Traditional providers offer office infrastructure. Firmic provides AI-powered op
 What are you building and how is it different than what is already out there? *
 Solution and unique value proposition. If relevant, please list and describe any IP that is associated with your company
 
-Firmic is the Operating System for AI-Native Companies. We provide AI powered operational infrastructure that enables businesses to launch, operate, and scale from a single platform.
+Firmic is the Operating System for AI-Native Companies. We provide AI powered operational infrastructure that enables businesses to launch, operate, and scale from a single platform, in a single day.
 
 Traditional providers such as Regus and Servcorp offer office infrastructure. Firmic goes beyond this by combining virtual offices, communications, compliance, document management, reporting, software integrations, and an AI workforce into one unified operating system.
 

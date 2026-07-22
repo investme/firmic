@@ -1,24 +1,35 @@
+import os
+
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# SQLite database
-DATABASE_URL = "sqlite:///./sonny.db"
+load_dotenv()
 
-# REQUIRED FOR SQLITE
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False}
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "sqlite:///./sonny.db",
 )
 
-# SESSION FACTORY
+connect_args = {}
+
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args=connect_args,
+)
+
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
-    bind=engine
+    bind=engine,
 )
 
-# BASE CLASS FOR ALL MODELS
 Base = declarative_base()
+
+
 def get_db():
     db = SessionLocal()
     try:

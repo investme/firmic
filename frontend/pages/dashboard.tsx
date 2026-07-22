@@ -350,12 +350,15 @@ export default function Dashboard() {
     [activity]
   );
 
-  const monthlyTotal = Number(summary?.total || 0);
-  const subtotal = Number(summary?.subtotal || 0);
-  const tax = Number(summary?.tax || 0);
-  const activeServices = summary?.services?.length || 0;
-  const hookupFee = monthlyTotal > 0 ? 49 : 0;
-  const checkout = monthlyTotal + hookupFee;
+const monthlyTotal = Number(summary?.total || 0);
+const subtotal = Number(summary?.subtotal || 0);
+const tax = Number(summary?.tax || 0);
+const activeServices = summary?.services?.length || 0;
+
+// The Usage Ledger is the single source of truth.
+// Do not manually add another hookup fee.
+const hookupFee = 0;
+const checkout = monthlyTotal;
 
   const healthScore = getHealthScore(intelligence);
   const healthStatus =

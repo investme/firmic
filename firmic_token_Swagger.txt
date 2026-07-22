@@ -1,0 +1,51 @@
+Firmic_token :  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0IiwiZW1haWwiOiJlZmF0b3VyYUBnbWFpbC5jb20iLCJleHAiOjE3ODQyOTI0NTJ9.E8R4DvkYdzn6HRGJemc9j77x49md2pCxCm82GUgp4wA
+
+Soso Company Id: 8f852952-22dc-475a-bad2-9f0d1777ae9f
+
+Next step: approve one decision
+
+Copy the decision ID shown in the response, for example:
+
+1d6cf1fe-c5e9-4110-a167-7633e7169f9b
+
+Workflow id : 97e83c1a-cf7c-48e8-be72-1d2ecf638844
+
+In_progress id step_id: 7900d8dc-dc77-4f3a-a46a-8b4be17967e2
+
+insight_id :  dcaa0694-abb8-4a7a-8999-6b3ac742cd5c
+
+ "run": 
+    "id":    ebdbfcf9-11a0-4e12-813c-6f4d5e859554
+
+action_id:
+3f403619-0fc7-4566-8469-9bb7650830b8
+
+"decision_id": "1d6cf1fe-c5e9-4110-a167-7633e7169f9b
+
+
+"decision_id": "1d6cf1fe-c5e9-4110-a167-7633e7169f9b"
+
+
+"idempotency_key": "c69c6f6c0f9f5e6df13029e7bf3efcd682220ea0d305c9b07311f93a32c638f9"
+
+
+new fermic token : eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJodXNzZWluQGZpcm1pYy5pbyIsImV4cCI6MTc4NDM3OTk3N30.1c8bkahTKvfvgeYsr1xZKeYzKNDze2ApZ0L_zc23yZk
+
+
+"agents":
+      "id": "fd2a4a17-5243-4a26-864f-31a279c3d559"
+
+Sonny run id :   88ef2521-eb25-4829-b1a7-6d3071d3fd54  
+
+with company : 8f852952-22dc-475a-bad2-9f0d1777ae9f  Soso
+
+ assignments id :  422d0f63-7b9c-4b3e-ac9e-ab67a27a6add
+
+
+new fermic token : 
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0IiwiZW1haWwiOiJlZmF0b3VyYUBnbWFpbC5jb20iLCJleHAiOjE3ODQ0NjczNTN9.PYQvcQQtP07zmlc8PPeM_xEes27xgR9cm5HDFpwaUgE
+
+new fermic token: 
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0IiwiZW1haWwiOiJlZmF0b3VyYUBnbWFpbC5jb20iLCJleHAiOjE3ODQ3NTIyMDZ9.SNuXoGvs7IWa4nmKMk24tE5ITYwYn3FTQ3gAwwUDkwM
+
+new customer id : e4fd8c67-16cd-45e6-9834-f769b8c05dec  Sarah Johnson

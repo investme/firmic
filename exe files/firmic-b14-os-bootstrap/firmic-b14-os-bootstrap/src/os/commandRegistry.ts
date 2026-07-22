@@ -1,0 +1,35 @@
+import {
+  Bell, Bot, BriefcaseBusiness, Building2, CalendarDays,
+  ChartNoAxesCombined, CheckSquare2, CircleDollarSign, Contact,
+  FileText, FolderLock, Gauge, Headphones, Landmark, Link2, Mail,
+  MessageSquare, Phone, ScrollText, Settings, ShieldCheck, Sparkles, Users,
+} from "lucide-react";
+import type { OSCommand } from "./types";
+
+export const coreCommands: OSCommand[] = [
+  { id: "dashboard", title: "Command Center", subtitle: "Open the executive dashboard", category: "Pages", keywords: ["dashboard", "home", "command center", "overview"], route: "/dashboard", icon: Gauge },
+  { id: "virtual-offices", title: "Office Marketplace", subtitle: "Browse available virtual offices", category: "Pages", keywords: ["office", "marketplace", "virtual office"], route: "/virtual-offices", icon: Building2 },
+  { id: "my-office", title: "Head Office", subtitle: "Manage the active company office", category: "Company", keywords: ["head office", "office", "address"], route: "/my-office", icon: Landmark },
+  { id: "ai-workforce", title: "AI Workforce", subtitle: "Manage Firmic AI employees", category: "AI", keywords: ["ai", "agents", "workforce", "employees"], route: "/ai-workforce", icon: Bot },
+  { id: "mailbox", title: "Digital Mailroom", subtitle: "Open company mail", category: "Pages", keywords: ["mail", "mailbox", "mailroom", "letters"], route: "/mailbox", icon: Mail },
+  { id: "voip-calls", title: "Business Communications", subtitle: "Manage calls and VoIP", category: "Pages", keywords: ["calls", "phone", "voip", "communications"], route: "/voip-calls", icon: Phone },
+  { id: "meeting-rooms", title: "Meeting Center", subtitle: "Book and manage meetings", category: "Pages", keywords: ["meetings", "calendar", "rooms", "book"], route: "/meeting-rooms", icon: CalendarDays },
+  { id: "crm", title: "Sales Hub", subtitle: "Open CRM and sales pipeline", category: "Pages", keywords: ["crm", "sales", "clients", "leads"], route: "/crm", icon: Contact },
+  { id: "microsoft-365", title: "Microsoft 365", subtitle: "Manage licenses and services", category: "Pages", keywords: ["microsoft", "365", "office", "licenses"], route: "/microsoft-365", icon: BriefcaseBusiness },
+  { id: "billing", title: "Billing Center", subtitle: "View invoices and company billing", category: "Finance", keywords: ["billing", "invoice", "payments", "finance"], route: "/billing", icon: CircleDollarSign },
+  { id: "messages", title: "Communication Center", subtitle: "Open company messages", category: "Pages", keywords: ["messages", "chat", "communication"], route: "/messages", icon: MessageSquare },
+  { id: "support", title: "Support Center", subtitle: "Open support tickets", category: "Pages", keywords: ["support", "help", "tickets"], route: "/support", icon: Headphones },
+  { id: "reports", title: "Reports", subtitle: "Open business reports", category: "Pages", keywords: ["reports", "analytics", "performance"], route: "/reports", icon: ChartNoAxesCombined },
+  { id: "timeline", title: "Timeline", subtitle: "Review company activity", category: "Pages", keywords: ["timeline", "history", "activity"], route: "/timeline", icon: ScrollText },
+  { id: "notifications", title: "Notifications", subtitle: "Review company alerts", category: "Pages", keywords: ["notifications", "alerts", "updates"], route: "/notifications", icon: Bell },
+  { id: "integrations", title: "Integrations", subtitle: "Manage connected business tools", category: "Settings", keywords: ["integrations", "apps", "connections"], route: "/integrations", icon: Link2 },
+  { id: "sonny", title: "Sonny AI COO", subtitle: "Open your AI Chief Operating Officer", category: "AI", keywords: ["sonny", "coo", "ai", "assistant"], route: "/sonny", icon: Sparkles },
+  { id: "executive-intelligence", title: "Executive Intelligence", subtitle: "View company health and recommendations", category: "AI", keywords: ["executive", "intelligence", "health", "insights"], route: "/executive-intelligence", icon: Sparkles },
+  { id: "hermes", title: "Hermes Compliance", subtitle: "Open compliance and document intelligence", category: "AI", keywords: ["hermes", "compliance", "legal", "documents"], route: "/hermes", icon: ShieldCheck },
+  { id: "company", title: "Company", subtitle: "Open active company profile", category: "Company", keywords: ["company", "profile", "business"], route: "/company", icon: Building2 },
+  { id: "companies", title: "Companies", subtitle: "Switch or manage companies", category: "Company", keywords: ["companies", "workspaces", "switch"], route: "/companies", icon: Users },
+  { id: "documents", title: "Document Vault", subtitle: "Open company documents", category: "Pages", keywords: ["documents", "files", "vault"], route: "/documents", icon: FolderLock },
+  { id: "tasks", title: "Tasks", subtitle: "Open operational tasks", category: "Pages", keywords: ["tasks", "todo", "work"], route: "/tasks", icon: CheckSquare2 },
+  { id: "create-company", title: "Create Company", subtitle: "Start a new company workspace", category: "Actions", keywords: ["create", "new", "company", "workspace"], route: "/create-company", icon: FileText },
+  { id: "settings", title: "Settings", subtitle: "Open workspace settings", category: "Settings", keywords: ["settings", "preferences", "configuration"], route: "/settings", icon: Settings },
+];

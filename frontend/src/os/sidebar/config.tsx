@@ -1,8 +1,321 @@
-import {BarChart3,Bell,Bot,BriefcaseBusiness,Building2,CalendarDays,CheckSquare2,CircleUserRound,FileText,Headphones,Home,Landmark,LayoutDashboard,Link2,Mail,MapPin,MessageSquare,Phone,Plus,Settings,ShieldCheck,Sparkles,Users,WalletCards,Warehouse} from "lucide-react";import type {SidebarConfig} from "./types";
-export const tenantSidebarConfig:SidebarConfig={mode:"tenant",brandEyebrow:"Firmic OS",brandTitle:"Firmic",brandSubtitle:"Business Infrastructure",sections:[
-{id:"executive",title:"Executive",items:[{id:"dashboard",label:"Command Center",href:"/dashboard",icon:<LayoutDashboard className="h-5 w-5"/>},{id:"executive-intelligence",label:"Executive Intelligence",href:"/executive-intelligence",icon:<Sparkles className="h-5 w-5"/>},{id:"sonny",label:"Sonny AI COO",href:"/sonny",icon:<CircleUserRound className="h-5 w-5"/>},{id:"hermes",label:"Hermes Compliance",href:"/hermes",icon:<ShieldCheck className="h-5 w-5"/>}]},
-{id:"workspace",title:"Workspace",items:[{id:"office-marketplace",label:"Office Marketplace",href:"/virtual-offices",icon:<Building2 className="h-5 w-5"/>},{id:"head-office",label:"Head Office",href:"/my-office",icon:<MapPin className="h-5 w-5"/>},{id:"ai-workforce",label:"AI Workforce",href:"/ai-workforce",icon:<Bot className="h-5 w-5"/>},{id:"documents",label:"Document Vault",href:"/documents",icon:<FileText className="h-5 w-5"/>},{id:"tasks",label:"Tasks",href:"/tasks",icon:<CheckSquare2 className="h-5 w-5"/>}]},
-{id:"operations",title:"Operations",items:[{id:"mailroom",label:"Digital Mailroom",href:"/mailbox",icon:<Mail className="h-5 w-5"/>},{id:"communications",label:"Business Communications",href:"/voip-calls",icon:<Phone className="h-5 w-5"/>},{id:"meeting-center",label:"Meeting Center",href:"/meeting-rooms",icon:<CalendarDays className="h-5 w-5"/>},{id:"sales-hub",label:"Sales Hub",href:"/crm",icon:<BarChart3 className="h-5 w-5"/>},{id:"microsoft-365",label:"Microsoft 365",href:"/microsoft-365",icon:<BriefcaseBusiness className="h-5 w-5"/>},{id:"messages",label:"Communication Center",href:"/messages",icon:<MessageSquare className="h-5 w-5"/>},{id:"support",label:"Support Center",href:"/support",icon:<Headphones className="h-5 w-5"/>}]},
-{id:"management",title:"Management",items:[{id:"billing",label:"Billing Center",href:"/billing",icon:<WalletCards className="h-5 w-5"/>},{id:"reports",label:"Reports",href:"/reports",icon:<BarChart3 className="h-5 w-5"/>},{id:"timeline",label:"Timeline",href:"/timeline",icon:<Landmark className="h-5 w-5"/>},{id:"notifications",label:"Notifications",href:"/notifications",icon:<Bell className="h-5 w-5"/>,badge:"notifications"},{id:"integrations",label:"Integrations",href:"/integrations",icon:<Link2 className="h-5 w-5"/>}]},
-{id:"administration",title:"Administration",items:[{id:"company",label:"Company",href:"/company",icon:<Landmark className="h-5 w-5"/>},{id:"companies",label:"Companies",href:"/companies",icon:<Building2 className="h-5 w-5"/>},{id:"create-company",label:"Create Company",href:"/create-company",icon:<Plus className="h-5 w-5"/>},{id:"settings",label:"Settings",href:"/settings",icon:<Settings className="h-5 w-5"/>}]}]};
-export const adminSidebarConfig:SidebarConfig={mode:"admin",brandEyebrow:"Firmic Internal",brandTitle:"Admin Console",brandSubtitle:"Platform Operations",sections:[{id:"platform",title:"Platform",items:[{id:"admin-dashboard",label:"Admin Command Center",href:"/admin",icon:<Home className="h-5 w-5"/>},{id:"admin-companies",label:"All Companies",href:"/admin-companies",icon:<Building2 className="h-5 w-5"/>},{id:"admin-users",label:"Admin Users & Roles",href:"/admin-users",icon:<Users className="h-5 w-5"/>}]},{id:"ops",title:"Operations",items:[{id:"admin-offices",label:"Office Inventory",href:"/admin-offices",icon:<Warehouse className="h-5 w-5"/>},{id:"admin-compliance",label:"Compliance Queue",href:"/admin-compliance",icon:<ShieldCheck className="h-5 w-5"/>},{id:"admin-billing",label:"Tenant Billing",href:"/admin-billing",icon:<WalletCards className="h-5 w-5"/>},{id:"admin-support",label:"Support Inbox",href:"/admin-support",icon:<MessageSquare className="h-5 w-5"/>}]},{id:"ai",title:"AI & Intelligence",items:[{id:"admin-ai-workforce",label:"AI Workforce Admin",href:"/admin-ai-workforce",icon:<Bot className="h-5 w-5"/>},{id:"admin-analytics",label:"Admin Reports",href:"/admin-analytics",icon:<BarChart3 className="h-5 w-5"/>}]},{id:"system",title:"System",items:[{id:"admin-settings",label:"Admin Settings",href:"/admin-settings",icon:<Settings className="h-5 w-5"/>}]}]};
+import {
+  Activity,
+  BadgeDollarSign,
+  Bell,
+  Bot,
+  BriefcaseBusiness,
+  Building2,
+  CalendarDays,
+  ChartNoAxesCombined,
+  CheckSquare,
+  CircleUserRound,
+  CreditCard,
+  FileText,
+  Headphones,
+  Home,
+  Inbox,
+  LayoutDashboard,
+  Mail,
+  MessageSquare,
+  Network,
+  Phone,
+  Plug,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Warehouse,
+} from "lucide-react";
+
+import type { SidebarConfig } from "./types";
+
+const iconClass = "h-5 w-5";
+
+export const tenantSidebarConfig: SidebarConfig = {
+  mode: "tenant",
+  brandEyebrow: "Firmic",
+  brandTitle: "Company Workspace",
+  brandSubtitle: "AI-Native Operating System",
+  sections: [
+    {
+      id: "command-center",
+      title: "Command Center",
+      items: [
+        {
+          id: "tenant-dashboard",
+          label: "Dashboard",
+          href: "/dashboard",
+          icon: <LayoutDashboard className={iconClass} />,
+        },
+        {
+          id: "tenant-notifications",
+          label: "Notifications",
+          href: "/notifications",
+          icon: <Bell className={iconClass} />,
+          badge: "notifications",
+        },
+        {
+          id: "tenant-executive-intelligence",
+          label: "Executive Intelligence",
+          href: "/executive-intelligence",
+          icon: <Sparkles className={iconClass} />,
+        },
+      ],
+    },
+    {
+      id: "company",
+      title: "Company",
+      items: [
+        {
+          id: "tenant-company",
+          label: "Company Workspace",
+          href: "/company",
+          icon: <Building2 className={iconClass} />,
+        },
+        {
+          id: "tenant-my-office",
+          label: "My Office",
+          href: "/my-office",
+          icon: <Home className={iconClass} />,
+        },
+        {
+          id: "tenant-virtual-offices",
+          label: "Virtual Offices",
+          href: "/virtual-offices",
+          icon: <Warehouse className={iconClass} />,
+        },
+        {
+          id: "tenant-ai-workforce",
+          label: "AI Workforce",
+          href: "/ai-workforce",
+          icon: <Bot className={iconClass} />,
+        },
+        {
+          id: "tenant-customer-hub",
+          label: "Customer Hub",
+          href: "/customer-hub",
+          icon: <Users className={iconClass} />,
+        },
+      ],
+    },
+    {
+      id: "operations",
+      title: "Operations",
+      items: [
+        {
+          id: "tenant-documents",
+          label: "Documents",
+          href: "/documents",
+          icon: <FileText className={iconClass} />,
+        },
+        {
+          id: "tenant-tasks",
+          label: "Tasks",
+          href: "/tasks",
+          icon: <CheckSquare className={iconClass} />,
+        },
+        {
+          id: "tenant-timeline",
+          label: "Timeline",
+          href: "/timeline",
+          icon: <Activity className={iconClass} />,
+        },
+        {
+          id: "tenant-mailbox",
+          label: "Digital Mailroom",
+          href: "/mailbox",
+          icon: <Inbox className={iconClass} />,
+        },
+        {
+          id: "tenant-meeting-rooms",
+          label: "Meeting Center",
+          href: "/meeting-rooms",
+          icon: <CalendarDays className={iconClass} />,
+        },
+      ],
+    },
+    {
+      id: "communications",
+      title: "Communications",
+      items: [
+        {
+          id: "tenant-messages",
+          label: "Messages",
+          href: "/messages",
+          icon: <MessageSquare className={iconClass} />,
+        },
+        {
+          id: "tenant-voip",
+          label: "VoIP & Calls",
+          href: "/voip-calls",
+          icon: <Phone className={iconClass} />,
+        },
+        {
+          id: "tenant-support",
+          label: "Support",
+          href: "/support",
+          icon: <Headphones className={iconClass} />,
+        },
+      ],
+    },
+    {
+      id: "business-tools",
+      title: "Business Tools",
+      items: [
+        {
+          id: "tenant-crm",
+          label: "Sales Hub",
+          href: "/crm",
+          icon: <BriefcaseBusiness className={iconClass} />,
+        },
+        {
+          id: "tenant-microsoft-365",
+          label: "Microsoft 365",
+          href: "/microsoft-365",
+          icon: <Mail className={iconClass} />,
+        },
+        {
+          id: "tenant-billing",
+          label: "Billing Center",
+          href: "/billing",
+          icon: <CreditCard className={iconClass} />,
+        },
+        {
+          id: "tenant-reports",
+          label: "Reports",
+          href: "/reports",
+          icon: <ChartNoAxesCombined className={iconClass} />,
+        },
+        {
+          id: "tenant-integrations",
+          label: "Integrations",
+          href: "/integrations",
+          icon: <Plug className={iconClass} />,
+        },
+      ],
+    },
+    {
+      id: "ai-executives",
+      title: "AI Executives",
+      items: [
+        {
+          id: "tenant-sonny",
+          label: "Sonny AI COO",
+          href: "/sonny",
+          icon: <Bot className={iconClass} />,
+        },
+        {
+          id: "tenant-hermes",
+          label: "Hermes Compliance",
+          href: "/hermes",
+          icon: <ShieldCheck className={iconClass} />,
+        },
+      ],
+    },
+    {
+      id: "workspace-settings",
+      title: "Workspace",
+      items: [
+        {
+          id: "tenant-settings",
+          label: "Settings",
+          href: "/settings",
+          icon: <Settings className={iconClass} />,
+        },
+      ],
+    },
+  ],
+};
+
+export const adminSidebarConfig: SidebarConfig = {
+  mode: "admin",
+  brandEyebrow: "Firmic",
+  brandTitle: "Admin Platform",
+  brandSubtitle: "Operations and Control",
+  sections: [
+    {
+      id: "admin-command-center",
+      title: "Command Center",
+      items: [
+        {
+          id: "admin-dashboard",
+          label: "Admin Dashboard",
+          href: "/admin",
+          icon: <LayoutDashboard className={iconClass} />,
+        },
+        {
+          id: "admin-analytics",
+          label: "Analytics",
+          href: "/admin-analytics",
+          icon: <ChartNoAxesCombined className={iconClass} />,
+        },
+      ],
+    },
+    {
+      id: "admin-management",
+      title: "Management",
+      items: [
+        {
+          id: "admin-companies",
+          label: "Companies",
+          href: "/admin-companies",
+          icon: <Building2 className={iconClass} />,
+        },
+        {
+          id: "admin-offices",
+          label: "Office Inventory",
+          href: "/admin-offices",
+          icon: <Warehouse className={iconClass} />,
+        },
+        {
+          id: "admin-users",
+          label: "Users",
+          href: "/admin-users",
+          icon: <CircleUserRound className={iconClass} />,
+        },
+        {
+          id: "admin-ai-workforce",
+          label: "AI Workforce",
+          href: "/admin-ai-workforce",
+          icon: <Bot className={iconClass} />,
+        },
+      ],
+    },
+    {
+      id: "admin-operations",
+      title: "Operations",
+      items: [
+        {
+          id: "admin-billing",
+          label: "Tenant Billing",
+          href: "/admin-billing",
+          icon: <BadgeDollarSign className={iconClass} />,
+        },
+        {
+          id: "admin-compliance",
+          label: "Compliance Queue",
+          href: "/admin-compliance",
+          icon: <ShieldCheck className={iconClass} />,
+        },
+        {
+          id: "admin-support",
+          label: "Support",
+          href: "/admin-support",
+          icon: <Headphones className={iconClass} />,
+        },
+      ],
+    },
+    {
+      id: "admin-system",
+      title: "System",
+      items: [
+        {
+          id: "admin-settings",
+          label: "Settings",
+          href: "/admin-settings",
+          icon: <Settings className={iconClass} />,
+        },
+      ],
+    },
+  ],
+};

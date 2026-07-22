@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey
+from sqlalchemy import Column, String, DateTime, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
@@ -12,6 +12,11 @@ class Company(Base):
     name = Column(String, index=True)
     status = Column(String, default="initiated")
 
+    headquarters_office_code = Column(String, nullable=True, index=True)
+    headquarters_location = Column(String, nullable=True)
+    headquarters_phone = Column(String, nullable=True)
+    headquarters_monthly_price_usd = Column(Float, nullable=True)
+
     documents = relationship("Document", back_populates="company")
     tasks = relationship("Task", back_populates="company")
     workflows = relationship("Workflow", back_populates="company")
@@ -22,39 +27,35 @@ class Document(Base):
 
     id = Column(String, primary_key=True, index=True)
     company_id = Column(String, ForeignKey("companies.id"), index=True)
-
     name = Column(String, index=True)
     type = Column(String, default="General")
     status = Column(String, default="pending")
-
     file_path = Column(String, nullable=True)
     uploaded_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     company = relationship("Company", back_populates="documents")
+
 
 class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(String, primary_key=True, index=True)
     company_id = Column(String, ForeignKey("companies.id"), index=True)
-
     title = Column(String, index=True)
     description = Column(String, nullable=True)
     status = Column(String, default="pending")
-
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     company = relationship("Company", back_populates="tasks")
+
 
 class Workflow(Base):
     __tablename__ = "workflows"
 
     id = Column(String, primary_key=True, index=True)
     company_id = Column(String, ForeignKey("companies.id"), index=True)
-
     name = Column(String, index=True)
     status = Column(String, default="running")
-
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     company = relationship("Company", back_populates="workflows")
@@ -66,10 +67,8 @@ class WorkflowStep(Base):
 
     id = Column(String, primary_key=True, index=True)
     workflow_id = Column(String, ForeignKey("workflows.id"), index=True)
-
     title = Column(String, index=True)
     status = Column(String, default="pending")
-
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     workflow = relationship("Workflow", back_populates="steps")

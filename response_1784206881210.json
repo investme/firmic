@@ -1,0 +1,704 @@
+{
+  "state_version": "b1.1",
+  "company": {
+    "id": "8f852952-22dc-475a-bad2-9f0d1777ae9f",
+    "name": "Soso",
+    "status": "active",
+    "owner_user_id": "4",
+    "headquarters": {
+      "active": true,
+      "office_code": "A003",
+      "location": "Hub71, Abu Dhabi, United Arab Emirates",
+      "phone": "+971 2 XXX 047",
+      "monthly_price_usd": 99
+    }
+  },
+  "documents": {
+    "summary": {
+      "total": 4,
+      "approved": 4,
+      "pending": 0
+    },
+    "signals": {
+      "total": 4,
+      "approved": 4,
+      "pending": 0,
+      "requirements": {
+        "trade_license": true,
+        "passport_copy": true,
+        "incorporation_certificate": true,
+        "proof_of_address": true,
+        "kyb": false,
+        "beneficial_owner": false,
+        "office_agreement": false
+      }
+    },
+    "items": [
+      {
+        "id": "3c7ae5d9-de25-401f-8e61-468ba7640824",
+        "name": "Incorporation Certificate",
+        "type": "Incorporation Certificate",
+        "status": "approved",
+        "file_path": null,
+        "uploaded_at": "2026-07-15T11:54:47.454816"
+      },
+      {
+        "id": "cb882b79-a466-42b9-9178-8273c8c1e1e9",
+        "name": "Passport Copy",
+        "type": "Passport Copy",
+        "status": "approved",
+        "file_path": null,
+        "uploaded_at": "2026-07-15T11:54:44.053112"
+      },
+      {
+        "id": "67f1ff5a-1bad-4012-b04f-5dbb95214e54",
+        "name": "Proof of Address",
+        "type": "Proof of Address",
+        "status": "approved",
+        "file_path": null,
+        "uploaded_at": "2026-07-15T11:54:28.670186"
+      },
+      {
+        "id": "9383b93d-dd0f-447a-8af8-bc9c3d1ebbe6",
+        "name": "Trade License",
+        "type": "Trade License",
+        "status": "approved",
+        "file_path": null,
+        "uploaded_at": "2026-07-15T11:53:49.253905"
+      }
+    ]
+  },
+  "tasks": {
+    "summary": {
+      "total": 10,
+      "pending": 6,
+      "completed": 4
+    },
+    "items": [
+      {
+        "id": "74ae73e6-34b6-447a-ad65-7ed5ccd4974d",
+        "title": "Review Beneficial Owner Declaration",
+        "description": "Hermes requested a review of the company beneficial owner declaration.",
+        "status": "pending",
+        "created_at": "2026-07-16T11:31:50.784255"
+      },
+      {
+        "id": "da417f54-bc27-4b56-b9d8-b967b494d822",
+        "title": "Review Beneficial Owner Declaration",
+        "description": "Hermes requested a review of the company beneficial owner declaration.",
+        "status": "pending",
+        "created_at": "2026-07-16T11:31:50.049855"
+      },
+      {
+        "id": "e3fed696-c198-4cc4-9ac0-e1096c51d0ab",
+        "title": "Review Beneficial Owner Declaration",
+        "description": "Hermes requested a review of the company beneficial owner declaration.",
+        "status": "pending",
+        "created_at": "2026-07-16T11:31:48.984424"
+      },
+      {
+        "id": "6028c3a3-9a95-470d-8407-ff2f31a70cef",
+        "title": "Review Beneficial Owner Declaration",
+        "description": "Hermes requested a review of the company beneficial owner declaration.",
+        "status": "pending",
+        "created_at": "2026-07-16T11:31:45.751085"
+      },
+      {
+        "id": "e29ce6e5-26a5-429b-88e1-0054734bb204",
+        "title": "Review Beneficial Owner Declaration",
+        "description": "Hermes requested a review of the company beneficial owner declaration.",
+        "status": "pending",
+        "created_at": "2026-07-15T16:26:27.105930"
+      },
+      {
+        "id": "d67a61f8-45f2-4a2c-9100-34e1925c4361",
+        "title": "Review Beneficial Owner Declaration",
+        "description": "Hermes requested a review of the company beneficial owner declaration.",
+        "status": "pending",
+        "created_at": "2026-07-15T16:26:24.085687"
+      },
+      {
+        "id": "15b499c9-fa9a-40e3-9a8a-88091f553801",
+        "title": "Upload Trade License",
+        "description": "Requested by Firmic Admin from the Hermes Compliance Queue.",
+        "status": "completed",
+        "created_at": "2026-07-15T10:56:39.660061"
+      },
+      {
+        "id": "dd180269-5a3c-41e9-a074-ccdac51b4021",
+        "title": "Upload Proof of Address",
+        "description": "Requested by Firmic Admin from the Hermes Compliance Queue.",
+        "status": "completed",
+        "created_at": "2026-07-15T10:56:39.660061"
+      },
+      {
+        "id": "51f239bb-6348-4802-9273-c2414aabf0e4",
+        "title": "Upload Incorporation Certificate",
+        "description": "Requested by Firmic Admin from the Hermes Compliance Queue.",
+        "status": "completed",
+        "created_at": "2026-07-15T10:56:39.660061"
+      },
+      {
+        "id": "aaf70ae5-9829-4cab-b025-5d0d6b99ae7f",
+        "title": "Upload Passport Copy",
+        "description": "Requested by Firmic Admin from the Hermes Compliance Queue.",
+        "status": "completed",
+        "created_at": "2026-07-15T10:56:39.660061"
+      }
+    ]
+  },
+  "workflows": {
+    "summary": {
+      "total": 0,
+      "running": 0,
+      "completed": 0
+    },
+    "items": []
+  },
+  "ai_workforce": {
+    "summary": {
+      "total": 5,
+      "active": 5,
+      "inactive": 0,
+      "active_monthly_cost_usd": 265
+    },
+    "items": [
+      {
+        "id": "633fca6d-a070-4823-8107-3048a414dc37",
+        "agent_name": "Appointment AI",
+        "monthly_price_usd": 49,
+        "status": "active",
+        "activated_at": "2026-07-15T20:23:25.032311",
+        "deactivated_at": null
+      },
+      {
+        "id": "8d5cea87-0bce-4d65-812b-9981f03f214b",
+        "agent_name": "Finance AI",
+        "monthly_price_usd": 59,
+        "status": "active",
+        "activated_at": "2026-07-15T12:49:24.890763",
+        "deactivated_at": null
+      },
+      {
+        "id": "518294b8-4c9f-4d7b-b278-b10a49ad3220",
+        "agent_name": "Legal AI",
+        "monthly_price_usd": 49,
+        "status": "active",
+        "activated_at": "2026-07-15T20:23:11.478795",
+        "deactivated_at": null
+      },
+      {
+        "id": "7c0f472d-f44c-4769-818f-2f58dc68cd2f",
+        "agent_name": "Receptionist AI",
+        "monthly_price_usd": 49,
+        "status": "active",
+        "activated_at": "2026-07-15T12:34:16.869360",
+        "deactivated_at": null
+      },
+      {
+        "id": "d96157ed-a9fc-4cb9-956c-6d649e50a604",
+        "agent_name": "Support AI",
+        "monthly_price_usd": 59,
+        "status": "active",
+        "activated_at": "2026-07-15T12:49:20.948396",
+        "deactivated_at": null
+      }
+    ]
+  },
+  "meetings": {
+    "summary": {
+      "total": 1,
+      "active": 1,
+      "cancelled": 0,
+      "booked_hours": 1
+    },
+    "items": [
+      {
+        "id": "12257f00-283a-43f3-9c88-f9cce84e78fb",
+        "room_id": 1,
+        "room_name": "Hub71 Focus Room",
+        "booking_date": "2026-07-15",
+        "booking_time": "09:30",
+        "duration_hours": 1,
+        "hourly_price_usd": 25,
+        "status": "confirmed",
+        "created_at": "2026-07-14T13:30:20.416714"
+      }
+    ]
+  },
+  "billing": {
+    "entry_count": 9,
+    "subtotal_usd": 487,
+    "tax_usd": 21.9,
+    "total_usd": 508.9,
+    "current_invoice_month": "2026-07",
+    "current_month_total_usd": 508.9,
+    "unbilled_usd": 278.25,
+    "billed_usd": 0,
+    "paid_usd": 230.65,
+    "status_totals_usd": {
+      "unbilled": 278.25,
+      "paid": 230.65
+    },
+    "service_totals_usd": {
+      "ai_workforce": 329.7,
+      "firmic_setup": 49,
+      "meeting_center": 26.25,
+      "office": 103.95
+    }
+  },
+  "support": {
+    "summary": {
+      "total": 1,
+      "open": 1,
+      "urgent": 0,
+      "resolved": 0
+    },
+    "items": [
+      {
+        "id": "ab91b61c-72ef-4cbd-a4e4-0a81fe482e86",
+        "subject": "item cost",
+        "category": "billing",
+        "priority": "normal",
+        "status": "open",
+        "assigned_admin_id": null,
+        "message_count": 1,
+        "created_at": "2026-07-15T15:46:07.051022",
+        "updated_at": "2026-07-15T15:46:07.051022",
+        "resolved_at": null
+      }
+    ]
+  },
+  "activity": {
+    "summary": {
+      "returned": 25
+    },
+    "items": [
+      {
+        "id": "e7e346fb-f49a-40ff-ac9c-d49a387f1f82",
+        "event_type": "ai_agent_hired",
+        "title": "Appointment AI hired",
+        "description": "Appointment AI was activated for Soso.",
+        "actor_type": "tenant",
+        "source_type": "company_ai_agent",
+        "source_id": "633fca6d-a070-4823-8107-3048a414dc37",
+        "metadata": null,
+        "created_at": "2026-07-15T20:23:25.038308"
+      },
+      {
+        "id": "9db1ca69-6590-4060-9ecd-99f01dc9e5b2",
+        "event_type": "ai_agent_hired",
+        "title": "Legal AI hired",
+        "description": "Legal AI was activated for Soso.",
+        "actor_type": "tenant",
+        "source_type": "company_ai_agent",
+        "source_id": "518294b8-4c9f-4d7b-b278-b10a49ad3220",
+        "metadata": null,
+        "created_at": "2026-07-15T20:23:11.506903"
+      },
+      {
+        "id": "5aa3d23d-11ae-4abd-97a2-992868b09a4b",
+        "event_type": "support_ticket_created",
+        "title": "Support ticket created",
+        "description": "Soso opened support ticket: item cost.",
+        "actor_type": "tenant",
+        "source_type": "support_ticket",
+        "source_id": "ab91b61c-72ef-4cbd-a4e4-0a81fe482e86",
+        "metadata": {
+          "category": "billing",
+          "priority": "normal",
+          "status": "open"
+        },
+        "created_at": "2026-07-15T15:46:07.031104"
+      },
+      {
+        "id": "be834cfa-407c-4943-9024-1a0c92d5cc19",
+        "event_type": "ai_agent_hired",
+        "title": "Finance AI hired",
+        "description": "Finance AI was activated for Soso.",
+        "actor_type": "tenant",
+        "source_type": "company_ai_agent",
+        "source_id": "8d5cea87-0bce-4d65-812b-9981f03f214b",
+        "metadata": null,
+        "created_at": "2026-07-15T12:49:24.896763"
+      },
+      {
+        "id": "bf159c91-d715-42c0-a496-b178060e1867",
+        "event_type": "ai_agent_hired",
+        "title": "Support AI hired",
+        "description": "Support AI was activated for Soso.",
+        "actor_type": "tenant",
+        "source_type": "company_ai_agent",
+        "source_id": "d96157ed-a9fc-4cb9-956c-6d649e50a604",
+        "metadata": null,
+        "created_at": "2026-07-15T12:49:20.962418"
+      },
+      {
+        "id": "5eab1d27-3f07-4398-8255-96baedc30a73",
+        "event_type": "ai_agent_hired",
+        "title": "Receptionist AI hired",
+        "description": "Receptionist AI was activated for Soso.",
+        "actor_type": "tenant",
+        "source_type": "company_ai_agent",
+        "source_id": "7c0f472d-f44c-4769-818f-2f58dc68cd2f",
+        "metadata": null,
+        "created_at": "2026-07-15T12:34:16.873383"
+      },
+      {
+        "id": "69764b5c-7854-4244-8f99-13da71b859a2",
+        "event_type": "ai_agent_deactivated",
+        "title": "Receptionist AI deactivated",
+        "description": "Receptionist AI was deactivated for Soso.",
+        "actor_type": "tenant",
+        "source_type": "company_ai_agent",
+        "source_id": "7c0f472d-f44c-4769-818f-2f58dc68cd2f",
+        "metadata": null,
+        "created_at": "2026-07-15T12:32:26.414216"
+      },
+      {
+        "id": "2853d79b-6161-4cbd-bf00-1fa8ab75cc9a",
+        "event_type": "compliance_document_verified",
+        "title": "Proof of Address verified",
+        "description": "Firmic Admin verified the uploaded compliance document.",
+        "actor_type": "admin",
+        "source_type": "document",
+        "source_id": "67f1ff5a-1bad-4012-b04f-5dbb95214e54",
+        "metadata": {
+          "document_name": "Proof of Address",
+          "document_type": "Proof of Address",
+          "verified_status": "approved"
+        },
+        "created_at": "2026-07-15T11:56:11.198567"
+      },
+      {
+        "id": "3ddbc203-9885-4c81-884d-fe436e3cb4ae",
+        "event_type": "compliance_document_verified",
+        "title": "Incorporation Certificate verified",
+        "description": "Firmic Admin verified the uploaded compliance document.",
+        "actor_type": "admin",
+        "source_type": "document",
+        "source_id": "3c7ae5d9-de25-401f-8e61-468ba7640824",
+        "metadata": {
+          "document_name": "Incorporation Certificate",
+          "document_type": "Incorporation Certificate",
+          "verified_status": "approved"
+        },
+        "created_at": "2026-07-15T11:56:08.644315"
+      },
+      {
+        "id": "d3164d64-db11-4713-9dbc-13adb5c08235",
+        "event_type": "compliance_document_verified",
+        "title": "Passport Copy verified",
+        "description": "Firmic Admin verified the uploaded compliance document.",
+        "actor_type": "admin",
+        "source_type": "document",
+        "source_id": "cb882b79-a466-42b9-9178-8273c8c1e1e9",
+        "metadata": {
+          "document_name": "Passport Copy",
+          "document_type": "Passport Copy",
+          "verified_status": "approved"
+        },
+        "created_at": "2026-07-15T11:56:03.188702"
+      },
+      {
+        "id": "e9bd3f9b-2f51-4fba-9865-ad6925f2a562",
+        "event_type": "compliance_document_verified",
+        "title": "Trade License verified",
+        "description": "Firmic Admin verified the uploaded compliance document.",
+        "actor_type": "admin",
+        "source_type": "document",
+        "source_id": "9383b93d-dd0f-447a-8af8-bc9c3d1ebbe6",
+        "metadata": {
+          "document_name": "Trade License",
+          "document_type": "Trade License",
+          "verified_status": "approved"
+        },
+        "created_at": "2026-07-15T11:55:58.807659"
+      },
+      {
+        "id": "93cf1b5d-20b8-414f-b015-209f442b4408",
+        "event_type": "compliance_reviewed",
+        "title": "Compliance review completed",
+        "description": "Firmic Admin reviewed the live Hermes compliance record.",
+        "actor_type": "admin",
+        "source_type": "compliance_queue",
+        "source_id": "8f852952-22dc-475a-bad2-9f0d1777ae9f",
+        "metadata": {
+          "reviewed_at": "2026-07-15T11:55:47.104419"
+        },
+        "created_at": "2026-07-15T11:55:47.106500"
+      },
+      {
+        "id": "5788acd8-3f12-4d37-952a-6c2926e505de",
+        "event_type": "compliance_document_uploaded",
+        "title": "Incorporation Certificate uploaded",
+        "description": "Soso supplied Incorporation Certificate for Firmic compliance review.",
+        "actor_type": "tenant",
+        "source_type": "document",
+        "source_id": "3c7ae5d9-de25-401f-8e61-468ba7640824",
+        "metadata": {
+          "document_name": "Incorporation Certificate",
+          "document_type": "Incorporation Certificate",
+          "requirement_key": "incorporation_certificate",
+          "completed_task_ids": [
+            "51f239bb-6348-4802-9273-c2414aabf0e4"
+          ]
+        },
+        "created_at": "2026-07-15T11:54:47.454816"
+      },
+      {
+        "id": "681eb9bf-b210-4d5d-b271-229eca4925fd",
+        "event_type": "compliance_document_uploaded",
+        "title": "Passport Copy uploaded",
+        "description": "Soso supplied Passport Copy for Firmic compliance review.",
+        "actor_type": "tenant",
+        "source_type": "document",
+        "source_id": "cb882b79-a466-42b9-9178-8273c8c1e1e9",
+        "metadata": {
+          "document_name": "Passport Copy",
+          "document_type": "Passport Copy",
+          "requirement_key": "passport",
+          "completed_task_ids": [
+            "aaf70ae5-9829-4cab-b025-5d0d6b99ae7f"
+          ]
+        },
+        "created_at": "2026-07-15T11:54:44.052049"
+      },
+      {
+        "id": "91d66171-f800-465c-b8fd-4595e7654d75",
+        "event_type": "compliance_document_uploaded",
+        "title": "Proof of Address uploaded",
+        "description": "Soso supplied Proof of Address for Firmic compliance review.",
+        "actor_type": "tenant",
+        "source_type": "document",
+        "source_id": "67f1ff5a-1bad-4012-b04f-5dbb95214e54",
+        "metadata": {
+          "document_name": "Proof of Address",
+          "document_type": "Proof of Address",
+          "requirement_key": "proof_of_address",
+          "completed_task_ids": [
+            "dd180269-5a3c-41e9-a074-ccdac51b4021"
+          ]
+        },
+        "created_at": "2026-07-15T11:54:28.670186"
+      },
+      {
+        "id": "620c70d0-cbf7-417b-9fc1-efdf2b13596a",
+        "event_type": "compliance_document_uploaded",
+        "title": "Trade License uploaded",
+        "description": "Soso supplied Trade License for Firmic compliance review.",
+        "actor_type": "tenant",
+        "source_type": "document",
+        "source_id": "9383b93d-dd0f-447a-8af8-bc9c3d1ebbe6",
+        "metadata": {
+          "document_name": "Trade License",
+          "document_type": "Trade License",
+          "requirement_key": "trade_license",
+          "completed_task_ids": [
+            "15b499c9-fa9a-40e3-9a8a-88091f553801"
+          ]
+        },
+        "created_at": "2026-07-15T11:53:49.253905"
+      },
+      {
+        "id": "2559498a-25b0-468b-8dbd-06be9c1a6400",
+        "event_type": "compliance_documents_requested",
+        "title": "Compliance documents requested",
+        "description": "Firmic Admin requested: Trade License, Passport Copy, Incorporation Certificate, Proof of Address.",
+        "actor_type": "admin",
+        "source_type": "compliance_queue",
+        "source_id": "8f852952-22dc-475a-bad2-9f0d1777ae9f",
+        "metadata": {
+          "missing_documents": [
+            "Trade License",
+            "Passport Copy",
+            "Incorporation Certificate",
+            "Proof of Address"
+          ],
+          "created_task_count": 0
+        },
+        "created_at": "2026-07-15T11:51:47.342858"
+      },
+      {
+        "id": "18908a7f-b814-4891-ba84-258b51dc0376",
+        "event_type": "compliance_documents_requested",
+        "title": "Compliance documents requested",
+        "description": "Firmic Admin requested: Trade License, Passport Copy, Incorporation Certificate, Proof of Address.",
+        "actor_type": "admin",
+        "source_type": "compliance_queue",
+        "source_id": "8f852952-22dc-475a-bad2-9f0d1777ae9f",
+        "metadata": {
+          "missing_documents": [
+            "Trade License",
+            "Passport Copy",
+            "Incorporation Certificate",
+            "Proof of Address"
+          ],
+          "created_task_count": 0
+        },
+        "created_at": "2026-07-15T11:51:39.088437"
+      },
+      {
+        "id": "4372e269-3e0a-44ac-9bec-bd6d93cb54cd",
+        "event_type": "compliance_documents_requested",
+        "title": "Compliance documents requested",
+        "description": "Firmic Admin requested: Trade License, Passport Copy, Incorporation Certificate, Proof of Address.",
+        "actor_type": "admin",
+        "source_type": "compliance_queue",
+        "source_id": "8f852952-22dc-475a-bad2-9f0d1777ae9f",
+        "metadata": {
+          "missing_documents": [
+            "Trade License",
+            "Passport Copy",
+            "Incorporation Certificate",
+            "Proof of Address"
+          ],
+          "created_task_count": 0
+        },
+        "created_at": "2026-07-15T10:59:18.384721"
+      },
+      {
+        "id": "7053f5e4-2922-4aa6-a93c-c97d6d081f1f",
+        "event_type": "compliance_documents_requested",
+        "title": "Compliance documents requested",
+        "description": "Firmic Admin requested: Trade License, Passport Copy, Incorporation Certificate, Proof of Address.",
+        "actor_type": "admin",
+        "source_type": "compliance_queue",
+        "source_id": "8f852952-22dc-475a-bad2-9f0d1777ae9f",
+        "metadata": {
+          "missing_documents": [
+            "Trade License",
+            "Passport Copy",
+            "Incorporation Certificate",
+            "Proof of Address"
+          ],
+          "created_task_count": 0
+        },
+        "created_at": "2026-07-15T10:59:08.382820"
+      },
+      {
+        "id": "3f53b2d5-2f07-44ad-937f-fcb9965a5abe",
+        "event_type": "compliance_reviewed",
+        "title": "Compliance review completed",
+        "description": "Firmic Admin reviewed the live Hermes compliance record.",
+        "actor_type": "admin",
+        "source_type": "compliance_queue",
+        "source_id": "8f852952-22dc-475a-bad2-9f0d1777ae9f",
+        "metadata": {
+          "reviewed_at": "2026-07-15T10:56:49.305829"
+        },
+        "created_at": "2026-07-15T10:56:49.305829"
+      },
+      {
+        "id": "6920f83f-f18f-4de4-9149-278d05c3c810",
+        "event_type": "compliance_documents_requested",
+        "title": "Compliance documents requested",
+        "description": "Firmic Admin requested: Trade License, Passport Copy, Incorporation Certificate, Proof of Address.",
+        "actor_type": "admin",
+        "source_type": "compliance_queue",
+        "source_id": "8f852952-22dc-475a-bad2-9f0d1777ae9f",
+        "metadata": {
+          "missing_documents": [
+            "Trade License",
+            "Passport Copy",
+            "Incorporation Certificate",
+            "Proof of Address"
+          ],
+          "created_task_count": 4
+        },
+        "created_at": "2026-07-15T10:56:39.653041"
+      },
+      {
+        "id": "5877cffd-cf18-4a91-924a-1bc2898860f5",
+        "event_type": "meeting_room_booked",
+        "title": "Hub71 Focus Room booked",
+        "description": "1 hour(s) booked on 2026-07-15 at 09:30.",
+        "actor_type": "tenant",
+        "source_type": "meeting_booking",
+        "source_id": "12257f00-283a-43f3-9c88-f9cce84e78fb",
+        "metadata": null,
+        "created_at": "2026-07-14T13:30:20.418532"
+      },
+      {
+        "id": "2bee35e2-1a7a-4043-8b99-9b80e4da6de0",
+        "event_type": "ai_agent_hired",
+        "title": "Receptionist AI hired",
+        "description": "Receptionist AI was activated for Soso.",
+        "actor_type": "tenant",
+        "source_type": "company_ai_agent",
+        "source_id": "7c0f472d-f44c-4769-818f-2f58dc68cd2f",
+        "metadata": null,
+        "created_at": "2026-07-14T13:29:44.542693"
+      },
+      {
+        "id": "788950bd-2da6-49bb-91c9-6585fd98aa33",
+        "event_type": "headquarters_activated",
+        "title": "Headquarters A003 activated",
+        "description": "Soso activated Headquarters A003.",
+        "actor_type": "tenant",
+        "source_type": "office",
+        "source_id": "3",
+        "metadata": null,
+        "created_at": "2026-07-14T13:29:30.094450"
+      }
+    ]
+  },
+  "memory": {
+    "summary": {
+      "returned": 0,
+      "by_type": {}
+    },
+    "items": []
+  },
+  "progress": {
+    "score": 100,
+    "task_progress": 40,
+    "components": {
+      "company_active": true,
+      "headquarters_active": true,
+      "has_documents": true,
+      "has_ai_workforce": true,
+      "tasks_have_progress": true
+    }
+  },
+  "intelligence": {
+    "alerts": [
+      {
+        "code": "tasks_pending",
+        "severity": "medium",
+        "title": "6 task(s) require attention",
+        "source": "tasks"
+      },
+      {
+        "code": "unbilled_usage",
+        "severity": "medium",
+        "title": "Unbilled usage is present",
+        "detail": "$278.25 remains unbilled",
+        "source": "billing"
+      }
+    ],
+    "recommendations": [
+      {
+        "code": "review_tasks",
+        "priority": "medium",
+        "title": "Review pending company tasks",
+        "target": "/tasks"
+      },
+      {
+        "code": "review_support",
+        "priority": "medium",
+        "title": "Review open support tickets",
+        "target": "/support"
+      },
+      {
+        "code": "review_billing",
+        "priority": "medium",
+        "title": "Review current billing",
+        "target": "/billing"
+      }
+    ],
+    "attention_required": true,
+    "critical_count": 0,
+    "high_count": 0
+  }
+}
