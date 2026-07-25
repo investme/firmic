@@ -69,3 +69,7 @@ _src_unused_backup/
 # Temporary API responses
 # =========================
 response_*.json
+# Python virtual environments
+.venv/
+.venv-production-test/
+venv/
