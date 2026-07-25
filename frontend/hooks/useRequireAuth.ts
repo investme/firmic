@@ -1,25 +1,35 @@
 import { useEffect, useState } from "react";
-import type { AuthUser } from "../services/authApi";
+import { useRouter } from "next/router";
+
 import { getAuthToken, getAuthUser } from "../services/authApi";
 
 export function useRequireAuth() {
+  const router = useRouter();
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    const token = getAuthToken();
+    if (!router.isReady) return;
 
-    if (!token) {
-      window.location.href = "/login";
+    const token = getAuthToken();
+    const user = getAuthUser();
+
+    if (!token || !user) {
+      const next = router.asPath && router.asPath !== "/login"
+        ? `?next=${encodeURIComponent(router.asPath)}`
+        : "";
+      void router.replace(`/login${next}`);
+      setCheckingAuth(false);
       return;
     }
 
-    setUser(getAuthUser());
-    setCheckingAuth(false);
-  }, []);
+    if (String(user.role || "").toLowerCase() === "admin") {
+      void router.replace("/admin");
+      setCheckingAuth(false);
+      return;
+    }
 
-  return {
-    checkingAuth,
-    user,
-  };
+    setCheckingAuth(false);
+  }, [router]);
+
+  return { checkingAuth };
 }

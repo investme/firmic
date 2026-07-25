@@ -318,3 +318,125 @@ export async function createCustomerTicket(
     )
   );
 }
+
+export type SonnyCustomerSummary = {
+  action: "summarize_customer";
+  title: string;
+  reply: string;
+  customer: {
+    id: string;
+    name: string;
+    status: string;
+    health: string;
+    relationship_score: number;
+  };
+  metrics: {
+    contacts: number;
+    active_opportunities: number;
+    pipeline_value: number;
+    weighted_forecast: number;
+    open_tickets: number;
+    recent_communications: number;
+  };
+  risks: string[];
+  recommended_next_action: string;
+  recent_activity: Array<Record<string, unknown>>;
+  recent_communications: Array<Record<string, unknown>>;
+  confidence: number;
+  source: string;
+};
+
+export async function summarizeCustomerWithSonny(
+  customerId: string,
+  options?: { signal?: AbortSignal }
+): Promise<SonnyCustomerSummary> {
+  return parse(
+    await fetch(
+      `${API_URL}/api/customer-hub/${encodeURIComponent(
+        customerId
+      )}/sonny/summary`,
+      {
+        headers: headers(),
+        cache: "no-store",
+        signal: options?.signal,
+      }
+    )
+  );
+}
+
+
+export type CustomerSonnyAction =
+  | "summary"
+  | "next_action"
+  | "follow_up"
+  | "proposal";
+
+export type CustomerSonnyActionResponse = SonnyCustomerSummary & {
+  action: string;
+  subject?: string;
+  email_body?: string;
+  execution_steps?: string[];
+  proposal?: {
+    objective?: string;
+    scope?: string[];
+    next_step?: string;
+    missing_information?: string[];
+  };
+};
+
+export async function executeCustomerSonnyAction(
+  customerId: string,
+  action: CustomerSonnyAction,
+  options?: { signal?: AbortSignal }
+): Promise<CustomerSonnyActionResponse> {
+  return parse(
+    await fetch(
+      `${API_URL}/api/customer-hub/${encodeURIComponent(
+        customerId
+      )}/sonny/action`,
+      {
+        method: "POST",
+        headers: headers(true),
+        cache: "no-store",
+        signal: options?.signal,
+        body: JSON.stringify({ action }),
+      }
+    )
+  );
+}
+
+
+export type CustomerSonnyExecution =
+  | "save_email_draft"
+  | "create_follow_up_task"
+  | "record_recommendation";
+
+export type CustomerSonnyExecutionResponse = {
+  ok: boolean;
+  execution: CustomerSonnyExecution;
+  reply: string;
+  record?: Record<string, unknown>;
+};
+
+export async function executeCustomerSonnyResult(
+  customerId: string,
+  execution: CustomerSonnyExecution,
+  sourceAction: CustomerSonnyAction
+): Promise<CustomerSonnyExecutionResponse> {
+  return parse(
+    await fetch(
+      `${API_URL}/api/customer-hub/${encodeURIComponent(
+        customerId
+      )}/sonny/execute`,
+      {
+        method: "POST",
+        headers: headers(true),
+        cache: "no-store",
+        body: JSON.stringify({
+          execution,
+          source_action: sourceAction,
+        }),
+      }
+    )
+  );
+}

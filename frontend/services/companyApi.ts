@@ -1,11 +1,24 @@
 import { API_URL } from "./config";
 
+export type CreateCompanyPayload = {
+  name: string;
+};
+
+export function isAuthenticated(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return Boolean(localStorage.getItem("firmic_token"));
+}
+
 function getAuthHeaders() {
   if (typeof window === "undefined") {
     throw new Error("Authentication is only available in the browser.");
   }
 
   const token = localStorage.getItem("firmic_token");
+
   if (!token) {
     throw new Error("Not authenticated. Please log in first.");
   }
@@ -38,7 +51,7 @@ async function parseResponse(
   return text ? JSON.parse(text) : null;
 }
 
-export async function createCompany(data: { name: string }) {
+export async function createCompany(data: CreateCompanyPayload) {
   const response = await fetch(`${API_URL}/api/company/create`, {
     method: "POST",
     headers: getAuthHeaders(),

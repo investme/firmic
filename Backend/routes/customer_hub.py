@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from auth import get_token_payload
 from database import get_db
-from models.company import Company
+from models.company import Company, Task
 from models.customer_hub import (
     Customer,
     CustomerActivity,
@@ -17,6 +19,11 @@ from models.customer_hub import (
     CustomerContact,
     CustomerOpportunity,
     CustomerSupportTicket,
+)
+from services.sonny.customer_intelligence import (
+    build_customer_summary,
+    execute_customer_sonny_action,
+    get_customer_with_intelligence_context,
 )
 from schemas.customer_hub import (
     CommunicationCreate,
@@ -30,6 +37,15 @@ from schemas.customer_hub import (
 )
 
 router = APIRouter(prefix="/api/customer-hub", tags=["Customer Hub"])
+
+
+class CustomerSonnyActionRequest(BaseModel):
+    action: str = Field(min_length=1, max_length=80)
+
+
+class CustomerSonnyExecutionRequest(BaseModel):
+    execution: str = Field(min_length=1, max_length=80)
+    source_action: str = Field(min_length=1, max_length=80)
 
 
 def verify_company_access(
@@ -674,3 +690,188 @@ def list_activity(
         "customer_id": customer.id,
         "activity": [serialize_activity(item) for item in items],
     }
+
+
+@router.get("/{customer_id}/sonny/summary")
+def summarize_customer_with_sonny(
+    customer_id: str,
+    token: dict = Depends(get_token_payload),
+    db: Session = Depends(get_db),
+):
+    customer = customer_or_404(customer_id, token, db)
+
+    expanded_customer = get_customer_with_intelligence_context(
+        db,
+        customer_id=customer.id,
+        company_id=customer.company_id,
+    )
+
+    if not expanded_customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    return build_customer_summary(expanded_customer)
+
+
+@router.post("/{customer_id}/sonny/action")
+def execute_customer_sonny_action_route(
+    customer_id: str,
+    payload: CustomerSonnyActionRequest,
+    token: dict = Depends(get_token_payload),
+    db: Session = Depends(get_db),
+):
+    customer = customer_or_404(customer_id, token, db)
+
+    expanded_customer = get_customer_with_intelligence_context(
+        db,
+        customer_id=customer.id,
+        company_id=customer.company_id,
+    )
+
+    if not expanded_customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    try:
+        return execute_customer_sonny_action(
+            expanded_customer,
+            action=payload.action,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/{customer_id}/sonny/execute")
+def execute_customer_sonny_result(
+    customer_id: str,
+    payload: CustomerSonnyExecutionRequest,
+    token: dict = Depends(get_token_payload),
+    db: Session = Depends(get_db),
+):
+    """Turn a generated Sonny recommendation into a persisted Firmic action.
+
+    The generated content is rebuilt on the server from current Customer Hub data,
+    so the database never trusts arbitrary text sent by the browser.
+    """
+    customer = customer_or_404(customer_id, token, db)
+    expanded_customer = get_customer_with_intelligence_context(
+        db,
+        customer_id=customer.id,
+        company_id=customer.company_id,
+    )
+    if not expanded_customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    try:
+        generated = execute_customer_sonny_action(
+            expanded_customer,
+            action=payload.source_action,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    execution = payload.execution.strip().lower()
+    actor_name = "Sonny AI COO"
+
+    if execution == "save_email_draft":
+        subject = str(generated.get("subject") or f"Follow-up for {customer.name}")
+        message = str(generated.get("email_body") or generated.get("reply") or "").strip()
+        if not message:
+            raise HTTPException(status_code=400, detail="Sonny did not produce an email draft")
+
+        record = CustomerCommunication(
+            id=str(uuid.uuid4()),
+            customer_id=customer.id,
+            type="email",
+            direction="draft",
+            subject=subject,
+            message=message,
+            actor=actor_name,
+        )
+        db.add(record)
+        activity(
+            db,
+            customer,
+            event_type="sonny_email_draft_saved",
+            title="Sonny follow-up email saved",
+            description=subject,
+            source_type="customer_communication",
+            source_id=record.id,
+            actor_name=actor_name,
+        )
+        db.commit()
+        db.refresh(record)
+        return {
+            "ok": True,
+            "execution": execution,
+            "reply": "The follow-up email was saved to Customer Hub communications.",
+            "record": serialize_communication(record),
+        }
+
+    if execution == "create_follow_up_task":
+        title = str(generated.get("recommended_next_action") or f"Follow up with {customer.name}")
+        description = str(generated.get("reply") or title)
+        record = Task(
+            id=str(uuid.uuid4()),
+            company_id=customer.company_id,
+            title=title[:255],
+            description=description,
+            status="pending",
+        )
+        db.add(record)
+        activity(
+            db,
+            customer,
+            event_type="sonny_task_created",
+            title="Sonny follow-up task created",
+            description=title,
+            source_type="task",
+            source_id=record.id,
+            actor_name=actor_name,
+        )
+        db.commit()
+        db.refresh(record)
+        return {
+            "ok": True,
+            "execution": execution,
+            "reply": "The follow-up task was created and added to the customer timeline.",
+            "record": {
+                "id": record.id,
+                "company_id": record.company_id,
+                "title": record.title,
+                "description": record.description,
+                "status": record.status,
+                "created_at": record.created_at,
+            },
+        }
+
+    if execution == "record_recommendation":
+        recommendation = str(
+            generated.get("recommended_next_action")
+            or generated.get("reply")
+            or "Sonny recommendation"
+        )
+        record = CustomerActivity(
+            id=str(uuid.uuid4()),
+            customer_id=customer.id,
+            company_id=customer.company_id,
+            event_type="sonny_recommendation_approved",
+            title="Sonny recommendation recorded",
+            description=recommendation,
+            actor_type="ai",
+            actor_name=actor_name,
+            source_type="sonny_customer_action",
+            source_id=payload.source_action,
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        return {
+            "ok": True,
+            "execution": execution,
+            "reply": "The recommendation was recorded in the customer activity timeline.",
+            "record": serialize_activity(record),
+        }
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unsupported Sonny execution: {payload.execution}",
+    )

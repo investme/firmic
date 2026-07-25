@@ -10,6 +10,7 @@ import {
 import { getCompanyAIAgents } from "../services/aiWorkforceApi";
 import { getCompanyMeetingBookings } from "../services/meetingBookingApi";
 import { getCompanyLedgerSummary } from "../services/ledgerApi";
+import { FirmicOrder, getConfirmedOrder } from "../src/utils/orderStorage";
 import { getCompanyActivity } from "../services/activityApi";
 import { getCompanyTasks } from "../services/taskApi";
 import {
@@ -126,6 +127,7 @@ export default function Dashboard() {
   const [agents, setAgents] = useState<ActiveAgent[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [summary, setSummary] = useState<LedgerSummary | null>(null);
+  const [confirmedOrder, setConfirmedOrder] = useState<FirmicOrder | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -157,6 +159,7 @@ export default function Dashboard() {
       setAgents([]);
       setBookings([]);
       setSummary(null);
+      setConfirmedOrder(null);
       setActivity([]);
       setNotifications([]);
       setTasks([]);
@@ -168,6 +171,7 @@ export default function Dashboard() {
     try {
       setLoading(true);
       setError("");
+      setConfirmedOrder(getConfirmedOrder(String(workspace.id)));
 
       const results = await Promise.allSettled([
         getCompanyAIAgents(workspace.id),
@@ -350,10 +354,12 @@ export default function Dashboard() {
     [activity]
   );
 
-const monthlyTotal = Number(summary?.total || 0);
-const subtotal = Number(summary?.subtotal || 0);
-const tax = Number(summary?.tax || 0);
-const activeServices = summary?.services?.length || 0;
+const monthlyTotal = confirmedOrder?.monthlyTotalUsd ?? Number(summary?.total || 0);
+const subtotal = confirmedOrder?.monthlySubtotalUsd ?? Number(summary?.subtotal || 0);
+const tax = confirmedOrder?.monthlyVatUsd ?? Number(summary?.tax || 0);
+const activeServices = confirmedOrder
+  ? confirmedOrder.items.filter((item) => item.billing === "monthly").length
+  : summary?.services?.length || 0;
 
 // The Usage Ledger is the single source of truth.
 // Do not manually add another hookup fee.
@@ -377,6 +383,20 @@ const checkout = monthlyTotal;
 
   const reviewLabel = useLiveRelativeTime(reviewedAt);
 
+  const primaryRecommendation =
+    intelligence?.recommendations?.[0]?.title ||
+    (overdueTasks > 0
+      ? `Review ${overdueTasks} overdue task${overdueTasks === 1 ? "" : "s"}`
+      : actionRequiredCount > 0
+      ? `Resolve ${actionRequiredCount} action-required alert${actionRequiredCount === 1 ? "" : "s"}`
+      : "Continue with today’s highest-priority company work");
+
+  const morningBriefItems = [
+    `${openTasks.length} open task${openTasks.length === 1 ? "" : "s"} across company operations.`,
+    `${unreadNotifications.length} unread executive alert${unreadNotifications.length === 1 ? "" : "s"}.`,
+    `${bookings.length} meeting booking${bookings.length === 1 ? "" : "s"} currently scheduled.`,
+    `${Math.max(3, agents.length + 3)} AI workforce members available.`,
+  ];
 
   const healthValue = Math.max(
     0,
@@ -502,7 +522,7 @@ const checkout = monthlyTotal;
           <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <p className="text-sm font-bold text-violet-700">
-                Company Command Center
+                Firmic Command Center
               </p>
 
               <h1 className="text-3xl font-bold text-slate-950 mt-1">
@@ -510,9 +530,7 @@ const checkout = monthlyTotal;
               </h1>
 
               <p className="text-slate-500 mt-2 max-w-4xl">
-                Your executive intelligence, priorities, workforce,
-                notifications, activity, headquarters, meetings, and billing
-                are connected in one operating view.
+                Welcome back to Firmic. See what happened, what needs attention, and what your company should do next.
               </p>
 
               <div className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-slate-400">
@@ -539,7 +557,7 @@ const checkout = monthlyTotal;
               >
                 {hasOffice
                   ? "Manage Headquarters"
-                  : "Activate Headquarters"}
+                  : "virtual-offices"}
               </a>
             </div>
           </header>
@@ -590,13 +608,74 @@ const checkout = monthlyTotal;
             />
           </section>
 
+          <section className="mt-8 overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-sm">
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px]">
+              <div className="p-6 lg:p-8">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-2xl">
+                    👔
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-violet-700">
+                      Sonny AI COO · Morning Brief
+                    </p>
+                    <h2 className="mt-1 text-2xl font-bold text-slate-950">
+                      Your company is {healthValue >= 80 ? "operating normally" : "ready for review"}.
+                    </h2>
+                    <p className="mt-3 max-w-3xl leading-7 text-slate-600">
+                      {intelligence?.executive_brief ||
+                        intelligence?.brief ||
+                        `I reviewed ${companyName} and consolidated the latest operational signals for you.`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  {morningBriefItems.map((item) => (
+                    <div
+                      key={item}
+                      className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <span className="mt-0.5 text-emerald-600">✓</span>
+                      <p className="text-sm font-medium text-slate-700">{item}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-violet-200 bg-violet-50 p-6 xl:border-l xl:border-t-0 lg:p-8">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600">
+                  Sonny recommends
+                </p>
+                <p className="mt-3 text-lg font-bold leading-7 text-violet-950">
+                  {primaryRecommendation}
+                </p>
+                <div className="mt-6 flex flex-col gap-3">
+                  <a
+                    href="/sonny"
+                    className="rounded-xl bg-violet-600 px-5 py-3 text-center font-bold text-white transition hover:bg-violet-700"
+                  >
+                    Ask Sonny
+                  </a>
+                  <a
+                    href="/tasks"
+                    className="rounded-xl border border-violet-200 bg-white px-5 py-3 text-center font-bold text-violet-700 transition hover:bg-violet-100"
+                  >
+                    Review Priorities
+                  </a>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="grid grid-cols-1 xl:grid-cols-[1.35fr_0.65fr] gap-6 mt-8">
             <div className="space-y-6">
               <section className="bg-gradient-to-br from-violet-700 to-indigo-700 text-white rounded-3xl p-6 shadow-sm">
                 <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
                   <div className="max-w-3xl">
                     <p className="text-sm font-bold text-violet-200">
-                      Executive Intelligence
+                      Sonny Executive Brief
                     </p>
 
                     <h2 className="text-2xl font-bold mt-2">
@@ -618,7 +697,13 @@ const checkout = monthlyTotal;
                       {healthScore === null ? "—" : healthScore}
                     </p>
                     <p className="text-sm text-violet-200 mt-1">
-                      {healthScore === null ? "Pending" : "out of 100"}
+                      {healthScore === null
+                        ? "Pending"
+                        : healthValue >= 90
+                        ? "Excellent · Operational"
+                        : healthValue >= 75
+                        ? "Healthy · Stable"
+                        : "Review recommended"}
                     </p>
                   </div>
                 </div>
@@ -643,7 +728,7 @@ const checkout = monthlyTotal;
                     href="/executive-intelligence"
                     className="bg-white text-violet-700 px-5 py-3 rounded-xl font-bold"
                   >
-                    Open Intelligence
+                    Open Full Brief
                   </a>
 
                   <a
@@ -678,7 +763,7 @@ const checkout = monthlyTotal;
                 </Panel>
 
                 <Panel
-                  title="Attention Required"
+                  title="Executive Alerts"
                   actionHref="/notifications"
                   actionText="Open Notifications"
                 >
@@ -708,7 +793,7 @@ const checkout = monthlyTotal;
               </section>
 
               <Panel
-                title="Latest Company Activity"
+                title="Company Timeline"
                 actionHref="/timeline"
                 actionText="View Timeline"
               >
@@ -739,7 +824,7 @@ const checkout = monthlyTotal;
                     href={hasOffice ? "/my-office" : "/virtual-offices"}
                     className="border border-slate-200 px-4 py-2 rounded-xl font-semibold hover:bg-slate-50 transition"
                   >
-                    {hasOffice ? "Manage Office" : "Rent Office"}
+                    {hasOffice ? "Manage Headquarters" : "virtual-offices"}
                   </a>
                 </div>
 
@@ -779,7 +864,7 @@ const checkout = monthlyTotal;
                 </Panel>
 
                 <Panel
-                  title="Optional AI Employees"
+                  title="AI Workforce"
                   actionHref="/ai-workforce"
                   actionText="Manage Workforce"
                 >
@@ -818,7 +903,7 @@ const checkout = monthlyTotal;
 
               <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
                 <h2 className="text-xl font-bold">
-                  Business Infrastructure Cost
+                  Monthly Operating Cost
                 </h2>
 
                 <div className="space-y-3 mt-5">
@@ -842,7 +927,7 @@ const checkout = monthlyTotal;
 
                 <div className="mt-5 bg-violet-50 border border-violet-100 rounded-2xl p-4">
                   <p className="text-sm text-violet-700 font-bold">
-                    Today’s Checkout
+                    Monthly Operating Cost
                   </p>
 
                   <h3 className="text-3xl font-bold text-violet-900 mt-1">
@@ -1022,7 +1107,7 @@ function buildPriorities({
     title: item.title || "Executive recommendation",
     description:
       item.description ||
-      "Review this recommendation from Executive Intelligence.",
+      "Review this recommendation from Sonny Executive Brief.",
     type: "recommendation",
   }));
 

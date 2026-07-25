@@ -197,7 +197,49 @@ export default function MyOffice() {
 
           {!loading && hasHeadquarters && (
             <>
-              <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm mt-8">
+              <section className="mt-8 grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-6">
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">Company Identity</p>
+                  <h2 className="text-xl font-bold text-slate-950 mt-1">Registered operating profile</h2>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+                    <IdentityField label="Company Name" value={companyName} />
+                    <IdentityField label="Jurisdiction" value={workspace?.jurisdiction || "Abu Dhabi, United Arab Emirates"} />
+                    <IdentityField label="Office Code" value={officeCode} />
+                    <IdentityField label="Business Phone" value={officePhone} />
+                    <IdentityField label="Business Address" value={officeLocation} />
+                    <IdentityField label="Plan" value={plan} />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-slate-950 to-violet-950 text-white rounded-3xl p-6 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="h-11 w-11 rounded-2xl bg-white/10 flex items-center justify-center text-2xl">👔</div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-violet-200 font-bold">Sonny AI COO</p>
+                      <h2 className="text-xl font-bold">Headquarters Brief</h2>
+                    </div>
+                  </div>
+
+                  <p className="text-slate-200 mt-5 leading-7">
+                    Your headquarters is fully operational. Core infrastructure is online and no urgent action is required.
+                  </p>
+
+                  <div className="mt-5 space-y-3">
+                    <StatusLine label="Headquarters" value="Active" />
+                    <StatusLine label="Digital Mailroom" value="Connected" />
+                    <StatusLine label="Business Communications" value="Online" />
+                    <StatusLine label="AI Workforce" value="Ready" />
+                  </div>
+
+                  <div className="mt-5 rounded-2xl bg-white/10 border border-white/10 p-4">
+                    <p className="text-xs uppercase tracking-wide text-violet-200 font-bold">Recommendation</p>
+                    <p className="text-sm text-white mt-2">Review monthly infrastructure costs or expand your AI workforce for additional operational coverage.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm mt-6">
                 <div className="flex flex-col lg:flex-row gap-6">
                   <div className="w-full lg:w-72 h-48 rounded-3xl bg-gradient-to-br from-violet-100 to-blue-100 flex items-center justify-center text-7xl">
                     🏢
@@ -207,15 +249,15 @@ export default function MyOffice() {
                     <div className="flex justify-between items-start gap-4">
                       <div>
                         <p className="text-xs font-bold text-violet-700">
-                          Premium Hub71 Virtual Headquarters
+                          Firmic Headquarters
                         </p>
 
                         <h2 className="text-3xl font-bold mt-1">
-                          Headquarters {officeCode}
+                          Office {officeCode}
                         </h2>
 
                         <p className="text-slate-500 mt-2">
-                          {officeLocation} · Activated May 12, 2026
+                          {officeLocation} · Activation date unavailable
                         </p>
                       </div>
 
@@ -274,12 +316,33 @@ export default function MyOffice() {
                 </p>
               </section>
 
+              <section className="mt-6 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">Included Infrastructure</p>
+                <h2 className="text-xl font-bold text-slate-950 mt-1">Everything required to operate from day one</h2>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-6">
+                  {[
+                    "Registered Business Address",
+                    "Digital Mailroom",
+                    "Business Communications",
+                    "Meeting Center",
+                    "Microsoft 365",
+                    "AI Workforce Access",
+                  ].map((service) => (
+                    <div key={service} className="flex items-center gap-3 rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
+                      <span className="h-7 w-7 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-bold">✓</span>
+                      <span className="font-semibold text-slate-700">{service}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
               <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mt-8">
                 <h2 className="text-xl font-bold">Business Infrastructure</h2>
 
                 <div className="bg-white border border-slate-200 rounded-2xl px-5 py-3 shadow-sm">
                   <p className="text-xs text-slate-500">
-                    Total Monthly Infrastructure
+                    Monthly Operating Cost
                   </p>
 
                   <p className="font-bold">
@@ -365,19 +428,21 @@ export default function MyOffice() {
               </div>
 
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-                <Panel title="Office Activity">
+                <Panel title="Operational Timeline">
                   <Activity time="09:42" text="Receptionist AI answered 18 calls" />
                   <Activity time="09:18" text="Mail received at Hub71" />
                   <Activity time="08:51" text="Sales AI created 2 CRM leads" />
                   <Activity time="08:30" text="Meeting room booked for tomorrow" />
                 </Panel>
 
-                <Panel title="Office Health">
-                  <div className="grid grid-cols-2 gap-4">
-                    <Mini title="System Status" value="Operational" />
-                    <Mini title="AI Workforce" value="7 Active" />
-                    <Mini title="Digital Mailroom" value="2 New" />
-                    <Mini title="Business Calls" value="12 Answered" />
+                <Panel title="Infrastructure Health">
+                  <div className="space-y-3">
+                    <HealthRow label="Headquarters" status="Healthy" />
+                    <HealthRow label="Digital Mailroom" status="Online" />
+                    <HealthRow label="Business Communications" status="Connected" />
+                    <HealthRow label="Microsoft 365" status="Ready" />
+                    <HealthRow label="AI Workforce" status="Active" />
+                    <HealthRow label="Meeting Center" status="Available" />
                   </div>
                 </Panel>
               </section>
@@ -403,6 +468,36 @@ function Info({
       <div className="text-3xl">{icon}</div>
       <p className="text-sm text-slate-500 mt-3">{title}</p>
       <p className="font-bold mt-1">{value}</p>
+    </div>
+  );
+}
+
+function IdentityField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+      <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">{label}</p>
+      <p className="font-bold text-slate-900 mt-2 break-words">{value}</p>
+    </div>
+  );
+}
+
+function StatusLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 text-sm">
+      <span className="text-slate-300">{label}</span>
+      <span className="font-bold text-green-300">{value}</span>
+    </div>
+  );
+}
+
+function HealthRow({ label, status }: { label: string; status: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 border border-slate-200 p-4">
+      <div className="flex items-center gap-3">
+        <span className="h-3 w-3 rounded-full bg-green-500" />
+        <span className="font-semibold text-slate-700">{label}</span>
+      </div>
+      <span className="rounded-full bg-green-100 text-green-700 px-3 py-1 text-xs font-bold">{status}</span>
     </div>
   );
 }

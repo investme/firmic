@@ -59,11 +59,16 @@ export function isTenant(): boolean {
   return !isAdmin();
 }
 
-export function logout(redirectTo = "/login") {
+export function clearAuthSession() {
   if (!isBrowser()) return;
   localStorage.removeItem("firmic_token");
   localStorage.removeItem("firmic_user");
   clearWorkspaceSnapshot();
+}
+
+export function logout(redirectTo = "/login") {
+  if (!isBrowser()) return;
+  clearAuthSession();
   window.location.href = redirectTo;
 }
 

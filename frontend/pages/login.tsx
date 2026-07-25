@@ -1,11 +1,20 @@
-import { useState } from "react";
-import { loginUser } from "../services/authApi";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/router";
+import { clearAuthSession, loginUser } from "../services/authApi";
 
 export default function Login() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const nextRoute = useMemo(() => {
+    const requested = router.query.next;
+    return typeof requested === "string" && requested.startsWith("/") && !requested.startsWith("//")
+      ? requested
+      : "/dashboard";
+  }, [router.query.next]);
 
   async function handleLogin() {
     if (!email.trim() || !password) {
@@ -23,11 +32,12 @@ export default function Login() {
       });
 
       if (String(result.user?.role || "").toLowerCase() === "admin") {
+        clearAuthSession();
         setError("Use the Admin Login page for administrator access.");
         return;
       }
 
-      window.location.href = "/dashboard";
+      window.location.href = nextRoute;
     } catch (err: any) {
       setError(err?.message || "Login failed.");
     } finally {
@@ -87,7 +97,7 @@ export default function Login() {
           </button>
 
           <p className="text-center text-sm text-slate-500">
-            New to Firmic? <a href="/register" className="text-violet-700 font-bold">Create account</a>
+            New to Firmic? <a href="/signup" className="text-violet-700 font-bold">Create account</a>
           </p>
 
           <a href="/admin-login" className="block text-center text-xs text-slate-400 hover:text-violet-700">

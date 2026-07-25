@@ -13,6 +13,8 @@ type UseFirmicAIVoiceOptions = {
   onBeforeListening?: () => void;
 };
 
+const MAX_LISTENING_MS = 12_000;
+
 export function useFirmicAIVoice({
   enabled,
   onTranscript,
@@ -23,6 +25,14 @@ export function useFirmicAIVoice({
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearListeningTimeout = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
 
   const stopVoice = useCallback(() => {
     stopFirmicVoice();
@@ -30,10 +40,19 @@ export function useFirmicAIVoice({
   }, []);
 
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop?.();
+    clearListeningTimeout();
+
+    const recognition = recognitionRef.current;
     recognitionRef.current = null;
+
+    try {
+      recognition?.stop?.();
+    } catch {
+      // The browser may already have ended recognition.
+    }
+
     setListening(false);
-  }, []);
+  }, [clearListeningTimeout]);
 
   const speak = useCallback(
     async (text: string) => {
@@ -74,16 +93,43 @@ export function useFirmicAIVoice({
     recognition.interimResults = true;
     recognition.continuous = false;
 
-    recognition.onstart = () => setListening(true);
-    recognition.onend = () => {
-      setListening(false);
-      recognitionRef.current = null;
+    recognition.onstart = () => {
+      setListening(true);
+      clearListeningTimeout();
+      timeoutRef.current = setTimeout(() => {
+        stopListening();
+        onWarning("Sonny stopped listening because no command was completed. Please try again.");
+      }, MAX_LISTENING_MS);
     };
-    recognition.onerror = () => {
+
+    recognition.onend = () => {
+      clearListeningTimeout();
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+      }
       setListening(false);
-      recognitionRef.current = null;
+    };
+
+    recognition.onerror = (event: any) => {
+      clearListeningTimeout();
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+      }
+      setListening(false);
+
+      if (event?.error === "aborted") return;
+      if (event?.error === "not-allowed" || event?.error === "service-not-allowed") {
+        onWarning("Microphone access is blocked. Allow microphone permission and try again.");
+        return;
+      }
+      if (event?.error === "no-speech") {
+        onWarning("Sonny did not hear a command. Please try again.");
+        return;
+      }
+
       onWarning("Sonny could not hear the command. Please try again.");
     };
+
     recognition.onresult = (event: any) => {
       let transcript = "";
       for (
@@ -99,17 +145,34 @@ export function useFirmicAIVoice({
 
       const latest = event.results[event.results.length - 1];
       if (latest?.isFinal && cleanTranscript) {
+        clearListeningTimeout();
         setListening(false);
-        window.setTimeout(
-          () => onFinalTranscript(cleanTranscript),
-          100
-        );
+
+        if (recognitionRef.current === recognition) {
+          recognitionRef.current = null;
+        }
+
+        try {
+          recognition.stop();
+        } catch {
+          // Recognition may already be stopping.
+        }
+
+        window.setTimeout(() => onFinalTranscript(cleanTranscript), 100);
       }
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
+
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setListening(false);
+      onWarning("Sonny could not start the microphone. Please try again.");
+    }
   }, [
+    clearListeningTimeout,
     onBeforeListening,
     onFinalTranscript,
     onTranscript,
@@ -120,10 +183,11 @@ export function useFirmicAIVoice({
 
   useEffect(() => {
     return () => {
+      clearListeningTimeout();
       stopListening();
       stopFirmicVoice();
     };
-  }, [stopListening]);
+  }, [clearListeningTimeout, stopListening]);
 
   return {
     listening,

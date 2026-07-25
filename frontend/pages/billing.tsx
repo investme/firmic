@@ -10,6 +10,7 @@ import {
   getCompanyLedger,
   getCompanyLedgerSummary,
 } from "../services/ledgerApi";
+import { FirmicOrder, getConfirmedOrder } from "../src/utils/orderStorage";
 
 type LedgerEntry = {
   id: string;
@@ -50,6 +51,7 @@ export default function Billing() {
   );
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [summary, setSummary] = useState<LedgerSummary | null>(null);
+  const [confirmedOrder, setConfirmedOrder] = useState<FirmicOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -80,6 +82,7 @@ export default function Billing() {
 
     try {
       setLoading(true);
+      setConfirmedOrder(getConfirmedOrder(String(workspace.id)));
       setError("");
 
       const [ledgerEntries, ledgerSummary] = await Promise.all([
@@ -111,13 +114,72 @@ export default function Billing() {
     headquarters?.location || "No headquarters selected";
   const plan = workspace?.plan || "Premium";
 
-  const subtotal = Number(summary?.subtotal || 0);
-  const tax = Number(summary?.tax || 0);
-  const total = Number(summary?.total || 0);
-  const activeServices = summary?.services?.length || 0;
+  const orderEntries: LedgerEntry[] = (confirmedOrder?.items || []).map((item) => {
+    const amount = item.unitPriceUsd * item.quantity;
+    const taxAmount = item.billing === "monthly"
+      ? Number((amount * confirmedOrder!.vatRate).toFixed(2))
+      : 0;
+    return {
+      id: `order-${item.key}`,
+      service: item.category === "ai" ? "ai_workforce" : item.category === "fee" ? "firmic_setup" : item.category,
+      category: item.category,
+      resource: item.name,
+      action: item.billing,
+      quantity: item.quantity,
+      unit: item.billing === "monthly" ? "month" : "setup",
+      unit_price: item.unitPriceUsd,
+      amount,
+      tax_amount: taxAmount,
+      total_amount: Number((amount + taxAmount).toFixed(2)),
+      currency: "USD",
+      status: "paid",
+      invoice_month: confirmedOrder!.confirmedAt?.slice(0, 7) || confirmedOrder!.createdAt.slice(0, 7),
+    };
+  });
+
+  // The Billing Center is a statement of the customer's complete active
+  // recurring subscription. Upgrade checkout may charge only the delta today,
+  // but that delta must not replace the monthly bill shown to the customer.
+  const displayedEntries = confirmedOrder
+    ? orderEntries.filter((entry) => entry.action === "monthly")
+    : entries;
+  const subtotal = confirmedOrder
+    ? confirmedOrder.monthlySubtotalUsd
+    : Number(summary?.subtotal || 0);
+  const tax = confirmedOrder
+    ? confirmedOrder.monthlyVatUsd
+    : Number(summary?.tax || 0);
+  const total = confirmedOrder
+    ? confirmedOrder.monthlyTotalUsd
+    : Number(summary?.total || 0);
+  const recurringMonthly = total;
+  const latestUpgradeCharge = confirmedOrder?.orderType === "upgrade"
+    ? confirmedOrder.amountDueUsd ?? confirmedOrder.firstPaymentUsd
+    : 0;
+  const activeServices = confirmedOrder
+    ? confirmedOrder.items.filter((item) => item.billing === "monthly").length
+    : summary?.services?.length || 0;
+
+  const displayedServices = confirmedOrder
+    ? confirmedOrder.items.map((item) => {
+        const subtotal = item.unitPriceUsd * item.quantity;
+        const tax = item.billing === "monthly"
+          ? Number((subtotal * confirmedOrder.vatRate).toFixed(2))
+          : 0;
+
+        return {
+          service: item.name,
+          currency: "USD",
+          subtotal,
+          tax,
+          total: Number((subtotal + tax).toFixed(2)),
+          entries: 1,
+        };
+      })
+    : summary?.services || [];
 
   function downloadLatestInvoice() {
-    const lines = entries.map(
+    const lines = displayedEntries.map(
       (entry) =>
         `${labelService(entry.service)} - ${
           entry.resource || entry.action
@@ -140,7 +202,8 @@ Tax: $${tax.toFixed(2)}
 Total: $${total.toFixed(2)}
 AED ${toAED(total)}
 
-Status: ${total > 0 ? "Payment due" : "No charges"}
+Payment method: ${confirmedOrder?.paymentMethod ? `${confirmedOrder.paymentMethod.brand} ending ${confirmedOrder.paymentMethod.last4}` : "Not added"}
+Status: ${confirmedOrder?.paymentStatus === "paid_demo" ? "Paid (MVP demo)" : total > 0 ? "Payment due" : "No charges"}
 `;
 
     const blob = new Blob([invoice], {
@@ -176,7 +239,7 @@ Status: ${total > 0 ? "Payment due" : "No charges"}
               </h1>
 
               <p className="text-slate-500 mt-2">
-                This page now reads directly from the PostgreSQL Usage Ledger.
+                Your complete active monthly subscription, payment method, and latest account activity.
               </p>
             </div>
 
@@ -214,10 +277,10 @@ Status: ${total > 0 ? "Payment due" : "No charges"}
           </section>
 
           <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
-            <Stat title="Current Spend" value={`$${total.toFixed(2)}`} sub={`AED ${toAED(total)}`} icon="💰" />
-            <Stat title="Subtotal" value={`$${subtotal.toFixed(2)}`} sub="Before tax" icon="🧾" />
+            <Stat title="Current Monthly Bill" value={`$${total.toFixed(2)}`} sub={`AED ${toAED(total)} / month`} icon="💰" />
+            <Stat title="Monthly Subtotal" value={`$${subtotal.toFixed(2)}`} sub="Before VAT" icon="🧾" />
             <Stat title="Active Services" value={String(activeServices)} sub="Ledger services" icon="✅" />
-            <Stat title="Payment Status" value={total > 0 ? "Due" : "No Charges"} sub={total > 0 ? "Payment pending" : "Workspace clean"} icon="💳" />
+            <Stat title="Payment Status" value={confirmedOrder?.paymentStatus === "paid_demo" ? "Paid" : total > 0 ? "Due" : "No Charges"} sub={confirmedOrder?.paymentMethod ? `${confirmedOrder.paymentMethod.brand} •••• ${confirmedOrder.paymentMethod.last4}` : total > 0 ? "Payment pending" : "Workspace clean"} icon="💳" />
           </section>
 
           <section className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 mt-8">
@@ -230,13 +293,13 @@ Status: ${total > 0 ? "Payment due" : "No charges"}
                 <p className="mt-5 text-slate-500">
                   Loading billing...
                 </p>
-              ) : entries.length === 0 ? (
+              ) : displayedEntries.length === 0 ? (
                 <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-6 text-slate-500">
                   No billable usage has been recorded for this company.
                 </div>
               ) : (
                 <div className="mt-5 space-y-3">
-                  {entries.map((entry) => (
+                  {displayedEntries.map((entry) => (
                     <div
                       key={entry.id}
                       className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-[1fr_130px_130px_120px] gap-4 items-center"
@@ -265,7 +328,7 @@ Status: ${total > 0 ? "Payment due" : "No charges"}
 
               <div className="mt-6 bg-violet-600 text-white rounded-3xl p-6">
                 <p className="text-violet-100">
-                  Current Ledger Total
+                  Current Monthly Bill
                 </p>
 
                 <h3 className="text-4xl font-bold mt-2">
@@ -275,6 +338,21 @@ Status: ${total > 0 ? "Payment due" : "No charges"}
                 <p className="text-violet-100 mt-1">
                   AED {toAED(total)}
                 </p>
+                <p className="text-violet-100 mt-3 text-sm">
+                  Full active subscription · billed each month
+                </p>
+
+                {latestUpgradeCharge > 0 && (
+                  <div className="mt-4 pt-4 border-t border-violet-400/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <p className="text-violet-100 text-sm">Latest upgrade payment</p>
+                      <p className="text-xs text-violet-200 mt-1">Additional services charged once at upgrade</p>
+                    </div>
+                    <p className="font-bold text-lg">
+                      ${latestUpgradeCharge.toFixed(2)} · Paid
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -285,7 +363,7 @@ Status: ${total > 0 ? "Payment due" : "No charges"}
                 </h2>
 
                 <div className="space-y-3 mt-5">
-                  {(summary?.services || []).map((service) => (
+                  {displayedServices.map((service) => (
                     <div
                       key={`${service.service}-${service.currency}`}
                       className="border-b border-slate-100 pb-3"
@@ -306,7 +384,7 @@ Status: ${total > 0 ? "Payment due" : "No charges"}
                     </div>
                   ))}
 
-                  {!summary?.services?.length && (
+                  {!displayedServices.length && (
                     <p className="text-slate-500">
                       No active service charges.
                     </p>
@@ -314,14 +392,25 @@ Status: ${total > 0 ? "Payment due" : "No charges"}
                 </div>
               </div>
 
+              {confirmedOrder?.paymentMethod && (
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                  <h2 className="text-xl font-bold">Payment Method</h2>
+                  <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                    <p className="font-bold">{confirmedOrder.paymentMethod.brand} •••• {confirmedOrder.paymentMethod.last4}</p>
+                    <p className="text-sm text-slate-500 mt-1">{confirmedOrder.paymentMethod.cardholderName}</p>
+                    <p className="text-xs text-emerald-600 font-bold mt-3">Paid · MVP demo transaction</p>
+                  </div>
+                </div>
+              )}
+
               <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
                 <h2 className="text-xl font-bold">
                   Tax Summary
                 </h2>
 
                 <div className="grid grid-cols-2 gap-3 mt-5">
-                  <Mini title="Subtotal" value={`$${subtotal.toFixed(2)}`} />
-                  <Mini title="Tax" value={`$${tax.toFixed(2)}`} />
+                  <Mini title="Monthly Subtotal" value={`$${subtotal.toFixed(2)}`} />
+                  <Mini title="Monthly VAT" value={`$${tax.toFixed(2)}`} />
                 </div>
               </div>
             </div>

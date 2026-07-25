@@ -17,7 +17,6 @@ import {
   LayoutDashboard,
   Mail,
   MessageSquare,
-  Network,
   Phone,
   Plug,
   Settings,
@@ -36,6 +35,7 @@ export const tenantSidebarConfig: SidebarConfig = {
   brandEyebrow: "Firmic",
   brandTitle: "Company Workspace",
   brandSubtitle: "AI-Native Operating System",
+
   sections: [
     {
       id: "command-center",
@@ -43,7 +43,7 @@ export const tenantSidebarConfig: SidebarConfig = {
       items: [
         {
           id: "tenant-dashboard",
-          label: "Dashboard",
+          label: "Command Center",
           href: "/dashboard",
           icon: <LayoutDashboard className={iconClass} />,
         },
@@ -62,6 +62,7 @@ export const tenantSidebarConfig: SidebarConfig = {
         },
       ],
     },
+
     {
       id: "company",
       title: "Company",
@@ -74,7 +75,7 @@ export const tenantSidebarConfig: SidebarConfig = {
         },
         {
           id: "tenant-my-office",
-          label: "My Office",
+          label: "Head Office",
           href: "/my-office",
           icon: <Home className={iconClass} />,
         },
@@ -98,6 +99,7 @@ export const tenantSidebarConfig: SidebarConfig = {
         },
       ],
     },
+
     {
       id: "operations",
       title: "Operations",
@@ -134,9 +136,10 @@ export const tenantSidebarConfig: SidebarConfig = {
         },
       ],
     },
+
     {
       id: "communications",
-      title: "Communications",
+      title: "Business Communications",
       items: [
         {
           id: "tenant-messages",
@@ -158,6 +161,7 @@ export const tenantSidebarConfig: SidebarConfig = {
         },
       ],
     },
+
     {
       id: "business-tools",
       title: "Business Tools",
@@ -194,6 +198,7 @@ export const tenantSidebarConfig: SidebarConfig = {
         },
       ],
     },
+
     {
       id: "ai-executives",
       title: "AI Executives",
@@ -212,6 +217,7 @@ export const tenantSidebarConfig: SidebarConfig = {
         },
       ],
     },
+
     {
       id: "workspace-settings",
       title: "Workspace",
@@ -232,6 +238,7 @@ export const adminSidebarConfig: SidebarConfig = {
   brandEyebrow: "Firmic",
   brandTitle: "Admin Platform",
   brandSubtitle: "Operations and Control",
+
   sections: [
     {
       id: "admin-command-center",
@@ -239,7 +246,7 @@ export const adminSidebarConfig: SidebarConfig = {
       items: [
         {
           id: "admin-dashboard",
-          label: "Admin Dashboard",
+          label: "Admin Command Center",
           href: "/admin",
           icon: <LayoutDashboard className={iconClass} />,
         },
@@ -251,6 +258,7 @@ export const adminSidebarConfig: SidebarConfig = {
         },
       ],
     },
+
     {
       id: "admin-management",
       title: "Management",
@@ -281,6 +289,7 @@ export const adminSidebarConfig: SidebarConfig = {
         },
       ],
     },
+
     {
       id: "admin-operations",
       title: "Operations",
@@ -305,6 +314,7 @@ export const adminSidebarConfig: SidebarConfig = {
         },
       ],
     },
+
     {
       id: "admin-system",
       title: "System",

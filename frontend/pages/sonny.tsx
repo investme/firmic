@@ -26,6 +26,7 @@ import {
   getWorkspaceChangedEventName,
 } from "../src/utils/workspaceContext";
 import { readCompanyStorage } from "../src/utils/companyStorage";
+import { getConfirmedOrder } from "../src/utils/orderStorage";
 import {
   sendSonnyChat,
   SonnyChatResponse,
@@ -69,6 +70,38 @@ const emptyDashboard: Dashboard = {
 const array = <T,>(value: unknown): T[] =>
   Array.isArray(value) ? value : [];
 
+function paidOrderAgents(companyId: string): SonnyAgent[] {
+  const order = getConfirmedOrder(String(companyId));
+  if (!order || order.paymentStatus !== "paid_demo") return [];
+
+  return order.items
+    .filter((item) => item.category === "ai" && item.billing === "monthly")
+    .map((item, index) => ({
+      id: `order-ai-${index}`,
+      agent_code: `ORDER_AI_${index + 1}`,
+      name: item.name,
+      display_name: item.name,
+      role: "AI Employee",
+      description: "Active AI employee from the confirmed Firmic order.",
+      status: "active",
+      capabilities: [],
+    }));
+}
+
+function mergeCompanyAgents(backendAgents: SonnyAgent[], orderAgents: SonnyAgent[]) {
+  const merged = new Map<string, SonnyAgent>();
+
+  for (const agent of [...backendAgents, ...orderAgents]) {
+    const key = String(agent.display_name || agent.name || agent.agent_code || "")
+      .trim()
+      .toLowerCase();
+    if (!key) continue;
+    merged.set(key, { ...merged.get(key), ...agent, status: agent.status || "active" });
+  }
+
+  return Array.from(merged.values());
+}
+
 function label(value?: string | null) {
   if (!value) return "Unknown";
   return value
@@ -87,6 +120,101 @@ function date(value?: string | null) {
         hour: "2-digit",
         minute: "2-digit",
       });
+}
+
+const SONNY_TIME_ZONE = "Asia/Beirut";
+
+function getBeirutDateParts(dateValue = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: SONNY_TIME_ZONE,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(dateValue);
+
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+
+  return {
+    weekday: value("weekday"),
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+    hour: value("hour"),
+    minute: value("minute"),
+    dayPeriod: value("dayPeriod"),
+  };
+}
+
+function getSonnyDateTimeAnswer(input: string): string | null {
+  const lower = input.toLowerCase().replace(/[?.,!]/g, " ").replace(/\s+/g, " ").trim();
+  const now = getBeirutDateParts();
+
+  const weekdayCheck = lower.match(
+    /(?:is|isn't|is not)\s+(?:it|today)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)/
+  );
+
+  if (weekdayCheck) {
+    const askedDay = weekdayCheck[1];
+    const isNegativeQuestion = lower.includes("isn't") || lower.includes("is not");
+    const matches = now.weekday.toLowerCase() === askedDay;
+    const answer = isNegativeQuestion ? !matches : matches;
+
+    if (answer) {
+      return `Yes. Today is ${now.weekday}, ${now.month} ${now.day}, ${now.year}, in Beirut.`;
+    }
+
+    return `No. Today is ${now.weekday}, ${now.month} ${now.day}, ${now.year}, in Beirut.`;
+  }
+
+  const asksTime =
+    lower.includes("what time is it") ||
+    lower.includes("current time") ||
+    lower === "time" ||
+    lower.includes("time now");
+
+  if (asksTime) {
+    return `The current time in Beirut is ${now.hour}:${now.minute} ${now.dayPeriod}.`;
+  }
+
+  const asksDate =
+    lower.includes("what is the date") ||
+    lower.includes("what's the date") ||
+    lower.includes("todays date") ||
+    lower.includes("today's date") ||
+    lower.includes("what date is it");
+
+  if (asksDate) {
+    return `Today is ${now.weekday}, ${now.month} ${now.day}, ${now.year}, in Beirut.`;
+  }
+
+  const asksDay =
+    lower.includes("what day is it") ||
+    lower.includes("what day is today") ||
+    lower.includes("what day is it today") ||
+    lower === "what day";
+
+  if (asksDay) {
+    return `Today is ${now.weekday}.`;
+  }
+
+  const asksMonth =
+    lower.includes("what month is it") || lower.includes("current month");
+  if (asksMonth) {
+    return `The current month is ${now.month}.`;
+  }
+
+  const asksYear =
+    lower.includes("what year is it") || lower.includes("current year");
+  if (asksYear) {
+    return `The current year is ${now.year}.`;
+  }
+
+  return null;
 }
 
 function statusTone(status?: string) {
@@ -283,7 +411,10 @@ export default function SonnyAI() {
       progress: pick(results[1], null, "progress"),
       tasks: array(pick(results[2], [], "tasks")),
       documents: array(pick(results[3], [], "documents")),
-      agents: array(pick(results[4], [], "agent registry")),
+      agents: mergeCompanyAgents(
+        array(pick(results[4], [], "agent registry")),
+        paidOrderAgents(String(workspace.id))
+      ),
       runs: hydratedRuns,
     });
 
@@ -517,6 +648,33 @@ export default function SonnyAI() {
     if (lower === "clear conversation") {
       clearConversation();
       stopVoice();
+      return;
+    }
+
+    const dateTimeAnswer = getSonnyDateTimeAnswer(clean);
+    if (dateTimeAnswer) {
+      reply(dateTimeAnswer, dateTimeAnswer);
+      return;
+    }
+
+    const asksForWorkforce =
+      lower === "show agents" ||
+      lower === "show workforce" ||
+      lower === "ai workforce overview" ||
+      lower.includes("how many ai employee") ||
+      lower.includes("how many agents");
+
+    if (asksForWorkforce) {
+      const active = data.agents.filter(
+        (agent) => !agent.status || agent.status === "active"
+      );
+      const names = active
+        .map((agent) => agent.display_name || agent.name || label(agent.agent_code))
+        .filter(Boolean);
+      const response = active.length
+        ? `AI workforce overview:\nActive AI employees: ${active.length}. Total AI employees: ${data.agents.length}.\n${names.join(", ")}.`
+        : "AI workforce overview: No active AI employees are recorded for this company.";
+      reply(response, response);
       return;
     }
 
@@ -968,7 +1126,7 @@ export default function SonnyAI() {
 
                           <div className="flex items-center gap-3">
                             <button
-                              onClick={startListening}
+                              onClick={listening ? stopListening : startListening}
                               disabled={working !== ""}
                               className={`group relative h-14 min-w-[150px] rounded-2xl px-4 font-bold transition disabled:opacity-50 ${
                                 listening
