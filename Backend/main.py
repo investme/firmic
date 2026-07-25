@@ -48,26 +48,15 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3001",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
         "http://192.168.56.1:3000",
         "http://192.168.56.1:3001",
+        "https://firmic.vercel.app",
+        "https://firmic-hussein-matars-projects.vercel.app",
         "https://firmic.io",
         "https://www.firmic.io",
         "https://app.firmic.io",
     ],
+    allow_origin_regex=r"https://firmic(?:-[a-z0-9-]+)?\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
