@@ -122,23 +122,50 @@ def health():
     db = SessionLocal()
 
     try:
-        db.execute(text("SELECT 1"))
+        connection_info = db.execute(
+            text(
+                """
+                SELECT
+                    current_database() AS database_name,
+                    current_schema() AS schema_name,
+                    current_user AS database_user,
+                    inet_server_addr()::text AS server_address
+                """
+            )
+        ).mappings().first()
+
+        admin_user = db.execute(
+            text(
+                """
+                SELECT id, email, role
+                FROM users
+                WHERE lower(email) = lower(:email)
+                """
+            ),
+            {"email": "hussein@firmic.io"},
+        ).mappings().first()
+
+        user_tables = db.execute(
+            text(
+                """
+                SELECT table_schema, table_name
+                FROM information_schema.tables
+                WHERE table_name = 'users'
+                ORDER BY table_schema
+                """
+            )
+        ).mappings().all()
 
         return {
             "app": "Firmic Backend",
             "status": "healthy",
-            "version": "1.4.0",
-            "database": "connected",
-            "authentication": "enabled",
-            "usage_ledger": "enabled",
-            "activity_log": "enabled",
-            "ai_workforce_sync": "enabled",
-            "meeting_booking_sync": "enabled",
+            "database_connection": dict(connection_info) if connection_info else None,
+            "admin_seen_by_backend": dict(admin_user) if admin_user else None,
+            "users_tables": [dict(row) for row in user_tables],
         }
 
     finally:
         db.close()
-
 
 @app.get("/version")
 def version():
