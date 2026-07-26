@@ -1,12 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
-
-from database import SessionLocal
 
 from routes import auth
 from routes import company
-from routes import admin
 from routes import document
 from routes import task
 from routes import task_update
@@ -17,30 +13,32 @@ from routes import workflow
 from routes import progress
 from routes import hermes
 from routes import support
+from routes import executive_intelligence
 
 from routes.admin import router as admin_router
 from routes.usage_ledger import router as usage_ledger_router
 from routes.activity_log import router as activity_log_router
 from routes.company_ai_agents import router as company_ai_agents_router
 from routes.meeting_bookings import router as meeting_bookings_router
-
-from api.offices import router as offices_router
-from fastapi.middleware.cors import CORSMiddleware
 from routes.workforce import router as workforce_router
-from models.workforce_job import (
-    WorkforceJob,
-    WorkforceTimelineEvent,
-)
-from routes import executive_intelligence
 from routes.timeline import router as timeline_router
 from routes.notifications import router as notifications_router
 from routes.customer_hub import router as customer_hub_router
 
+from api.offices import router as offices_router
+
+from models.workforce_job import (
+    WorkforceJob,
+    WorkforceTimelineEvent,
+)
+
 
 app = FastAPI(
     title="Firmic Backend",
-    version="1.3.0",
+    version="1.4.0",
 )
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -63,17 +61,62 @@ app.add_middleware(
 )
 
 
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(company.router, prefix="/api/company")
-app.include_router(document.router, prefix="/api/document")
-app.include_router(task.router, prefix="/api/task")
-app.include_router(task_update.router, prefix="/api/task")
-app.include_router(sonny.router, prefix="/api/sonny")
-app.include_router(sonny_chat.router, prefix="/api/sonny")
-app.include_router(sonny_brain.router, prefix="/api/sonny/brain", tags=["Sonny Brain"])
-app.include_router(workflow.router, prefix="/api/workflow")
-app.include_router(progress.router, prefix="/api/progress")
-app.include_router(hermes.router, prefix="/api/hermes")
+app.include_router(
+    auth.router,
+    prefix="/api/auth",
+    tags=["Authentication"],
+)
+
+app.include_router(
+    company.router,
+    prefix="/api/company",
+)
+
+app.include_router(
+    document.router,
+    prefix="/api/document",
+)
+
+app.include_router(
+    task.router,
+    prefix="/api/task",
+)
+
+app.include_router(
+    task_update.router,
+    prefix="/api/task",
+)
+
+app.include_router(
+    sonny.router,
+    prefix="/api/sonny",
+)
+
+app.include_router(
+    sonny_chat.router,
+    prefix="/api/sonny",
+)
+
+app.include_router(
+    sonny_brain.router,
+    prefix="/api/sonny/brain",
+    tags=["Sonny Brain"],
+)
+
+app.include_router(
+    workflow.router,
+    prefix="/api/workflow",
+)
+
+app.include_router(
+    progress.router,
+    prefix="/api/progress",
+)
+
+app.include_router(
+    hermes.router,
+    prefix="/api/hermes",
+)
 
 app.include_router(admin_router)
 app.include_router(usage_ledger_router)
@@ -83,28 +126,25 @@ app.include_router(meeting_bookings_router)
 app.include_router(offices_router)
 app.include_router(support.router)
 app.include_router(workforce_router)
-app.include_router(
-    executive_intelligence.router,
-    prefix="/api/executive-intelligence",
-    tags=["Executive Intelligence"],
-)
-app.include_router(workforce_router)
 
 app.include_router(
     executive_intelligence.router,
     prefix="/api/executive-intelligence",
     tags=["Executive Intelligence"],
 )
+
 app.include_router(
     timeline_router,
     prefix="/api/timeline",
     tags=["Timeline"],
 )
+
 app.include_router(
     notifications_router,
     prefix="/api/notifications",
     tags=["Notifications"],
 )
+
 app.include_router(customer_hub_router)
 
 
@@ -119,53 +159,12 @@ def root():
 
 @app.get("/health")
 def health():
-    db = SessionLocal()
+    return {
+        "app": "Firmic Backend",
+        "status": "healthy",
+        "version": "1.4.0",
+    }
 
-    try:
-        connection_info = db.execute(
-            text(
-                """
-                SELECT
-                    current_database() AS database_name,
-                    current_schema() AS schema_name,
-                    current_user AS database_user,
-                    inet_server_addr()::text AS server_address
-                """
-            )
-        ).mappings().first()
-
-        admin_user = db.execute(
-            text(
-                """
-                SELECT id, email, role
-                FROM users
-                WHERE lower(email) = lower(:email)
-                """
-            ),
-            {"email": "hussein@firmic.io"},
-        ).mappings().first()
-
-        user_tables = db.execute(
-            text(
-                """
-                SELECT table_schema, table_name
-                FROM information_schema.tables
-                WHERE table_name = 'users'
-                ORDER BY table_schema
-                """
-            )
-        ).mappings().all()
-
-        return {
-            "app": "Firmic Backend",
-            "status": "healthy",
-            "database_connection": dict(connection_info) if connection_info else None,
-            "admin_seen_by_backend": dict(admin_user) if admin_user else None,
-            "users_tables": [dict(row) for row in user_tables],
-        }
-
-    finally:
-        db.close()
 
 @app.get("/version")
 def version():
