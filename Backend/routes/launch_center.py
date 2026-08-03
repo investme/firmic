@@ -194,6 +194,76 @@ def calculate_progress(application: LaunchApplication) -> float:
         (completed_count / len(milestones)) * 100,
         1,
     )
+def synchronize_application_milestones(
+    application: LaunchApplication,
+) -> None:
+    """
+    Keep milestone states aligned with the launch application.
+
+    The milestone records remain the source used by the progress UI,
+    while the application fields provide convenient operational summaries.
+    """
+
+    milestones = {
+        milestone.key: milestone
+        for milestone in application.milestones or []
+    }
+
+    def set_status(
+        key: str,
+        value: str,
+    ) -> None:
+        milestone = milestones.get(key)
+
+        if not milestone:
+            return
+
+        now = datetime.datetime.utcnow()
+
+        if value != "not_started" and milestone.started_at is None:
+            milestone.started_at = now
+
+        if value in {"approved", "completed"}:
+            milestone.completed_at = milestone.completed_at or now
+        else:
+            milestone.completed_at = None
+
+        milestone.status = value
+
+    if application.jurisdiction:
+        set_status("jurisdiction", "completed")
+    else:
+        set_status("jurisdiction", "in_progress")
+
+    if application.business_activity:
+        set_status("business_activity", "completed")
+    else:
+        set_status("business_activity", "in_progress")
+
+    if application.formation_partner_id:
+        set_status("formation_partner", "completed")
+    else:
+        set_status("formation_partner", "not_started")
+
+    set_status("licensing", application.formation_status)
+    set_status("banking", application.banking_status)
+    set_status("virtual_office", application.office_status)
+    set_status("workspace_activation", application.workspace_status)
+
+    completed = all(
+        milestone.status in {"approved", "completed"}
+        for milestone in milestones.values()
+    )
+
+    if completed:
+        application.status = "completed"
+        application.completed_at = (
+            application.completed_at
+            or datetime.datetime.utcnow()
+        )
+    elif application.status == "completed":
+        application.status = "in_progress"
+        application.completed_at = None
 
 
 def serialize_application(
@@ -302,6 +372,9 @@ def create_launch_application(
             db,
             application=application,
         )
+        db.flush()
+        db.refresh(application)
+        synchronize_application_milestones(application)
 
         db.commit()
 
@@ -483,7 +556,7 @@ def update_launch_application(
             and isinstance(value, str)
         ):
             value = value.strip() or None
-
+            synchronize_application_milestones(application)
         setattr(application, field_name, value)
 
     if application.status == "completed":
