@@ -37,6 +37,7 @@ from models.launch_center import (
     LaunchApplication,
     LaunchMilestone,
 )
+from routes.launch_center import router as launch_center_router
 
 
 app = FastAPI(
@@ -122,6 +123,12 @@ app.include_router(
 app.include_router(
     hermes.router,
     prefix="/api/hermes",
+)
+
+app.include_router(
+    launch_center_router,
+    prefix="/api/launch-center",
+    tags=["Launch Center"],
 )
 
 app.include_router(admin_router)
