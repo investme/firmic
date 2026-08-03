@@ -213,6 +213,20 @@ def main_test() -> None:
             db=db,
         )
 
+        print("\nUpdated Launch Application")
+        print("--------------------------")
+        print("Status:", updated["status"])
+        print("Progress:", updated["progress_percent"])
+
+        print("\nMilestones:")
+
+        for milestone in updated["milestones"]:
+            print(
+                milestone.key,
+                "->",
+                milestone.status,
+            )
+
         assert updated["progress_percent"] == 100.0
         assert updated["status"] == "completed"
         assert updated["formation_partner"].id == formation_partner_id

@@ -550,14 +550,17 @@ def update_launch_application(
         "business_description",
     }
 
-    for field_name, value in updates.items():
-        if (
-            field_name in string_fields
-            and isinstance(value, str)
-        ):
-            value = value.strip() or None
-            synchronize_application_milestones(application)
-        setattr(application, field_name, value)
+for field_name, value in updates.items():
+    if (
+        field_name in string_fields
+        and isinstance(value, str)
+    ):
+        value = value.strip() or None
+
+    setattr(application, field_name, value)
+
+# Synchronize only after every update has been applied.
+synchronize_application_milestones(application)
 
     if application.status == "completed":
         application.completed_at = (
