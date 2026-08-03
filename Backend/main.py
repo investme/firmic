@@ -31,6 +31,12 @@ from models.workforce_job import (
     WorkforceJob,
     WorkforceTimelineEvent,
 )
+from models.launch_center import (
+    BankPartner,
+    FormationPartner,
+    LaunchApplication,
+    LaunchMilestone,
+)
 
 
 app = FastAPI(

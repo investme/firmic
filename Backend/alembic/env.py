@@ -11,6 +11,12 @@ from models.company import Company, Document, Task, Workflow, WorkflowStep
 from firmic_models import User, Office
 from models.sonny_memory import SonnyMemory
 from models.workforce_job import WorkforceJob, WorkforceTimelineEvent
+from models.launch_center import (
+    BankPartner,
+    FormationPartner,
+    LaunchApplication,
+    LaunchMilestone,
+)
 
 load_dotenv()
 # this is the Alembic Config object, which provides
