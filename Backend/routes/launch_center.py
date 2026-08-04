@@ -562,6 +562,19 @@ def update_launch_application(
     # Synchronize after every submitted update has been applied.
     synchronize_application_milestones(application)
 
+    company = (
+        db.query(Company)
+        .filter(Company.id == application.company_id)
+        .first()
+    )
+
+    if company:
+        company.status = (
+            "active"
+            if application.status == "completed"
+            else "launching"
+        )
+
     if application.status == "completed":
         application.completed_at = (
             application.completed_at

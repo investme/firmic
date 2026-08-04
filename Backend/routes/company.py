@@ -10,6 +10,10 @@ from services.ledger_service import record_usage
 from auth import get_token_payload
 import uuid
 import threading
+from services.subscription_service import (
+    create_company_subscription,
+    activate_subscription,
+)
 
 router = APIRouter()
 
@@ -125,25 +129,34 @@ def create_company(
         id=str(uuid.uuid4()),
         user_id=str(user_id),
         name=company_name,
-        status="initiated",
+        status="launching",
         headquarters_office_code=None,
         headquarters_location=None,
         headquarters_phone=None,
         headquarters_monthly_price_usd=None,
     )
 
+
     try:
         db.add(company)
         db.flush()
 
-        ensure_hookup_fee(
-            db,
-            company,
-            commit=False,
+        subscription = create_company_subscription(
+            db=db,
+            company=company,
+            plan_code="PLAN_STARTER",
+            actor=str(user_id),
+        )
+
+        activate_subscription(
+            db=db,
+            subscription=subscription,
+            actor=str(user_id),
         )
 
         db.commit()
         db.refresh(company)
+
     except Exception:
         db.rollback()
         raise
@@ -155,9 +168,15 @@ def create_company(
     ).start()
 
     return {
-        "status": "created",
-        "company": serialize_company(company),
-    }
+       "status": "created",
+       "company": serialize_company(company),
+       "subscription": {
+          "plan": subscription.plan.code,
+          "status": subscription.status,
+          "monthly_total": subscription.monthly_total,
+          "launch_fee": subscription.launch_activation_fee,
+    },
+}
 
 
 @router.get("/list")

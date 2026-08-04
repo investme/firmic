@@ -18,6 +18,66 @@ from models.launch_center import (
     LaunchMilestone,
 )
 
+from models.subscription import (
+    Plan,
+    ServiceCatalog,
+    CompanySubscription,
+    SubscriptionItem,
+    SubscriptionEvent,
+)
+from models.activity_log import ActivityLog
+
+from models.company_ai_agent import CompanyAIAgent
+
+from models.customer_hub import (
+    Customer,
+    CustomerContact,
+    CustomerOpportunity,
+    CustomerCommunication,
+    CustomerSupportTicket,
+    CustomerActivity,
+)
+
+from models.meeting_booking import MeetingBooking
+
+from models.support_ticket import (
+    SupportTicket,
+    SupportMessage,
+)
+
+from models.usage_ledger import UsageLedger
+
+from models.sonny_automation import (
+    SonnyAutomationRun,
+    SonnyAutomationAction,
+)
+
+from models.sonny_decision import SonnyDecision
+
+from models.sonny_insight import (
+    SonnyInsight,
+    SonnyInsightEvidence,
+)
+
+from models.sonny_knowledge import SonnyCompanyKnowledge
+
+from models.sonny_orchestration import (
+    SonnyAgentRegistry,
+    SonnyOrchestrationRun,
+    SonnyAgentAssignment,
+    SonnyAgentMessage,
+)
+
+from models.sonny_plan import (
+    SonnyPlan,
+    SonnyPlanItem,
+)
+
+from models.sonny_workflow import (
+    SonnyWorkflow,
+    SonnyWorkflowStep,
+)
+
 load_dotenv()
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

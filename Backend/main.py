@@ -37,6 +37,7 @@ from models.launch_center import (
     LaunchApplication,
     LaunchMilestone,
 )
+from routes.subscriptions import router as subscriptions_router
 from routes.launch_center import router as launch_center_router
 
 
@@ -159,6 +160,8 @@ app.include_router(
 )
 
 app.include_router(customer_hub_router)
+
+app.include_router(subscriptions_router)
 
 
 @app.get("/")
