@@ -1,0 +1,412 @@
+Firmic v2 – Project Continuation Memory
+Project Vision
+
+Firmic is The Operating System for AI-Native Companies.
+
+It is not a virtual office website.
+
+It is not a CRM.
+
+It is not an AI chat application.
+
+Firmic provides everything required to launch and operate a company from one platform:
+
+Company formation
+Virtual headquarters
+AI Workforce
+Communications
+Compliance
+Finance
+Documents
+Business operations
+
+Every feature should reinforce this positioning.
+
+Current Architecture
+
+Backend
+
+FastAPI
+SQLAlchemy
+PostgreSQL
+
+Frontend
+
+Next.js
+TypeScript
+Tailwind
+
+Current deployment:
+
+Production deployment working
+Hub71 application in preparation
+Major Milestone Completed
+
+The Launch Engine now exists.
+
+It is the single source of truth for company onboarding.
+
+Nothing should determine launch state except the Launch Engine.
+
+Never duplicate launch logic elsewhere.
+
+Everything should read Launch Engine.
+
+Including:
+
+Dashboard
+Hermes
+Sonny
+Headquarters
+Documents
+AI Workforce
+Company Status
+Compliance
+Launch Engine Philosophy
+
+A company should never become active simply because it was created.
+
+Instead:
+
+Company Created
+
+↓
+
+Launch Engine Initialized
+
+↓
+
+Headquarters Reserved
+
+↓
+
+Documents Requested
+
+↓
+
+Passport Uploaded
+
+↓
+
+Trade License Uploaded
+
+↓
+
+Compliance Review
+
+↓
+
+Office Activated
+
+↓
+
+AI Workforce Provisioned
+
+↓
+
+Business Number Assigned
+
+↓
+
+Microsoft 365 Connected
+
+↓
+
+Communications Activated
+
+↓
+
+Company Active
+
+Everything on the platform should reflect this lifecycle.
+
+Dashboard
+
+The Dashboard has already begun transitioning to the Launch Engine.
+
+It is no longer based on Company Health.
+
+Instead it should show:
+
+Company Launch
+Progress
+Outstanding Requirements
+Next Step
+Continue Launch
+Headquarters Status
+AI Workforce Status
+Billing
+Tasks
+Activity
+
+Future dashboard work should continue using Launch Engine as the data source.
+
+Sidebar
+
+The tenant sidebar has already been redesigned.
+
+Structure:
+
+COMPANY
+
+Command Center
+
+INFRASTRUCTURE
+
+Company
+Headquarters
+Virtual Offices
+Launch Center
+
+AI WORKFORCE
+
+AI Workforce
+Sonny
+Hermes
+
+OPERATIONS
+
+Operations (mother page)
+
+COMMUNICATIONS
+
+VoIP
+Support
+
+FINANCE
+
+Finance (mother page)
+
+ADMINISTRATION
+
+Documents
+Settings
+
+Operations and Finance are parent pages.
+
+Children should appear only inside those pages.
+
+The sidebar should stay compact.
+
+Compliance Rules
+
+A company cannot become operational until required documents are approved.
+
+Compliance must be enforced by the Launch Engine.
+
+Examples:
+
+Passport
+
+Trade License
+
+Proof of Address
+
+KYC
+
+Compliance Approval
+
+Until approved:
+
+Headquarters remains pending
+Company remains pending
+AI Workforce remains pending
+
+No feature should bypass compliance.
+
+AI Workforce Vision
+
+Firmic's AI Workforce is one of the company's defining products.
+
+Instead of a list of AI agents, it should feel like managing a real organization.
+
+Hierarchy:
+
+Founder
+
+↓
+
+Sonny (AI COO)
+
+↓
+
+Operations
+
+Finance
+
+Marketing
+
+Sales
+
+Compliance
+
+HR
+
+Customer Success
+
+Research
+
+Executive Assistant
+
+Every AI employee eventually gets:
+
+Profile
+Avatar
+Status
+Current task
+Skills
+Memory
+Reports
+Activity
+KPIs
+Chat
+Assigned workflows
+AI Workflow Vision
+
+Eventually:
+
+Founder clicks:
+
+Launch Marketing Campaign
+
+↓
+
+Marketing AI
+
+↓
+
+Research AI
+
+↓
+
+Design AI
+
+↓
+
+Copywriter AI
+
+↓
+
+Sonny Review
+
+↓
+
+Done
+
+Firmic should orchestrate work instead of opening chat windows.
+
+Company Creation (CURRENT TASK)
+
+The old onboarding page must be replaced completely.
+
+Do not redesign it.
+
+Replace it.
+
+Current page:
+
+pages/create-company.tsx
+
+The new experience should be a Launch Engine onboarding.
+
+Instead of:
+
+Build your company profile
+
+it should become:
+
+Launch Your Company
+
+Powered by Sonny AI COO
+
+The page should include:
+
+Sonny introduction
+Launch progress
+Company profile (step 1)
+Live launch checklist
+Compliance explanation
+Headquarters reservation
+Hermes handoff
+AI provisioning explanation
+
+The CTA becomes:
+
+Begin Company Launch
+
+instead of:
+
+Create Company Workspace
+
+Pricing (Must Preserve)
+
+Plans:
+
+Starter
+
+$149/month
+5 AI Workers
+
+Business
+
+$399/month
+25 AI Workers
+Recommended
+
+Enterprise
+
+$999/month
+Unlimited AI Workforce
+
+Backend mapping:
+
+Starter → PLAN_STARTER
+
+Business → PLAN_BUSINESS
+
+Enterprise → PLAN_ENTERPRISE
+
+Never lose these mappings.
+
+Product Roadmap
+
+Priority:
+
+Replace Company Creation with Launch Engine
+Finish Launch Center
+Finish Documents/KYC
+Finish Headquarters Activation
+Finish AI Workforce Provisioning
+Stripe Billing
+Public Marketing Website
+AI Workforce v2
+Workflow Automation
+AI Marketplace
+Enterprise Features
+UI Polish
+Design Principles
+
+Firmic should always feel:
+
+Enterprise
+Premium
+Minimal
+AI-first
+Operational
+Cohesive
+
+Avoid generic SaaS forms whenever possible.
+
+Every page should feel like operating a company, not configuring software.
+
+Development Workflow
+
+For the remainder of the project:
+
+Work feature-by-feature.
+Return complete files instead of snippets.
+Preserve existing functionality unless intentionally replacing it.
+Compile after every file replacement.
+Keep Launch Engine as the single source of truth.
+Avoid duplicate logic.
+Prefer architecture over quick fixes.

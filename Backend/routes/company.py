@@ -14,6 +14,7 @@ from services.subscription_service import (
     create_company_subscription,
     activate_subscription,
 )
+from services.launch_service import ensure_company_launch
 
 router = APIRouter()
 
@@ -119,6 +120,19 @@ def create_company(
 
     company_name = payload.name.strip()
 
+    allowed_plans = {
+        "PLAN_STARTER",
+        "PLAN_BUSINESS",
+        "PLAN_ENTERPRISE",
+    }
+
+    if payload.plan_code not in allowed_plans:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid subscription plan.",
+        )
+
+
     if not company_name:
         raise HTTPException(
             status_code=400,
@@ -141,10 +155,16 @@ def create_company(
         db.add(company)
         db.flush()
 
+        ensure_company_launch(
+          db,
+          company,
+          commit=False,
+)
+
         subscription = create_company_subscription(
             db=db,
             company=company,
-            plan_code="PLAN_STARTER",
+            plan_code=payload.plan_code,
             actor=str(user_id),
         )
 

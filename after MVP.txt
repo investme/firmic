@@ -335,3 +335,42 @@ b8_workforce_orchestrator
 927599baf739
         ↓
 9d1a4ca1405c   ← Subscription Engine
+
+I actually think I know what's happening, and it's not the file size.
+
+We've been working in this same conversation for a very long time (days of Firmic architecture, backend, Launch Engine, sidebar, dashboard, compliance, etc.). The chat context is now extremely large.
+
+What's likely happening is:
+
+The browser is struggling to send large pasted code blocks into an already massive conversation.
+The upload/paste is timing out or being truncated before it reaches me.
+That's why even medium-sized files are failing while tiny snippets still work.
+I think this is the right moment to start a fresh chat.
+
+Normally I avoid suggesting that, but we're at the point where it will genuinely make development smoother.
+
+Here's the plan I'd use:
+
+Open a new chat.
+
+First message:
+
+"Continue Firmic MVP. Read the memory reminder."
+
+Paste your Firmic memory reminder (the one we created for carrying the project across chats).
+Then upload pages/create-company.tsx.
+
+Because the new chat has an empty context, you'll be able to upload entire files again, and I can return complete copy-paste replacements without fighting the context limit.
+
+I also already know exactly what we're doing next:
+
+✅ Replace the old company form.
+✅ Build the AI Launch Engine onboarding.
+✅ Sonny guides the founder.
+✅ Hermes handles KYC and compliance.
+✅ Headquarters reservation.
+✅ Compliance hold before activation.
+✅ AI provisioning.
+✅ Automatic transition into the Command Center.
+
+I also don't want us to lose momentum. From here onward, I think we should work in a way where I always return complete files instead of patches or snippets. That has been much more reliable for this project and avoids the "guessing" that slowed us down earlier.

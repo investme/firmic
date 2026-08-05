@@ -39,6 +39,7 @@ from models.launch_center import (
 )
 from routes.subscriptions import router as subscriptions_router
 from routes.launch_center import router as launch_center_router
+from routes.launch import router as launch_router
 
 
 app = FastAPI(
@@ -162,6 +163,7 @@ app.include_router(
 app.include_router(customer_hub_router)
 
 app.include_router(subscriptions_router)
+app.include_router(launch_router)
 
 
 @app.get("/")

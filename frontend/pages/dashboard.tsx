@@ -1,29 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+
 import FirmicSidebar from "../components/FirmicSidebar";
 import ProtectedRoute from "../components/ProtectedRoute";
+
+import { getCompanyAIAgents } from "../services/aiWorkforceApi";
+import { getCompanyActivity } from "../services/activityApi";
 import { API_URL } from "../services/config";
+import { getCompanyLaunch, type LaunchSummary } from "../services/launchApi";
+import { getCompanyLedgerSummary } from "../services/ledgerApi";
+import { getCompanyMeetingBookings } from "../services/meetingBookingApi";
+import { getCompanyTasks } from "../services/taskApi";
+
 import { toAED } from "../src/data/pricing";
 import {
   getActiveWorkspace,
   getWorkspaceChangedEventName,
+  type FirmicWorkspace,
 } from "../src/utils/workspaceContext";
-import { getCompanyAIAgents } from "../services/aiWorkforceApi";
-import { getCompanyMeetingBookings } from "../services/meetingBookingApi";
-import { getCompanyLedgerSummary } from "../services/ledgerApi";
 import { FirmicOrder, getConfirmedOrder } from "../src/utils/orderStorage";
-import { getCompanyActivity } from "../services/activityApi";
-import { getCompanyTasks } from "../services/taskApi";
-import {
-  AIOnlinePill,
-  AnimatedMetric,
-  useLiveRelativeTime,
-  AIWorkforceActivity,
-  AIWorkforceStatus,
-  CompanyHealthRing,
-  ExecutiveActivityFeed,
-  ExecutiveTimeline,
-} from "../src/os/ui";
-
 
 type ActiveAgent = {
   id: string;
@@ -56,8 +50,6 @@ type Activity = {
   event_type: string;
   title: string;
   description?: string;
-  actor_type?: string;
-  source_type?: string;
   created_at?: string;
 };
 
@@ -78,75 +70,36 @@ type TaskItem = {
   priority?: string;
 };
 
-type ExecutiveIntelligence = {
-  business_health?: {
-    score?: number;
-    status?: string;
-  };
-  health_score?: number;
-  status?: string;
-  company_status?: string;
-  compliance?: {
-    score?: number;
-    status?: string;
-  };
-  revenue?: {
-    total?: number;
-    status?: string;
-  };
-  kpis?: Array<{
-    name?: string;
-    label?: string;
-    value?: string | number;
-  }>;
-  risks?: Array<{
-    title?: string;
-    description?: string;
-    severity?: string;
-  }>;
-  recommendations?: Array<{
-    title?: string;
-    description?: string;
-    priority?: string;
-  }>;
-  executive_brief?: string;
-  brief?: string;
-};
-
-type WorkforceStatus = {
-  name: string;
-  role: string;
-  status: string;
-  detail: string;
-};
-
 export default function Dashboard() {
-  const [workspace, setWorkspace] = useState(() =>
-    getActiveWorkspace()
-  );
+  const [workspace, setWorkspace] = useState<FirmicWorkspace | null>(null);
+  const [launch, setLaunch] = useState<LaunchSummary | null>(null);
   const [agents, setAgents] = useState<ActiveAgent[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [summary, setSummary] = useState<LedgerSummary | null>(null);
-  const [confirmedOrder, setConfirmedOrder] = useState<FirmicOrder | null>(null);
+  const [confirmedOrder, setConfirmedOrder] = useState<FirmicOrder | null>(
+    null,
+  );
   const [activity, setActivity] = useState<Activity[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [intelligence, setIntelligence] =
-    useState<ExecutiveIntelligence | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [reviewedAt, setReviewedAt] = useState<Date | null>(null);
 
   useEffect(() => {
-    const sync = () => setWorkspace(getActiveWorkspace());
+    const synchronizeWorkspace = () => {
+      setWorkspace(getActiveWorkspace());
+    };
 
-    sync();
-    window.addEventListener(getWorkspaceChangedEventName(), sync);
-    window.addEventListener("storage", sync);
+    synchronizeWorkspace();
+
+    const eventName = getWorkspaceChangedEventName();
+
+    window.addEventListener(eventName, synchronizeWorkspace);
+    window.addEventListener("storage", synchronizeWorkspace);
 
     return () => {
-      window.removeEventListener(getWorkspaceChangedEventName(), sync);
-      window.removeEventListener("storage", sync);
+      window.removeEventListener(eventName, synchronizeWorkspace);
+      window.removeEventListener("storage", synchronizeWorkspace);
     };
   }, []);
 
@@ -156,6 +109,7 @@ export default function Dashboard() {
 
   async function loadDashboard() {
     if (!workspace?.id) {
+      setLaunch(null);
       setAgents([]);
       setBookings([]);
       setSummary(null);
@@ -163,7 +117,6 @@ export default function Dashboard() {
       setActivity([]);
       setNotifications([]);
       setTasks([]);
-      setIntelligence(null);
       setLoading(false);
       return;
     }
@@ -174,845 +127,742 @@ export default function Dashboard() {
       setConfirmedOrder(getConfirmedOrder(String(workspace.id)));
 
       const results = await Promise.allSettled([
+        getCompanyLaunch(workspace.id),
         getCompanyAIAgents(workspace.id),
         getCompanyMeetingBookings(workspace.id),
         getCompanyLedgerSummary(workspace.id),
         getCompanyActivity(workspace.id),
         getCompanyTasks(workspace.id),
-        fetchCompanyResource(
-          `/api/notifications/company/${workspace.id}`
-        ),
-        fetchCompanyResource(
-          `/api/timeline/company/${workspace.id}`
-        ),
-        fetchCompanyResource(
-          `/api/executive-intelligence/${workspace.id}`
-        ),
+        fetchCompanyResource(`/api/notifications/company/${workspace.id}`),
+        fetchCompanyResource(`/api/timeline/company/${workspace.id}`),
       ]);
 
-      setAgents(
-        fulfilledArray<ActiveAgent>(results[0])
-      );
+      setLaunch(results[0].status === "fulfilled" ? results[0].value : null);
+      setAgents(fulfilledArray<ActiveAgent>(results[1]));
+      setBookings(fulfilledArray<Booking>(results[2]));
+      setSummary(results[3].status === "fulfilled" ? results[3].value : null);
 
-      setBookings(
-        fulfilledArray<Booking>(results[1])
-      );
+      const legacyActivity = fulfilledArray<Activity>(results[4]);
+      setTasks(fulfilledArray<TaskItem>(results[5]));
 
-      setSummary(
-        results[2].status === "fulfilled"
-          ? results[2].value
-          : null
-      );
-
-      const legacyActivity =
-        fulfilledArray<Activity>(results[3]);
-
-      setTasks(
-        fulfilledArray<TaskItem>(results[4])
-      );
-
-      const notificationsBody =
-        results[5].status === "fulfilled"
-          ? results[5].value
-          : null;
+      const notificationBody =
+        results[6].status === "fulfilled" ? results[6].value : null;
 
       setNotifications(
-        Array.isArray(notificationsBody?.notifications)
-          ? notificationsBody.notifications
-          : []
+        Array.isArray(notificationBody?.notifications)
+          ? notificationBody.notifications
+          : [],
       );
 
       const timelineBody =
-        results[6].status === "fulfilled"
-          ? results[6].value
-          : null;
+        results[7].status === "fulfilled" ? results[7].value : null;
 
-      const timelineEvents =
-        Array.isArray(timelineBody?.events)
-          ? timelineBody.events
-          : [];
+      const timelineEvents = Array.isArray(timelineBody?.events)
+        ? timelineBody.events
+        : [];
 
-      setActivity(
-        timelineEvents.length > 0
-          ? timelineEvents
-          : legacyActivity
-      );
+      setActivity(timelineEvents.length > 0 ? timelineEvents : legacyActivity);
 
-      setIntelligence(
-        results[7].status === "fulfilled"
-          ? results[7].value
-          : null
-      );
-
-      if (
-        results.some(
-          (result) => result.status === "rejected"
-        )
-      ) {
+      if (results.some((result) => result.status === "rejected")) {
         setError(
-          "Some Command Center modules could not be loaded. Available company data is still shown."
+          "Some Command Center modules could not be loaded. Available company data is still shown.",
         );
       }
+    } catch (caughtError: unknown) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The Command Center could not be loaded.",
+      );
     } finally {
-      setReviewedAt(new Date());
       setLoading(false);
     }
   }
 
+  const companyName = workspace?.name || "Active Company";
   const headquarters = workspace?.headquarters;
   const hasOffice = Boolean(headquarters?.office_code);
-  const companyName = workspace?.name || "Active Company";
-  const officeCode =
-    headquarters?.office_code || "Not Selected";
-  const officeLocation =
-    headquarters?.location || "No headquarters selected";
-  const businessNumber =
-    headquarters?.phone || "Not Assigned";
-  const officePrice =
-    headquarters?.monthly_price_usd || 0;
-  const plan = workspace?.plan || "Premium";
 
-  const totalBookedHours = useMemo(
-    () =>
-      bookings.reduce(
-        (sum, booking) =>
-          sum + Number(booking.duration_hours || 0),
-        0
-      ),
-    [bookings]
-  );
+  const monthlyTotal =
+    confirmedOrder?.monthlyTotalUsd ?? Number(summary?.total || 0);
+
+  const subtotal =
+    confirmedOrder?.monthlySubtotalUsd ?? Number(summary?.subtotal || 0);
+
+  const tax = confirmedOrder?.monthlyVatUsd ?? Number(summary?.tax || 0);
+
+  const activeServices = confirmedOrder
+    ? confirmedOrder.items.filter((item) => item.billing === "monthly").length
+    : summary?.services?.length || 0;
 
   const unreadNotifications = useMemo(
     () => notifications.filter((item) => !item.read),
-    [notifications]
-  );
-
-  const actionRequiredCount = useMemo(
-    () =>
-      notifications.filter(
-        (item) => normalizeNotificationType(item.type) === "action_required"
-      ).length,
-    [notifications]
-  );
-
-  const warningCount = useMemo(
-    () =>
-      notifications.filter(
-        (item) => normalizeNotificationType(item.type) === "warning"
-      ).length,
-    [notifications]
-  );
-
-  const pendingCount = useMemo(
-    () =>
-      notifications.filter(
-        (item) => normalizeNotificationType(item.type) === "pending"
-      ).length,
-    [notifications]
+    [notifications],
   );
 
   const openTasks = useMemo(
     () =>
       tasks.filter(
-        (task) =>
-          String(task.status || "").toLowerCase() !== "completed"
+        (task) => String(task.status || "").toLowerCase() !== "completed",
       ),
-    [tasks]
+    [tasks],
   );
 
-  const completedTasks = useMemo(
+  const totalBookedHours = useMemo(
     () =>
-      tasks.filter(
-        (task) =>
-          String(task.status || "").toLowerCase() === "completed"
-      ).length,
-    [tasks]
+      bookings.reduce(
+        (total, booking) => total + Number(booking.duration_hours || 0),
+        0,
+      ),
+    [bookings],
   );
 
-  const overdueTasks = useMemo(
-    () =>
-      tasks.filter((task) =>
-        ["overdue", "late"].includes(
-          String(task.status || "").toLowerCase()
-        )
-      ).length,
-    [tasks]
+  const launchRequirements = launch?.requirements || [];
+
+  const outstandingRequirements = launchRequirements.filter(
+    (requirement) => requirement.required && requirement.status !== "approved",
   );
 
-  const priorities = useMemo(
-    () =>
-      buildPriorities({
-        notifications,
-        tasks: openTasks,
-        recommendations: intelligence?.recommendations || [],
-      }).slice(0, 5),
-    [notifications, openTasks, intelligence]
+  const approvedRequirements = launchRequirements.filter(
+    (requirement) => requirement.required && requirement.status === "approved",
   );
 
-  const workforceStatuses = useMemo(
-    () => buildWorkforceStatuses(activity),
-    [activity]
-  );
+  const launchStatus = launch?.status || "pending_compliance";
+  const launchComplete = launchStatus === "active";
 
-const monthlyTotal = confirmedOrder?.monthlyTotalUsd ?? Number(summary?.total || 0);
-const subtotal = confirmedOrder?.monthlySubtotalUsd ?? Number(summary?.subtotal || 0);
-const tax = confirmedOrder?.monthlyVatUsd ?? Number(summary?.tax || 0);
-const activeServices = confirmedOrder
-  ? confirmedOrder.items.filter((item) => item.billing === "monthly").length
-  : summary?.services?.length || 0;
+  const launchActionHref = launch?.next_action_href || "/launch-center";
 
-// The Usage Ledger is the single source of truth.
-// Do not manually add another hookup fee.
-const hookupFee = 0;
-const checkout = monthlyTotal;
-
-  const healthScore = getHealthScore(intelligence);
-  const healthStatus =
-    intelligence?.business_health?.status ||
-    intelligence?.status ||
-    "Awaiting intelligence";
-
-  const complianceStatus =
-    intelligence?.compliance?.status ||
-    (hasOffice ? "Operational" : "Setup needed");
-
-  const companyStatus =
-    intelligence?.company_status ||
-    workspace?.status ||
-    "Active";
-
-  const reviewLabel = useLiveRelativeTime(reviewedAt);
-
-  const primaryRecommendation =
-    intelligence?.recommendations?.[0]?.title ||
-    (overdueTasks > 0
-      ? `Review ${overdueTasks} overdue task${overdueTasks === 1 ? "" : "s"}`
-      : actionRequiredCount > 0
-      ? `Resolve ${actionRequiredCount} action-required alert${actionRequiredCount === 1 ? "" : "s"}`
-      : "Continue with today’s highest-priority company work");
-
-  const morningBriefItems = [
-    `${openTasks.length} open task${openTasks.length === 1 ? "" : "s"} across company operations.`,
-    `${unreadNotifications.length} unread executive alert${unreadNotifications.length === 1 ? "" : "s"}.`,
-    `${bookings.length} meeting booking${bookings.length === 1 ? "" : "s"} currently scheduled.`,
-    `${Math.max(3, agents.length + 3)} AI workforce members available.`,
-  ];
-
-  const healthValue = Math.max(
-    0,
-    Math.min(100, Number(healthScore ?? 92))
-  );
-
-  const timelineItems = [
-    {
-      id: "review",
-      time: "09:02",
-      title: "Operational review completed",
-      detail: `Executive intelligence refreshed for ${workspace?.name || "this workspace"}.`,
-      actor: "Sonny",
-      tone: "violet" as const,
-    },
-    {
-      id: "documents",
-      time: "09:06",
-      title: "Document readiness reviewed",
-      detail: "Workspace documents are ready for review and generation.",
-      actor: "Hermes",
-      tone: "blue" as const,
-    },
-    {
-      id: "growth",
-      time: "09:09",
-      title: "Growth signals monitored",
-      detail: "Current growth indicators were checked for new opportunities.",
-      actor: "Julia",
-      tone: "emerald" as const,
-    },
-    {
-      id: "tasks",
-      time: "09:14",
-      title: "Task progress synchronized",
-      detail: `${completedTasks} tasks completed and ${overdueTasks} overdue.`,
-      actor: "Operations",
-      tone: overdueTasks > 0 ? ("amber" as const) : ("slate" as const),
-    },
-  ];
-
-  const workforceCards = [
-    {
-      id: "sonny",
-      name: "Sonny",
-      role: "Chief Operating Officer",
-      status: "Online" as const,
-      activity: "Reviewing operations and executive priorities.",
-    },
-    {
-      id: "hermes",
-      name: "Hermes",
-      role: "Documentation Officer",
-      status: "Ready" as const,
-      activity: "Ready to prepare and manage company documents.",
-    },
-    {
-      id: "julia",
-      name: "Julia",
-      role: "Growth Officer",
-      status: "Online" as const,
-      activity: "Monitoring growth opportunities and performance signals.",
-    },
-  ];
-
-  const workforceActivity = [
-    {
-      id: "sonny-activity",
-      agent: "Sonny",
-      action: "Reviewed company health and open priorities.",
-      time: "Just now",
-    },
-    {
-      id: "hermes-activity",
-      agent: "Hermes",
-      action: "Checked document readiness and pending files.",
-      time: "3m ago",
-    },
-    {
-      id: "julia-activity",
-      agent: "Julia",
-      action: "Updated growth monitoring status.",
-      time: "7m ago",
-    },
-  ];
-
-  const executiveFeed = [
-    {
-      id: "workspace-active",
-      title: "Workspace operating normally",
-      detail: `${workspace?.name || "Company"} is active and connected.`,
-      type: "success" as const,
-    },
-    {
-      id: "tasks-feed",
-      title:
-        overdueTasks > 0
-          ? `${overdueTasks} overdue task${overdueTasks === 1 ? "" : "s"} need attention`
-          : "Task operations are on track",
-      detail: `${completedTasks} completed tasks recorded.`,
-      type: overdueTasks > 0 ? ("warning" as const) : ("success" as const),
-    },
-    {
-      id: "documents-feed",
-      title: "Document workspace synchronized",
-      detail: "The document workspace is connected and ready.",
-      type: "info" as const,
-    },
-    {
-      id: "ai-feed",
-      title: "AI workforce online",
-      detail: "Sonny, Hermes, and Julia are available.",
-      type: "success" as const,
-    },
-  ];
+  const launchActionLabel = launch?.next_action_label || "Open Launch Center";
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-slate-50 flex">
+      <div className="flex min-h-screen bg-slate-50">
         <FirmicSidebar />
 
-        <main className="flex-1 min-w-0 p-6 xl:p-8">
-          <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <main className="min-w-0 flex-1 p-6 xl:p-8">
+          <header className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
             <div>
               <p className="text-sm font-bold text-violet-700">
                 Firmic Command Center
               </p>
 
-              <h1 className="text-3xl font-bold text-slate-950 mt-1">
+              <h1 className="mt-1 text-3xl font-bold text-slate-950">
                 {greeting()}, {companyName}.
               </h1>
 
-              <p className="text-slate-500 mt-2 max-w-4xl">
-                Welcome back to Firmic. See what happened, what needs attention, and what your company should do next.
+              <p className="mt-2 max-w-4xl text-slate-500">
+                Review your company launch, current operations, and the next
+                action required from your team.
               </p>
-
-              <div className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-slate-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
-                {loading ? "Reviewing company..." : reviewLabel}
-              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <AIOnlinePill workers={Math.max(3, agents.length + 3)} />
-
+            <div className="flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={() => void loadDashboard()}
                 disabled={loading}
-                className="border border-slate-200 bg-white px-5 py-3 rounded-xl font-bold hover:bg-slate-100 transition disabled:opacity-50"
+                className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-bold transition hover:bg-slate-100 disabled:opacity-50"
               >
                 {loading ? "Refreshing..." : "Refresh"}
               </button>
 
               <a
-                href={hasOffice ? "/my-office" : "/virtual-offices"}
-                className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold text-center hover:bg-violet-700 transition"
+                href="/launch-center"
+                className="rounded-xl bg-violet-600 px-6 py-3 text-center font-bold text-white transition hover:bg-violet-700"
               >
-                {hasOffice
-                  ? "Manage Headquarters"
-                  : "virtual-offices"}
+                Open Launch Center
               </a>
             </div>
           </header>
 
           {!workspace?.id && (
-            <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 text-yellow-700">
+            <Alert>
               Select or create a company to activate the Command Center.
-            </div>
+            </Alert>
           )}
 
-          {error && (
-            <div className="mt-6 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-2xl p-4">
-              {error}
-            </div>
-          )}
+          {error && <Alert>{error}</Alert>}
 
-          <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
-            <Stat
-              title="Business Health"
-              value={
-                healthScore === null
-                  ? "Pending"
-                  : `${healthScore}%`
-              }
-              icon="🧠"
-              detail={healthStatus}
-            />
+          {workspace?.id && (
+            <>
+              <LaunchPanel
+                launch={launch}
+                loading={loading}
+                companyName={companyName}
+                outstandingRequirements={outstandingRequirements}
+                approvedRequirements={approvedRequirements}
+                actionHref={launchActionHref}
+                actionLabel={launchActionLabel}
+              />
 
-            <Stat
-              title="Unread Notifications"
-              value={String(unreadNotifications.length)}
-              icon="🔔"
-              detail={`${actionRequiredCount} action required`}
-            />
+              <section className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-4">
+                <Stat
+                  title="Launch Status"
+                  value={formatLabel(launchStatus)}
+                  detail={
+                    launchComplete
+                      ? "Company fully operational"
+                      : launch?.next_step || "Launch Engine synchronizing"
+                  }
+                  icon="🚀"
+                />
 
-            <Stat
-              title="Open Tasks"
-              value={String(openTasks.length)}
-              icon="✅"
-              detail={`${pendingCount} pending approvals`}
-            />
+                <Stat
+                  title="Open Tasks"
+                  value={String(openTasks.length)}
+                  detail="Across company operations"
+                  icon="✅"
+                />
 
-            <Stat
-              title="Current Billing"
-              value={`$${monthlyTotal.toFixed(2)}`}
-              icon="💰"
-              detail={`AED ${toAED(monthlyTotal)}`}
-            />
-          </section>
+                <Stat
+                  title="Unread Alerts"
+                  value={String(unreadNotifications.length)}
+                  detail="Notifications requiring review"
+                  icon="🔔"
+                />
 
-          <section className="mt-8 overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-sm">
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px]">
-              <div className="p-6 lg:p-8">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-2xl">
-                    👔
-                  </div>
+                <Stat
+                  title="Current Billing"
+                  value={`$${monthlyTotal.toFixed(2)}`}
+                  detail={`AED ${toAED(monthlyTotal)}`}
+                  icon="💳"
+                />
+              </section>
 
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-violet-700">
-                      Sonny AI COO · Morning Brief
-                    </p>
-                    <h2 className="mt-1 text-2xl font-bold text-slate-950">
-                      Your company is {healthValue >= 80 ? "operating normally" : "ready for review"}.
-                    </h2>
-                    <p className="mt-3 max-w-3xl leading-7 text-slate-600">
-                      {intelligence?.executive_brief ||
-                        intelligence?.brief ||
-                        `I reviewed ${companyName} and consolidated the latest operational signals for you.`}
-                    </p>
-                  </div>
-                </div>
+              <section className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+                <div className="space-y-6">
+                  <Panel
+                    title="Launch Requirements"
+                    actionHref="/launch-center"
+                    actionText="View Full Launch"
+                  >
+                    {launchRequirements.length === 0 ? (
+                      <Empty text="Launch requirements are loading." />
+                    ) : (
+                      <div className="space-y-3">
+                        {launchRequirements.slice(0, 7).map((requirement) => (
+                          <RequirementRow
+                            key={requirement.key}
+                            label={requirement.label}
+                            status={requirement.status}
+                            actionHref={requirement.action_href}
+                            actionLabel={requirement.action_label}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </Panel>
 
-                <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                  {morningBriefItems.map((item) => (
-                    <div
-                      key={item}
-                      className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  <Panel
+                    title="Recent Company Activity"
+                    actionHref="/timeline"
+                    actionText="Open Timeline"
+                  >
+                    {activity.length === 0 ? (
+                      <Empty text="No synchronized activity yet." />
+                    ) : (
+                      <div className="space-y-3">
+                        {activity.slice(0, 6).map((event) => (
+                          <ActivityRow key={event.id} event={event} />
+                        ))}
+                      </div>
+                    )}
+                  </Panel>
+
+                  <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <Panel
+                      title="Headquarters"
+                      actionHref={hasOffice ? "/my-office" : "/launch-center"}
+                      actionText={
+                        hasOffice ? "Manage Headquarters" : "Continue Launch"
+                      }
                     >
-                      <span className="mt-0.5 text-emerald-600">✓</span>
-                      <p className="text-sm font-medium text-slate-700">{item}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                      {!hasOffice ? (
+                        <Empty text="Your headquarters has not been reserved yet." />
+                      ) : (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <Mini
+                            title="Office"
+                            value={headquarters?.office_code || "Reserved"}
+                          />
+                          <Mini
+                            title="Status"
+                            value={formatLabel(
+                              launch?.office_status || "awaiting_compliance",
+                            )}
+                          />
+                          <Mini
+                            title="Location"
+                            value={
+                              headquarters?.location ||
+                              "Location being prepared"
+                            }
+                          />
+                          <Mini
+                            title="Phone"
+                            value={headquarters?.phone || "Pending activation"}
+                          />
+                        </div>
+                      )}
+                    </Panel>
 
-              <div className="border-t border-violet-200 bg-violet-50 p-6 xl:border-l xl:border-t-0 lg:p-8">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600">
-                  Sonny recommends
-                </p>
-                <p className="mt-3 text-lg font-bold leading-7 text-violet-950">
-                  {primaryRecommendation}
-                </p>
-                <div className="mt-6 flex flex-col gap-3">
-                  <a
-                    href="/sonny"
-                    className="rounded-xl bg-violet-600 px-5 py-3 text-center font-bold text-white transition hover:bg-violet-700"
-                  >
-                    Ask Sonny
-                  </a>
-                  <a
-                    href="/tasks"
-                    className="rounded-xl border border-violet-200 bg-white px-5 py-3 text-center font-bold text-violet-700 transition hover:bg-violet-100"
-                  >
-                    Review Priorities
-                  </a>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="grid grid-cols-1 xl:grid-cols-[1.35fr_0.65fr] gap-6 mt-8">
-            <div className="space-y-6">
-              <section className="bg-gradient-to-br from-violet-700 to-indigo-700 text-white rounded-3xl p-6 shadow-sm">
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
-                  <div className="max-w-3xl">
-                    <p className="text-sm font-bold text-violet-200">
-                      Sonny Executive Brief
-                    </p>
-
-                    <h2 className="text-2xl font-bold mt-2">
-                      {healthStatus}
-                    </h2>
-
-                    <p className="text-violet-100 mt-3 leading-7">
-                      {intelligence?.executive_brief ||
-                        intelligence?.brief ||
-                        "Firmic is consolidating your company data into an executive operating brief."}
-                    </p>
-                  </div>
-
-                  <div className="bg-white/10 rounded-3xl p-5 text-center min-w-[170px]">
-                    <p className="text-sm text-violet-200">
-                      Health Score
-                    </p>
-                    <p className="text-5xl font-bold mt-2">
-                      {healthScore === null ? "—" : healthScore}
-                    </p>
-                    <p className="text-sm text-violet-200 mt-1">
-                      {healthScore === null
-                        ? "Pending"
-                        : healthValue >= 90
-                        ? "Excellent · Operational"
-                        : healthValue >= 75
-                        ? "Healthy · Stable"
-                        : "Review recommended"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-6">
-                  <ExecutiveMini
-                    title="Company Status"
-                    value={label(companyStatus)}
-                  />
-                  <ExecutiveMini
-                    title="Compliance"
-                    value={label(complianceStatus)}
-                  />
-                  <ExecutiveMini
-                    title="Active Services"
-                    value={String(activeServices)}
-                  />
-                </div>
-
-                <div className="flex flex-wrap gap-3 mt-6">
-                  <a
-                    href="/executive-intelligence"
-                    className="bg-white text-violet-700 px-5 py-3 rounded-xl font-bold"
-                  >
-                    Open Full Brief
-                  </a>
-
-                  <a
-                    href="/sonny"
-                    className="bg-white/10 border border-white/20 px-5 py-3 rounded-xl font-bold"
-                  >
-                    Ask Sonny
-                  </a>
-                </div>
-              </section>
-
-              <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Panel
-                  title="Today's Priorities"
-                  actionHref="/tasks"
-                  actionText="Open Tasks"
-                >
-                  {priorities.length === 0 ? (
-                    <EmptyText text="No urgent priorities found." />
-                  ) : (
-                    <div className="space-y-3">
-                      {priorities.map((priority, index) => (
-                        <PriorityRow
-                          key={`${priority.title}-${index}`}
-                          title={priority.title}
-                          description={priority.description}
-                          type={priority.type}
+                    <Panel
+                      title="AI Workforce"
+                      actionHref="/ai-workforce"
+                      actionText="Open Workforce"
+                    >
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <Mini
+                          title="Assigned Agents"
+                          value={String(agents.length)}
                         />
-                      ))}
-                    </div>
-                  )}
-                </Panel>
+                        <Mini
+                          title="Launch State"
+                          value={
+                            launchComplete
+                              ? "Operational"
+                              : "Waiting for Activation"
+                          }
+                        />
+                        <Mini
+                          title="Monthly AI Cost"
+                          value={`$${agents
+                            .reduce(
+                              (total, agent) =>
+                                total + Number(agent.monthly_price_usd || 0),
+                              0,
+                            )
+                            .toFixed(2)}`}
+                        />
+                        <Mini
+                          title="Sonny"
+                          value={
+                            launchComplete ? "Orchestrating" : "Guiding Launch"
+                          }
+                        />
+                      </div>
+                    </Panel>
+                  </section>
 
-                <Panel
-                  title="Executive Alerts"
-                  actionHref="/notifications"
-                  actionText="Open Notifications"
-                >
-                  <div className="grid grid-cols-2 gap-3">
-                    <AttentionMini
-                      title="Unread"
-                      value={unreadNotifications.length}
-                      icon="🔔"
-                    />
-                    <AttentionMini
-                      title="Action Required"
-                      value={actionRequiredCount}
-                      icon="🔴"
-                    />
-                    <AttentionMini
-                      title="Warnings"
-                      value={warningCount}
-                      icon="⚠️"
-                    />
-                    <AttentionMini
-                      title="Pending"
-                      value={pendingCount}
-                      icon="🟡"
-                    />
-                  </div>
-                </Panel>
-              </section>
-
-              <Panel
-                title="Company Timeline"
-                actionHref="/timeline"
-                actionText="View Timeline"
-              >
-                {activity.length === 0 ? (
-                  <EmptyText text="No synchronized activity yet." />
-                ) : (
-                  <div className="space-y-3">
-                    {activity.slice(0, 5).map((event) => (
-                      <ActivityRow key={event.id} event={event} />
-                    ))}
-                  </div>
-                )}
-              </Panel>
-
-              <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-bold">
-                      Head Office
-                    </h2>
-
-                    <p className="text-sm text-slate-500 mt-1">
-                      Registered company headquarters and infrastructure.
-                    </p>
-                  </div>
-
-                  <a
-                    href={hasOffice ? "/my-office" : "/virtual-offices"}
-                    className="border border-slate-200 px-4 py-2 rounded-xl font-semibold hover:bg-slate-50 transition"
+                  <Panel
+                    title="Meeting Center"
+                    actionHref="/meeting-rooms"
+                    actionText="Manage Meetings"
                   >
-                    {hasOffice ? "Manage Headquarters" : "virtual-offices"}
-                  </a>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <Mini title="Bookings" value={String(bookings.length)} />
+                      <Mini
+                        title="Booked Hours"
+                        value={String(totalBookedHours)}
+                      />
+                      <Mini
+                        title="Availability"
+                        value={
+                          launchComplete ? "Operational" : "Activation pending"
+                        }
+                      />
+                    </div>
+                  </Panel>
                 </div>
 
-                {!hasOffice ? (
-                  <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-6 text-slate-500">
-                    No headquarters has been assigned to this company.
-                  </div>
-                ) : (
-                  <div className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Mini title="Office" value={officeCode} />
-                    <Mini title="Location" value={officeLocation} />
-                    <Mini title="Business Number" value={businessNumber} />
-                    <Mini
-                      title="Plan"
-                      value={`${plan} · $${officePrice}/mo`}
-                    />
-                  </div>
-                )}
+                <aside className="space-y-6">
+                  <Panel title="Next Actions">
+                    <div className="space-y-3">
+                      {outstandingRequirements.length === 0 ? (
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
+                          All launch requirements have been completed.
+                        </div>
+                      ) : (
+                        outstandingRequirements.slice(0, 5).map((item) => (
+                          <a
+                            key={item.key}
+                            href={item.action_href || "/launch-center"}
+                            className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-violet-300 hover:bg-violet-50"
+                          >
+                            <p className="font-bold text-slate-900">
+                              {item.label}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {item.status === "uploaded"
+                                ? "Uploaded and awaiting review."
+                                : item.action_label || "Continue this step."}
+                            </p>
+                          </a>
+                        ))
+                      )}
+                    </div>
+                  </Panel>
+
+                  <Panel title="Monthly Operating Cost">
+                    <div className="space-y-1">
+                      <Row title="Subtotal" value={`$${subtotal.toFixed(2)}`} />
+                      <Row title="Tax" value={`$${tax.toFixed(2)}`} />
+                      <Row
+                        title="Active Services"
+                        value={String(activeServices)}
+                      />
+                    </div>
+
+                    <div className="mt-5 rounded-2xl border border-violet-100 bg-violet-50 p-4">
+                      <p className="text-sm font-bold text-violet-700">
+                        Monthly Total
+                      </p>
+                      <p className="mt-1 text-3xl font-bold text-violet-950">
+                        ${monthlyTotal.toFixed(2)}
+                      </p>
+                      <p className="text-violet-700">
+                        AED {toAED(monthlyTotal)}
+                      </p>
+                    </div>
+
+                    <a
+                      href="/billing"
+                      className="mt-5 block rounded-xl bg-violet-600 py-3 text-center font-bold text-white"
+                    >
+                      Open Subscription
+                    </a>
+                  </Panel>
+
+                  <Panel title="Quick Access">
+                    <div className="grid grid-cols-2 gap-3">
+                      <QuickAction
+                        href="/documents"
+                        icon="📄"
+                        text="Documents"
+                      />
+                      <QuickAction href="/hermes" icon="🛡️" text="Hermes" />
+                      <QuickAction href="/sonny" icon="👔" text="Sonny" />
+                      <QuickAction
+                        href="/launch-center"
+                        icon="🚀"
+                        text="Launch Center"
+                      />
+                    </div>
+                  </Panel>
+                </aside>
               </section>
-
-              <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Panel
-                  title="Meeting Center"
-                  actionHref="/meeting-rooms"
-                  actionText="Manage Meetings"
-                >
-                  <div className="grid grid-cols-2 gap-3">
-                    <Mini
-                      title="Bookings"
-                      value={String(bookings.length)}
-                    />
-                    <Mini
-                      title="Booked Hours"
-                      value={String(totalBookedHours)}
-                    />
-                  </div>
-                </Panel>
-
-                <Panel
-                  title="AI Workforce"
-                  actionHref="/ai-workforce"
-                  actionText="Manage Workforce"
-                >
-                  <div className="grid grid-cols-2 gap-3">
-                    <Mini
-                      title="Active Agents"
-                      value={String(agents.length)}
-                    />
-                    <Mini
-                      title="Monthly AI Cost"
-                      value={`$${agents
-                        .reduce(
-                          (sum, agent) =>
-                            sum + Number(agent.monthly_price_usd || 0),
-                          0
-                        )
-                        .toFixed(2)}`}
-                    />
-                  </div>
-                </Panel>
-              </section>
-            </div>
-
-            <aside className="space-y-6">
-              <Panel
-                title="AI Workforce Health"
-                actionHref="/ai-workforce"
-                actionText="Open Workforce"
-              >
-                <div className="space-y-3">
-                  {workforceStatuses.map((agent) => (
-                    <WorkforceRow key={agent.name} agent={agent} />
-                  ))}
-                </div>
-              </Panel>
-
-              <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-                <h2 className="text-xl font-bold">
-                  Monthly Operating Cost
-                </h2>
-
-                <div className="space-y-3 mt-5">
-                  <Row
-                    title="Subtotal"
-                    value={`$${subtotal.toFixed(2)}`}
-                  />
-                  <Row
-                    title="Tax"
-                    value={`$${tax.toFixed(2)}`}
-                  />
-                  <Row
-                    title="Active Services"
-                    value={String(activeServices)}
-                  />
-                  <Row
-                    title="One-Time Hookup"
-                    value={`$${hookupFee.toFixed(2)}`}
-                  />
-                </div>
-
-                <div className="mt-5 bg-violet-50 border border-violet-100 rounded-2xl p-4">
-                  <p className="text-sm text-violet-700 font-bold">
-                    Monthly Operating Cost
-                  </p>
-
-                  <h3 className="text-3xl font-bold text-violet-900 mt-1">
-                    ${checkout.toFixed(2)}
-                  </h3>
-
-                  <p className="text-violet-700">
-                    AED {toAED(checkout)}
-                  </p>
-                </div>
-
-                <a
-                  href="/billing"
-                  className="mt-5 block text-center bg-violet-600 text-white py-3 rounded-xl font-bold"
-                >
-                  Open Billing Center
-                </a>
-              </section>
-
-              <Panel title="Founder Quick Actions">
-                <div className="grid grid-cols-2 gap-3">
-                  <QuickAction
-                    href="/tasks"
-                    icon="✅"
-                    text="Create Task"
-                  />
-                  <QuickAction
-                    href="/documents"
-                    icon="📄"
-                    text="Upload Document"
-                  />
-                  <QuickAction
-                    href="/meeting-rooms"
-                    icon="📅"
-                    text="Book Meeting"
-                  />
-                  <QuickAction
-                    href="/sonny"
-                    icon="👔"
-                    text="Open Sonny"
-                  />
-                  <QuickAction
-                    href="/timeline"
-                    icon="📜"
-                    text="Timeline"
-                  />
-                  <QuickAction
-                    href="/notifications"
-                    icon="🔔"
-                    text="Notifications"
-                  />
-                </div>
-              </Panel>
-            </aside>
-          </section>
-        
-        <section className="mt-8 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <ExecutiveTimeline items={timelineItems} />
-
-          <CompanyHealthRing
-            value={healthValue}
-            reviewedLabel={reviewLabel}
-          />
-        </section>
-
-        <section className="mt-6">
-          <AIWorkforceStatus agents={workforceCards} />
-        </section>
-
-        <section className="mt-6 grid gap-6 xl:grid-cols-2">
-          <AIWorkforceActivity items={workforceActivity} />
-          <ExecutiveActivityFeed items={executiveFeed} />
-        </section>
-
+            </>
+          )}
         </main>
       </div>
     </ProtectedRoute>
   );
 }
 
+function LaunchPanel({
+  launch,
+  loading,
+  companyName,
+  outstandingRequirements,
+  approvedRequirements,
+  actionHref,
+  actionLabel,
+}: {
+  launch: LaunchSummary | null;
+  loading: boolean;
+  companyName: string;
+  outstandingRequirements: LaunchSummary["requirements"];
+  approvedRequirements: LaunchSummary["requirements"];
+  actionHref: string;
+  actionLabel: string;
+}) {
+  const status = launch?.status || "pending_compliance";
+  const active = status === "active";
+  const progress = Number(launch?.progress_percent || 0);
+
+  return (
+    <section
+      className={[
+        "mt-8 overflow-hidden rounded-3xl border shadow-sm",
+        active ? "border-emerald-200 bg-white" : "border-violet-200 bg-white",
+      ].join(" ")}
+    >
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_330px]">
+        <div className="p-6 lg:p-8">
+          <div className="flex items-start gap-4">
+            <div
+              className={[
+                "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-2xl",
+                active ? "bg-emerald-100" : "bg-violet-100",
+              ].join(" ")}
+            >
+              {active ? "✓" : "🚀"}
+            </div>
+
+            <div className="min-w-0">
+              <p
+                className={[
+                  "text-sm font-bold",
+                  active ? "text-emerald-700" : "text-violet-700",
+                ].join(" ")}
+              >
+                Company Launch
+              </p>
+
+              <h2 className="mt-1 text-3xl font-bold text-slate-950">
+                {loading
+                  ? "Synchronizing launch status..."
+                  : active
+                    ? `${companyName} is operational.`
+                    : `${companyName} is ${formatLabel(status).toLowerCase()}.`}
+              </h2>
+
+              <p className="mt-3 max-w-3xl leading-7 text-slate-600">
+                {active
+                  ? "Your headquarters and Firmic operating services are active."
+                  : "Complete the remaining requirements before Firmic activates your headquarters and operating services."}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-7">
+            <div className="flex items-center justify-between gap-4">
+              <p className="font-bold text-slate-900">Launch progress</p>
+
+              <p className="font-bold text-violet-700">
+                {progress.toFixed(0)}%
+              </p>
+            </div>
+
+            <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className={[
+                  "h-full rounded-full transition-all duration-500",
+                  active ? "bg-emerald-600" : "bg-violet-600",
+                ].join(" ")}
+                style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+              />
+            </div>
+
+            <p className="mt-3 text-sm text-slate-500">
+              {approvedRequirements.length} of {launch?.total_requirements || 0}{" "}
+              launch requirements completed.
+            </p>
+          </div>
+        </div>
+
+        <div
+          className={[
+            "border-t p-6 xl:border-l xl:border-t-0 lg:p-8",
+            active
+              ? "border-emerald-200 bg-emerald-50"
+              : "border-violet-200 bg-violet-50",
+          ].join(" ")}
+        >
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+            {active ? "Launch Complete" : "Next Step"}
+          </p>
+
+          <p className="mt-3 text-xl font-bold text-slate-950">
+            {active
+              ? "Company operational"
+              : launch?.next_step || "Review launch requirements"}
+          </p>
+
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {active
+              ? "Firmic services are available for your company."
+              : `${outstandingRequirements.length} requirement${
+                  outstandingRequirements.length === 1 ? "" : "s"
+                } remain.`}
+          </p>
+
+          <a
+            href={active ? "/launch-center" : actionHref}
+            className={[
+              "mt-6 block rounded-xl px-5 py-3 text-center font-bold text-white transition",
+              active
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : "bg-violet-600 hover:bg-violet-700",
+            ].join(" ")}
+          >
+            {active ? "View Launch Record" : actionLabel}
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RequirementRow({
+  label,
+  status,
+  actionHref,
+  actionLabel,
+}: {
+  label: string;
+  status: string;
+  actionHref?: string | null;
+  actionLabel?: string | null;
+}) {
+  const approved = status === "approved";
+  const uploaded = status === "uploaded";
+
+  return (
+    <div className="flex flex-col justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center">
+      <div className="flex items-center gap-3">
+        <span
+          className={[
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+            approved
+              ? "bg-emerald-600 text-white"
+              : uploaded
+                ? "bg-blue-100 text-blue-700"
+                : "bg-amber-100 text-amber-700",
+          ].join(" ")}
+        >
+          {approved ? "✓" : uploaded ? "↑" : "!"}
+        </span>
+
+        <div>
+          <p className="font-bold text-slate-900">{label}</p>
+          <p className="mt-1 text-sm text-slate-500">
+            {approved
+              ? "Completed"
+              : uploaded
+                ? "Uploaded and awaiting review"
+                : "Action required"}
+          </p>
+        </div>
+      </div>
+
+      {!approved && actionHref && (
+        <a
+          href={actionHref}
+          className="text-sm font-bold text-violet-700 hover:text-violet-900"
+        >
+          {actionLabel || "Continue"} →
+        </a>
+      )}
+    </div>
+  );
+}
+
+function Stat({
+  title,
+  value,
+  detail,
+  icon,
+}: {
+  title: string;
+  value: string;
+  detail: string;
+  icon: string;
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="text-3xl">{icon}</div>
+      <p className="mt-3 text-sm text-slate-500">{title}</p>
+      <p className="mt-1 text-2xl font-bold text-slate-950">{value}</p>
+      <p className="mt-2 text-xs text-slate-400">{detail}</p>
+    </div>
+  );
+}
+
+function Panel({
+  title,
+  children,
+  actionHref,
+  actionText,
+}: {
+  title: string;
+  children: ReactNode;
+  actionHref?: string;
+  actionText?: string;
+}) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-xl font-bold text-slate-950">{title}</h2>
+
+        {actionHref && actionText && (
+          <a
+            href={actionHref}
+            className="text-sm font-bold text-violet-700 hover:text-violet-900"
+          >
+            {actionText} →
+          </a>
+        )}
+      </div>
+
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function ActivityRow({ event }: { event: Activity }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
+      <div>
+        <p className="font-semibold text-slate-900">
+          {event.title || formatLabel(event.event_type)}
+        </p>
+
+        {event.description && (
+          <p className="mt-1 text-sm text-slate-500">{event.description}</p>
+        )}
+      </div>
+
+      <p className="shrink-0 text-xs text-slate-400">
+        {formatRelativeTime(event.created_at)}
+      </p>
+    </div>
+  );
+}
+
+function Mini({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs text-slate-500">{title}</p>
+      <p className="mt-1 break-words font-bold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function Row({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4 border-b border-slate-100 py-3 last:border-b-0">
+      <span className="text-slate-500">{title}</span>
+      <span className="font-bold text-slate-900">{value}</span>
+    </div>
+  );
+}
+
+function QuickAction({
+  href,
+  icon,
+  text,
+}: {
+  href: string;
+  icon: string;
+  text: string;
+}) {
+  return (
+    <a
+      href={href}
+      className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-violet-200 hover:bg-violet-50"
+    >
+      <span className="text-2xl">{icon}</span>
+      <p className="mt-3 text-sm font-bold text-slate-900">{text}</p>
+    </a>
+  );
+}
+
+function Empty({ text }: { text: string }) {
+  return <p className="text-slate-500">{text}</p>;
+}
+
+function Alert({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+      {children}
+    </div>
+  );
+}
+
 async function fetchCompanyResource(path: string) {
   const token =
-    typeof window !== "undefined"
-      ? localStorage.getItem("firmic_token")
-      : null;
+    typeof window !== "undefined" ? localStorage.getItem("firmic_token") : null;
 
   if (!token) {
     throw new Error("Not authenticated.");
@@ -1034,198 +884,19 @@ async function fetchCompanyResource(path: string) {
       `Request failed with status ${response.status}`;
 
     throw new Error(
-      typeof detail === "string"
-        ? detail
-        : JSON.stringify(detail)
+      typeof detail === "string" ? detail : JSON.stringify(detail),
     );
   }
 
   return body;
 }
 
-function fulfilledArray<T>(
-  result: PromiseSettledResult<any>
-): T[] {
-  if (
-    result.status === "fulfilled" &&
-    Array.isArray(result.value)
-  ) {
-    return result.value;
+function fulfilledArray<T>(result: PromiseSettledResult<unknown>): T[] {
+  if (result.status !== "fulfilled") {
+    return [];
   }
 
-  return [];
-}
-
-function getHealthScore(
-  intelligence: ExecutiveIntelligence | null
-): number | null {
-  const value =
-    intelligence?.business_health?.score ??
-    intelligence?.health_score;
-
-  const numeric = Number(value);
-
-  return Number.isFinite(numeric)
-    ? Math.round(numeric)
-    : null;
-}
-
-function buildPriorities({
-  notifications,
-  tasks,
-  recommendations,
-}: {
-  notifications: NotificationItem[];
-  tasks: TaskItem[];
-  recommendations: Array<{
-    title?: string;
-    description?: string;
-    priority?: string;
-  }>;
-}) {
-  const notificationItems = notifications
-    .filter((item) =>
-      ["action_required", "warning", "pending"].includes(
-        normalizeNotificationType(item.type)
-      )
-    )
-    .map((item) => ({
-      title: item.title || "Notification needs attention",
-      description: item.description || "Review this company update.",
-      type: normalizeNotificationType(item.type),
-    }));
-
-  const taskItems = tasks.map((task) => ({
-    title: task.title || "Open company task",
-    description:
-      task.description ||
-      `Task status: ${label(task.status || "open")}`,
-    type: "task",
-  }));
-
-  const recommendationItems = recommendations.map((item) => ({
-    title: item.title || "Executive recommendation",
-    description:
-      item.description ||
-      "Review this recommendation from Sonny Executive Brief.",
-    type: "recommendation",
-  }));
-
-  return [
-    ...notificationItems,
-    ...taskItems,
-    ...recommendationItems,
-  ];
-}
-
-function buildWorkforceStatuses(
-  activity: Activity[]
-): WorkforceStatus[] {
-  return [
-    buildAgentStatus(
-      "Sonny",
-      "AI Chief Operating Officer",
-      activity
-    ),
-    buildAgentStatus(
-      "Hermes",
-      "AI Compliance Officer",
-      activity
-    ),
-    buildAgentStatus(
-      "Julia",
-      "AI Growth Officer",
-      activity
-    ),
-  ];
-}
-
-function buildAgentStatus(
-  name: string,
-  role: string,
-  activity: Activity[]
-): WorkforceStatus {
-  const event = activity.find((item) =>
-    [
-      item.title,
-      item.description,
-      item.actor_type,
-      item.source_type,
-      item.event_type,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(name.toLowerCase())
-  );
-
-  if (!event) {
-    return {
-      name,
-      role,
-      status: "Idle",
-      detail: "Ready for company work",
-    };
-  }
-
-  const text = [
-    event.title,
-    event.description,
-    event.event_type,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  const status =
-    text.includes("failed") || text.includes("error")
-      ? "Attention"
-      : text.includes("completed") || text.includes("finished")
-      ? "Completed"
-      : text.includes("started") ||
-        text.includes("assigned") ||
-        text.includes("working")
-      ? "Working"
-      : "Active";
-
-  return {
-    name,
-    role,
-    status,
-    detail: event.title || "Recent workforce activity",
-  };
-}
-
-function normalizeNotificationType(
-  type?: string | null
-) {
-  const value = String(type || "").toLowerCase();
-
-  if (
-    ["action_required", "action", "required"].includes(value)
-  ) {
-    return "action_required";
-  }
-
-  if (
-    ["pending", "approval", "pending_approval"].includes(value)
-  ) {
-    return "pending";
-  }
-
-  if (
-    ["warning", "error", "failed"].includes(value)
-  ) {
-    return "warning";
-  }
-
-  if (
-    ["success", "completed"].includes(value)
-  ) {
-    return "success";
-  }
-
-  return "info";
+  return Array.isArray(result.value) ? (result.value as T[]) : [];
 }
 
 function greeting() {
@@ -1236,262 +907,12 @@ function greeting() {
   return "Good evening";
 }
 
-function Stat({
-  title,
-  value,
-  icon,
-  detail,
-}: {
-  title: string;
-  value: string;
-  icon: string;
-  detail?: string;
-}) {
-  return (
-    <div className="group bg-white border border-slate-200 rounded-3xl p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-violet-200">
-      <div className="text-3xl">{icon}</div>
-      <p className="text-sm text-slate-500 mt-3">{title}</p>
-      <p className="text-2xl font-bold mt-1 tabular-nums">
-        <AnimatedMetric value={value} />
-      </p>
-      {detail && (
-        <p className="text-xs text-slate-400 mt-2">{detail}</p>
-      )}
-    </div>
-  );
-}
-
-function Panel({
-  title,
-  children,
-  actionHref,
-  actionText,
-}: {
-  title: string;
-  children: React.ReactNode;
-  actionHref?: string;
-  actionText?: string;
-}) {
-  return (
-    <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-xl font-bold">{title}</h2>
-
-        {actionHref && actionText && (
-          <a
-            href={actionHref}
-            className="text-sm text-violet-700 font-bold hover:text-violet-900"
-          >
-            {actionText} →
-          </a>
-        )}
-      </div>
-
-      <div className="mt-5">{children}</div>
-    </section>
-  );
-}
-
-function ExecutiveMini({
-  title,
-  value,
-}: {
-  title: string;
-  value: string;
-}) {
-  return (
-    <div className="bg-white/10 rounded-2xl p-4">
-      <p className="text-xs text-violet-200">{title}</p>
-      <p className="font-bold mt-1">{value}</p>
-    </div>
-  );
-}
-
-function AttentionMini({
-  title,
-  value,
-  icon,
-}: {
-  title: string;
-  value: number;
-  icon: string;
-}) {
-  return (
-    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-      <span className="text-xl">{icon}</span>
-      <p className="text-2xl font-bold mt-2">{value}</p>
-      <p className="text-xs text-slate-500 mt-1">{title}</p>
-    </div>
-  );
-}
-
-function PriorityRow({
-  title,
-  description,
-  type,
-}: {
-  title: string;
-  description: string;
-  type: string;
-}) {
-  const icon =
-    type === "warning"
-      ? "⚠️"
-      : type === "pending"
-      ? "🟡"
-      : type === "action_required"
-      ? "🔴"
-      : type === "recommendation"
-      ? "🧠"
-      : "✅";
-
-  return (
-    <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-4">
-      <span className="text-xl shrink-0">{icon}</span>
-      <div>
-        <p className="font-bold">{title}</p>
-        <p className="text-sm text-slate-500 mt-1">
-          {description}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function ActivityRow({
-  event,
-}: {
-  event: Activity;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
-      <div>
-        <p className="font-semibold">
-          {event.title || label(event.event_type)}
-        </p>
-
-        {event.description && (
-          <p className="text-sm text-slate-500 mt-1">
-            {event.description}
-          </p>
-        )}
-      </div>
-
-      <p className="text-xs text-slate-400 shrink-0">
-        {formatRelativeTime(event.created_at)}
-      </p>
-    </div>
-  );
-}
-
-function WorkforceRow({
-  agent,
-}: {
-  agent: WorkforceStatus;
-}) {
-  const statusClass =
-    agent.status === "Attention"
-      ? "bg-red-100 text-red-700"
-      : agent.status === "Working"
-      ? "bg-blue-100 text-blue-700"
-      : agent.status === "Completed"
-      ? "bg-green-100 text-green-700"
-      : "bg-slate-100 text-slate-600";
-
-  return (
-    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-bold">{agent.name}</p>
-          <p className="text-xs text-slate-500 mt-1">
-            {agent.role}
-          </p>
-        </div>
-
-        <span
-          className={`px-3 py-1 rounded-full text-xs font-bold ${statusClass}`}
-        >
-          {agent.status}
-        </span>
-      </div>
-
-      <p className="text-sm text-slate-500 mt-3">
-        {agent.detail}
-      </p>
-    </div>
-  );
-}
-
-function Mini({
-  title,
-  value,
-}: {
-  title: string;
-  value: string;
-}) {
-  return (
-    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 min-w-0">
-      <p className="text-xs text-slate-500">{title}</p>
-      <p className="font-bold mt-1 break-words">{value}</p>
-    </div>
-  );
-}
-
-function Row({
-  title,
-  value,
-}: {
-  title: string;
-  value: string;
-}) {
-  return (
-    <div className="flex justify-between gap-4 py-3 border-b border-slate-100">
-      <span className="text-slate-500">{title}</span>
-      <span className="font-bold">{value}</span>
-    </div>
-  );
-}
-
-function QuickAction({
-  href,
-  icon,
-  text,
-}: {
-  href: string;
-  icon: string;
-  text: string;
-}) {
-  return (
-    <a
-      href={href}
-      className="bg-slate-50 border border-slate-200 rounded-2xl p-4 hover:bg-violet-50 hover:border-violet-200 transition"
-    >
-      <span className="text-2xl">{icon}</span>
-      <p className="font-bold text-sm mt-3">{text}</p>
-    </a>
-  );
-}
-
-function EmptyText({
-  text,
-}: {
-  text: string;
-}) {
-  return (
-    <p className="text-slate-500">
-      {text}
-    </p>
-  );
-}
-
-function label(value?: string | null) {
+function formatLabel(value?: string | null) {
   if (!value) return "Unknown";
 
   return value
     .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase()
-    );
+    .replace(/\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatRelativeTime(value?: string | null) {
@@ -1511,15 +932,12 @@ function formatRelativeTime(value?: string | null) {
   if (difference < minute) return "Just now";
 
   if (difference < hour) {
-    const minutes = Math.floor(difference / minute);
-    return `${minutes}m ago`;
+    return `${Math.floor(difference / minute)}m ago`;
   }
 
   if (difference < day) {
-    const hours = Math.floor(difference / hour);
-    return `${hours}h ago`;
+    return `${Math.floor(difference / hour)}h ago`;
   }
 
-  const days = Math.floor(difference / day);
-  return `${days}d ago`;
+  return `${Math.floor(difference / day)}d ago`;
 }

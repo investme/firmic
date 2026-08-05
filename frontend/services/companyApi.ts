@@ -2,6 +2,10 @@ import { API_URL } from "./config";
 
 export type CreateCompanyPayload = {
   name: string;
+  plan_code:
+    | "PLAN_STARTER"
+    | "PLAN_BUSINESS"
+    | "PLAN_ENTERPRISE";
 };
 
 export function isAuthenticated(): boolean {

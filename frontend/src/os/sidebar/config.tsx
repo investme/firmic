@@ -1,7 +1,5 @@
 import {
-  Activity,
   BadgeDollarSign,
-  Bell,
   Bot,
   BriefcaseBusiness,
   Building2,
@@ -15,14 +13,11 @@ import {
   Home,
   Inbox,
   LayoutDashboard,
-  Mail,
-  MessageSquare,
   Phone,
   Plug,
   Settings,
   ShieldCheck,
   Sparkles,
-  Users,
   Warehouse,
 } from "lucide-react";
 
@@ -38,8 +33,8 @@ export const tenantSidebarConfig: SidebarConfig = {
 
   sections: [
     {
-      id: "command-center",
-      title: "Command Center",
+      id: "company",
+      title: "Company",
       items: [
         {
           id: "tenant-dashboard",
@@ -47,44 +42,38 @@ export const tenantSidebarConfig: SidebarConfig = {
           href: "/dashboard",
           icon: <LayoutDashboard className={iconClass} />,
         },
+      ],
+    },
+
+    {
+      id: "infrastructure",
+      title: "Infrastructure",
+      items: [
         {
-          id: "tenant-notifications",
-          label: "Notifications",
-          href: "/notifications",
-          icon: <Bell className={iconClass} />,
-          badge: "notifications",
+          id: "tenant-company",
+          label: "Company",
+          href: "/company",
+          icon: <Building2 className={iconClass} />,
         },
         {
-          id: "tenant-executive-intelligence",
-          label: "Executive Intelligence",
-          href: "/executive-intelligence",
+          id: "tenant-headquarters",
+          label: "Headquarters",
+          href: "/my-office",
+          icon: <Home className={iconClass} />,
+        },
+        {
+          id: "tenant-launch-center",
+          label: "Launch Center",
+          href: "/launch-center",
           icon: <Sparkles className={iconClass} />,
         },
       ],
     },
 
     {
-      id: "company",
-      title: "Company",
+      id: "ai-workforce",
+      title: "AI Workforce",
       items: [
-        {
-          id: "tenant-company",
-          label: "Company Workspace",
-          href: "/company",
-          icon: <Building2 className={iconClass} />,
-        },
-        {
-          id: "tenant-my-office",
-          label: "Head Office",
-          href: "/my-office",
-          icon: <Home className={iconClass} />,
-        },
-        {
-          id: "tenant-virtual-offices",
-          label: "Virtual Offices",
-          href: "/virtual-offices",
-          icon: <Warehouse className={iconClass} />,
-        },
         {
           id: "tenant-ai-workforce",
           label: "AI Workforce",
@@ -92,10 +81,16 @@ export const tenantSidebarConfig: SidebarConfig = {
           icon: <Bot className={iconClass} />,
         },
         {
-          id: "tenant-customer-hub",
-          label: "Customer Hub",
-          href: "/customer-hub",
-          icon: <Users className={iconClass} />,
+          id: "tenant-sonny",
+          label: "Sonny",
+          href: "/sonny",
+          icon: <Bot className={iconClass} />,
+        },
+        {
+          id: "tenant-hermes",
+          label: "Hermes",
+          href: "/hermes",
+          icon: <ShieldCheck className={iconClass} />,
         },
       ],
     },
@@ -105,10 +100,10 @@ export const tenantSidebarConfig: SidebarConfig = {
       title: "Operations",
       items: [
         {
-          id: "tenant-documents",
-          label: "Documents",
-          href: "/documents",
-          icon: <FileText className={iconClass} />,
+          id: "tenant-crm",
+          label: "CRM",
+          href: "/crm",
+          icon: <BriefcaseBusiness className={iconClass} />,
         },
         {
           id: "tenant-tasks",
@@ -117,19 +112,13 @@ export const tenantSidebarConfig: SidebarConfig = {
           icon: <CheckSquare className={iconClass} />,
         },
         {
-          id: "tenant-timeline",
-          label: "Timeline",
-          href: "/timeline",
-          icon: <Activity className={iconClass} />,
-        },
-        {
           id: "tenant-mailbox",
-          label: "Digital Mailroom",
+          label: "Mailbox",
           href: "/mailbox",
           icon: <Inbox className={iconClass} />,
         },
         {
-          id: "tenant-meeting-rooms",
+          id: "tenant-meeting-center",
           label: "Meeting Center",
           href: "/meeting-rooms",
           icon: <CalendarDays className={iconClass} />,
@@ -139,14 +128,8 @@ export const tenantSidebarConfig: SidebarConfig = {
 
     {
       id: "communications",
-      title: "Business Communications",
+      title: "Communications",
       items: [
-        {
-          id: "tenant-messages",
-          label: "Messages",
-          href: "/messages",
-          icon: <MessageSquare className={iconClass} />,
-        },
         {
           id: "tenant-voip",
           label: "VoIP & Calls",
@@ -163,32 +146,14 @@ export const tenantSidebarConfig: SidebarConfig = {
     },
 
     {
-      id: "business-tools",
-      title: "Business Tools",
+      id: "finance",
+      title: "Finance",
       items: [
         {
-          id: "tenant-crm",
-          label: "Sales Hub",
-          href: "/crm",
-          icon: <BriefcaseBusiness className={iconClass} />,
-        },
-        {
-          id: "tenant-microsoft-365",
-          label: "Microsoft 365",
-          href: "/microsoft-365",
-          icon: <Mail className={iconClass} />,
-        },
-        {
-          id: "tenant-billing",
-          label: "Billing Center",
+          id: "tenant-subscription",
+          label: "Subscription",
           href: "/billing",
           icon: <CreditCard className={iconClass} />,
-        },
-        {
-          id: "tenant-reports",
-          label: "Reports",
-          href: "/reports",
-          icon: <ChartNoAxesCombined className={iconClass} />,
         },
         {
           id: "tenant-integrations",
@@ -200,28 +165,15 @@ export const tenantSidebarConfig: SidebarConfig = {
     },
 
     {
-      id: "ai-executives",
-      title: "AI Executives",
+      id: "administration",
+      title: "Administration",
       items: [
         {
-          id: "tenant-sonny",
-          label: "Sonny AI COO",
-          href: "/sonny",
-          icon: <Bot className={iconClass} />,
+          id: "tenant-documents",
+          label: "Documents",
+          href: "/documents",
+          icon: <FileText className={iconClass} />,
         },
-        {
-          id: "tenant-hermes",
-          label: "Hermes Compliance",
-          href: "/hermes",
-          icon: <ShieldCheck className={iconClass} />,
-        },
-      ],
-    },
-
-    {
-      id: "workspace-settings",
-      title: "Workspace",
-      items: [
         {
           id: "tenant-settings",
           label: "Settings",

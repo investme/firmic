@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { toAED } from "../src/data/pricing";
@@ -7,100 +7,108 @@ import {
   getWorkspaceChangedEventName,
 } from "../src/utils/workspaceContext";
 import {
-  getCompanyLedger,
-  getCompanyLedgerSummary,
-} from "../services/ledgerApi";
-import { FirmicOrder, getConfirmedOrder } from "../src/utils/orderStorage";
+  CompanySubscription,
+  SubscriptionItem,
+  getCompanySubscription,
+} from "../services/subscriptionApi";
 
-type LedgerEntry = {
-  id: string;
-  service: string;
-  category: string;
-  resource?: string;
-  action: string;
-  quantity: number;
-  unit: string;
-  unit_price: number;
-  amount: number;
-  tax_amount: number;
-  total_amount: number;
-  currency: string;
-  status: string;
-  invoice_month: string;
-  created_at?: string;
-};
+function formatMoney(value: number): string {
+  return `$${Number(value || 0).toFixed(2)}`;
+}
 
-type LedgerSummary = {
-  company_id: string;
-  subtotal: number;
-  tax: number;
-  total: number;
-  services: Array<{
-    service: string;
-    currency: string;
-    subtotal: number;
-    tax: number;
-    total: number;
-    entries: number;
-  }>;
-};
+function formatDate(value?: string | null): string {
+  if (!value) {
+    return "Not scheduled";
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "Not scheduled";
+  }
+
+  return parsed.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatStatus(value?: string): string {
+  if (!value) {
+    return "Unknown";
+  }
+
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function isIncludedItem(item: SubscriptionItem): boolean {
+  return (
+    item.billing_behavior === "included" ||
+    item.metadata_json?.included_by_plan === true
+  );
+}
+
+function activeItems(
+  subscription: CompanySubscription | null,
+): SubscriptionItem[] {
+  if (!subscription) {
+    return [];
+  }
+
+  return subscription.items.filter((item) => item.status !== "cancelled");
+}
 
 export default function Billing() {
-  const [workspace, setWorkspace] = useState(() =>
-    getActiveWorkspace()
+  const [workspace, setWorkspace] = useState(() => getActiveWorkspace());
+  const [subscription, setSubscription] = useState<CompanySubscription | null>(
+    null,
   );
-  const [entries, setEntries] = useState<LedgerEntry[]>([]);
-  const [summary, setSummary] = useState<LedgerSummary | null>(null);
-  const [confirmedOrder, setConfirmedOrder] = useState<FirmicOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const sync = () => setWorkspace(getActiveWorkspace());
+    const syncWorkspace = () => {
+      setWorkspace(getActiveWorkspace());
+    };
 
-    sync();
-    window.addEventListener(getWorkspaceChangedEventName(), sync);
-    window.addEventListener("storage", sync);
+    syncWorkspace();
+
+    window.addEventListener(getWorkspaceChangedEventName(), syncWorkspace);
+    window.addEventListener("storage", syncWorkspace);
 
     return () => {
-      window.removeEventListener(getWorkspaceChangedEventName(), sync);
-      window.removeEventListener("storage", sync);
+      window.removeEventListener(getWorkspaceChangedEventName(), syncWorkspace);
+      window.removeEventListener("storage", syncWorkspace);
     };
   }, []);
 
   useEffect(() => {
-    loadBilling();
+    void loadBilling();
   }, [workspace?.id]);
 
   async function loadBilling() {
     if (!workspace?.id) {
-      setEntries([]);
-      setSummary(null);
+      setSubscription(null);
       setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
-      setConfirmedOrder(getConfirmedOrder(String(workspace.id)));
       setError("");
 
-      const [ledgerEntries, ledgerSummary] = await Promise.all([
-        getCompanyLedger(workspace.id),
-        getCompanyLedgerSummary(workspace.id),
-      ]);
+      const result = await getCompanySubscription(String(workspace.id));
 
-      setEntries(
-        Array.isArray(ledgerEntries)
-          ? ledgerEntries.filter(
-              (entry) => entry.status !== "void"
-            )
-          : []
-      );
+      setSubscription(result);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Failed to load subscription.";
 
-      setSummary(ledgerSummary);
-    } catch (err: any) {
-      setError(err?.message || "Failed to load billing.");
+      setSubscription(null);
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -108,105 +116,89 @@ export default function Billing() {
 
   const companyName = workspace?.name || "Active Company";
   const headquarters = workspace?.headquarters;
-  const officeCode =
-    headquarters?.office_code || "Not Selected";
-  const officeLocation =
-    headquarters?.location || "No headquarters selected";
-  const plan = workspace?.plan || "Premium";
+  const officeCode = headquarters?.office_code || "Not selected";
+  const officeLocation = headquarters?.location || "No headquarters selected";
 
-  const orderEntries: LedgerEntry[] = (confirmedOrder?.items || []).map((item) => {
-    const amount = item.unitPriceUsd * item.quantity;
-    const taxAmount = item.billing === "monthly"
-      ? Number((amount * confirmedOrder!.vatRate).toFixed(2))
-      : 0;
-    return {
-      id: `order-${item.key}`,
-      service: item.category === "ai" ? "ai_workforce" : item.category === "fee" ? "firmic_setup" : item.category,
-      category: item.category,
-      resource: item.name,
-      action: item.billing,
-      quantity: item.quantity,
-      unit: item.billing === "monthly" ? "month" : "setup",
-      unit_price: item.unitPriceUsd,
-      amount,
-      tax_amount: taxAmount,
-      total_amount: Number((amount + taxAmount).toFixed(2)),
-      currency: "USD",
-      status: "paid",
-      invoice_month: confirmedOrder!.confirmedAt?.slice(0, 7) || confirmedOrder!.createdAt.slice(0, 7),
-    };
-  });
+  const items = useMemo(() => activeItems(subscription), [subscription]);
 
-  // The Billing Center is a statement of the customer's complete active
-  // recurring subscription. Upgrade checkout may charge only the delta today,
-  // but that delta must not replace the monthly bill shown to the customer.
-  const displayedEntries = confirmedOrder
-    ? orderEntries.filter((entry) => entry.action === "monthly")
-    : entries;
-  const subtotal = confirmedOrder
-    ? confirmedOrder.monthlySubtotalUsd
-    : Number(summary?.subtotal || 0);
-  const tax = confirmedOrder
-    ? confirmedOrder.monthlyVatUsd
-    : Number(summary?.tax || 0);
-  const total = confirmedOrder
-    ? confirmedOrder.monthlyTotalUsd
-    : Number(summary?.total || 0);
-  const recurringMonthly = total;
-  const latestUpgradeCharge = confirmedOrder?.orderType === "upgrade"
-    ? confirmedOrder.amountDueUsd ?? confirmedOrder.firstPaymentUsd
-    : 0;
-  const activeServices = confirmedOrder
-    ? confirmedOrder.items.filter((item) => item.billing === "monthly").length
-    : summary?.services?.length || 0;
+  const includedServices = useMemo(() => items.filter(isIncludedItem), [items]);
 
-  const displayedServices = confirmedOrder
-    ? confirmedOrder.items.map((item) => {
-        const subtotal = item.unitPriceUsd * item.quantity;
-        const tax = item.billing === "monthly"
-          ? Number((subtotal * confirmedOrder.vatRate).toFixed(2))
-          : 0;
+  const additionalServices = useMemo(
+    () => items.filter((item) => !isIncludedItem(item)),
+    [items],
+  );
 
-        return {
-          service: item.name,
-          currency: "USD",
-          subtotal,
-          tax,
-          total: Number((subtotal + tax).toFixed(2)),
-          entries: 1,
-        };
-      })
-    : summary?.services || [];
+  const aiItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          item.service.category === "ai" &&
+          item.service.code === "SERVICE_AI_EMPLOYEE",
+      ),
+    [items],
+  );
 
-  function downloadLatestInvoice() {
-    const lines = displayedEntries.map(
-      (entry) =>
-        `${labelService(entry.service)} - ${
-          entry.resource || entry.action
-        }: $${entry.amount.toFixed(2)} + tax $${entry.tax_amount.toFixed(
-          2
-        )} = $${entry.total_amount.toFixed(2)}`
-    );
+  const usedAIEmployees = aiItems.reduce(
+    (total, item) => total + Number(item.quantity || 0),
+    0,
+  );
 
-    const invoice = `FIRMIC INVOICE
+  const aiLimit = subscription?.plan.max_ai_employees ?? 0;
+
+  const availableAIEmployees =
+    aiLimit === 0 ? null : Math.max(0, aiLimit - usedAIEmployees);
+
+  const subtotal = Number(subscription?.monthly_subtotal || 0);
+  const discount = Number(subscription?.discount_total || 0);
+  const tax = Number(subscription?.tax_total || 0);
+  const total = Number(subscription?.monthly_total || 0);
+  const launchFee = Number(subscription?.launch_activation_fee || 0);
+
+  function downloadAccountStatement() {
+    if (!subscription) {
+      return;
+    }
+
+    const serviceLines = items.map((item) => {
+      const pricing = isIncludedItem(item)
+        ? "Included in plan"
+        : `${formatMoney(item.monthly_price)}/month`;
+
+      return [
+        item.service.name,
+        `Quantity: ${item.quantity}`,
+        `Status: ${formatStatus(item.status)}`,
+        pricing,
+      ].join(" · ");
+    });
+
+    const statement = `FIRMIC SUBSCRIPTION STATEMENT
 
 Company: ${companyName}
-Plan: ${plan}
+Plan: ${subscription.plan.name}
+Subscription status: ${formatStatus(subscription.status)}
+Billing cycle: ${formatStatus(subscription.billing_cycle)}
 Headquarters: ${officeCode}
 Location: ${officeLocation}
 
-${lines.join("\n") || "No billable usage"}
+BUSINESS SERVICES
+${serviceLines.join("\n") || "No active services"}
 
-Subtotal: $${subtotal.toFixed(2)}
-Tax: $${tax.toFixed(2)}
-Total: $${total.toFixed(2)}
-AED ${toAED(total)}
+MONTHLY SUBSCRIPTION
+Subtotal: ${formatMoney(subtotal)}
+Discount: ${formatMoney(discount)}
+Tax: ${formatMoney(tax)}
+Monthly total: ${formatMoney(total)}
+Monthly total in AED: AED ${toAED(total)}
 
-Payment method: ${confirmedOrder?.paymentMethod ? `${confirmedOrder.paymentMethod.brand} ending ${confirmedOrder.paymentMethod.last4}` : "Not added"}
-Status: ${confirmedOrder?.paymentStatus === "paid_demo" ? "Paid (MVP demo)" : total > 0 ? "Payment due" : "No charges"}
+ONE-TIME COMPANY LAUNCH
+Company Launch Fee: ${formatMoney(launchFee)}
+
+NEXT INVOICE
+${formatDate(subscription.next_invoice_date)}
 `;
 
-    const blob = new Blob([invoice], {
+    const blob = new Blob([statement], {
       type: "text/plain;charset=utf-8",
     });
 
@@ -214,7 +206,10 @@ Status: ${confirmedOrder?.paymentStatus === "paid_demo" ? "Paid (MVP demo)" : to
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = `${companyName.replace(/\s+/g, "_")}_Invoice.txt`;
+    link.download = `${companyName.replace(
+      /\s+/g,
+      "_",
+    )}_Subscription_Statement.txt`;
 
     document.body.appendChild(link);
     link.click();
@@ -224,239 +219,487 @@ Status: ${confirmedOrder?.paymentStatus === "paid_demo" ? "Paid (MVP demo)" : to
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-slate-50 flex">
+      <div className="flex min-h-screen bg-slate-50">
         <FirmicSidebar />
 
-        <main className="flex-1 p-6 xl:p-8">
-          <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <main className="min-w-0 flex-1 p-6 xl:p-8">
+          <header className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
             <div>
-              <p className="text-sm font-bold text-violet-700">
-                Billing Center
-              </p>
+              <p className="text-sm font-bold text-violet-700">Subscription</p>
 
-              <h1 className="text-3xl font-bold text-slate-950 mt-1">
-                Billing for {companyName}.
+              <h1 className="mt-1 text-3xl font-bold text-slate-950">
+                Subscription for {companyName}.
               </h1>
 
-              <p className="text-slate-500 mt-2">
-                Your complete active monthly subscription, payment method, and latest account activity.
+              <p className="mt-2 max-w-3xl text-slate-500">
+                Review your Firmic plan, active business services, company
+                launch fee, and recurring monthly subscription.
               </p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={loadBilling}
+                onClick={() => void loadBilling()}
                 disabled={loading}
-                className="border border-slate-200 bg-white px-5 py-3 rounded-xl font-bold disabled:opacity-50"
+                className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-bold transition hover:bg-slate-100 disabled:opacity-50"
               >
-                Refresh
+                {loading ? "Refreshing..." : "Refresh"}
               </button>
 
               <button
                 type="button"
-                onClick={downloadLatestInvoice}
-                className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold"
+                onClick={downloadAccountStatement}
+                disabled={!subscription}
+                className="rounded-xl bg-violet-600 px-6 py-3 font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Download Latest Invoice
+                Download Statement
               </button>
             </div>
           </header>
 
-          {error && (
-            <div className="mt-6 bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4">
-              {error}
-            </div>
+          {!workspace?.id && (
+            <Notice tone="warning">
+              Select or create a company to view its subscription.
+            </Notice>
           )}
 
-          <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Mini title="Company" value={companyName} />
-            <Mini title="Plan" value={plan} />
-            <Mini title="Headquarters" value={officeCode} />
-            <Mini title="Location" value={officeLocation} />
-          </section>
+          {error && <Notice tone="error">{error}</Notice>}
 
-          <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
-            <Stat title="Current Monthly Bill" value={`$${total.toFixed(2)}`} sub={`AED ${toAED(total)} / month`} icon="💰" />
-            <Stat title="Monthly Subtotal" value={`$${subtotal.toFixed(2)}`} sub="Before VAT" icon="🧾" />
-            <Stat title="Active Services" value={String(activeServices)} sub="Ledger services" icon="✅" />
-            <Stat title="Payment Status" value={confirmedOrder?.paymentStatus === "paid_demo" ? "Paid" : total > 0 ? "Due" : "No Charges"} sub={confirmedOrder?.paymentMethod ? `${confirmedOrder.paymentMethod.brand} •••• ${confirmedOrder.paymentMethod.last4}` : total > 0 ? "Payment pending" : "Workspace clean"} icon="💳" />
-          </section>
+          {loading && workspace?.id && (
+            <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-8 text-slate-500 shadow-sm">
+              Loading subscription...
+            </section>
+          )}
 
-          <section className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 mt-8">
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-              <h2 className="text-xl font-bold">
-                Usage Ledger
+          {!loading && workspace?.id && !subscription && !error && (
+            <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+              <p className="text-sm font-bold text-violet-700">
+                Subscription unavailable
+              </p>
+
+              <h2 className="mt-2 text-2xl font-bold text-slate-950">
+                This company does not have an active Firmic subscription yet.
               </h2>
 
-              {loading ? (
-                <p className="mt-5 text-slate-500">
-                  Loading billing...
-                </p>
-              ) : displayedEntries.length === 0 ? (
-                <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-6 text-slate-500">
-                  No billable usage has been recorded for this company.
-                </div>
-              ) : (
-                <div className="mt-5 space-y-3">
-                  {displayedEntries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-[1fr_130px_130px_120px] gap-4 items-center"
-                    >
-                      <div>
-                        <p className="font-bold">
-                          {labelService(entry.service)}
-                        </p>
+              <p className="mt-3 text-slate-500">
+                Start or complete the company launch process to activate a plan
+                and business services.
+              </p>
 
-                        <p className="text-sm text-slate-500 mt-1">
-                          {entry.resource || entry.action}
-                        </p>
+              <a
+                href="/launch-center"
+                className="mt-6 inline-flex rounded-xl bg-violet-600 px-5 py-3 font-bold text-white transition hover:bg-violet-700"
+              >
+                Open Launch Center
+              </a>
+            </section>
+          )}
 
-                        <p className="text-xs text-slate-400 mt-1">
-                          {entry.quantity} {entry.unit} · {entry.invoice_month}
-                        </p>
-                      </div>
+          {subscription && (
+            <>
+              <section className="mt-8 grid grid-cols-1 gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:grid-cols-4">
+                <Mini title="Company" value={companyName} />
+                <Mini title="Current Plan" value={subscription.plan.name} />
+                <Mini title="Headquarters" value={officeCode} />
+                <Mini
+                  title="Status"
+                  value={formatStatus(subscription.status)}
+                />
+              </section>
 
-                      <Info title="Subtotal" value={`$${entry.amount.toFixed(2)}`} />
-                      <Info title="Tax" value={`$${entry.tax_amount.toFixed(2)}`} />
-                      <Info title="Total" value={`$${entry.total_amount.toFixed(2)}`} />
-                    </div>
-                  ))}
-                </div>
-              )}
+              <section className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+                <Stat
+                  title="Monthly Subscription"
+                  value={formatMoney(total)}
+                  sub={`AED ${toAED(total)} per month`}
+                  icon="💰"
+                />
 
-              <div className="mt-6 bg-violet-600 text-white rounded-3xl p-6">
-                <p className="text-violet-100">
-                  Current Monthly Bill
-                </p>
+                <Stat
+                  title="Monthly Subtotal"
+                  value={formatMoney(subtotal)}
+                  sub={
+                    discount > 0
+                      ? `${formatMoney(discount)} discount applied`
+                      : "Before tax"
+                  }
+                  icon="🧾"
+                />
 
-                <h3 className="text-4xl font-bold mt-2">
-                  ${total.toFixed(2)}
-                </h3>
+                <Stat
+                  title="Active Services"
+                  value={String(items.length)}
+                  sub={`${includedServices.length} included in plan`}
+                  icon="🧩"
+                />
 
-                <p className="text-violet-100 mt-1">
-                  AED {toAED(total)}
-                </p>
-                <p className="text-violet-100 mt-3 text-sm">
-                  Full active subscription · billed each month
-                </p>
+                <Stat
+                  title="Next Invoice"
+                  value={formatDate(subscription.next_invoice_date)}
+                  sub={formatStatus(subscription.billing_cycle)}
+                  icon="📅"
+                />
+              </section>
 
-                {latestUpgradeCharge > 0 && (
-                  <div className="mt-4 pt-4 border-t border-violet-400/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div>
-                      <p className="text-violet-100 text-sm">Latest upgrade payment</p>
-                      <p className="text-xs text-violet-200 mt-1">Additional services charged once at upgrade</p>
-                    </div>
-                    <p className="font-bold text-lg">
-                      ${latestUpgradeCharge.toFixed(2)} · Paid
+              <section className="mt-8 overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-sm">
+                <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px]">
+                  <div className="p-6 lg:p-8">
+                    <p className="text-sm font-bold text-violet-700">
+                      Current Firmic Plan
                     </p>
-                  </div>
-                )}
-              </div>
-            </div>
 
-            <div className="space-y-6">
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-                <h2 className="text-xl font-bold">
-                  Service Summary
-                </h2>
+                    <div className="mt-3 flex flex-col justify-between gap-5 md:flex-row md:items-start">
+                      <div>
+                        <h2 className="text-3xl font-bold text-slate-950">
+                          {subscription.plan.name}
+                        </h2>
 
-                <div className="space-y-3 mt-5">
-                  {displayedServices.map((service) => (
-                    <div
-                      key={`${service.service}-${service.currency}`}
-                      className="border-b border-slate-100 pb-3"
-                    >
-                      <div className="flex justify-between gap-3">
-                        <span className="font-semibold">
-                          {labelService(service.service)}
-                        </span>
-
-                        <span className="font-bold">
-                          ${service.total.toFixed(2)}
-                        </span>
+                        <p className="mt-3 max-w-2xl leading-7 text-slate-600">
+                          {subscription.plan.description ||
+                            "Your Firmic plan provides the operating infrastructure and business services assigned to this company."}
+                        </p>
                       </div>
 
-                      <p className="text-xs text-slate-500 mt-1">
-                        {service.entries} ledger entr{service.entries === 1 ? "y" : "ies"}
+                      <div className="shrink-0 rounded-2xl bg-violet-50 px-5 py-4 text-right">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-600">
+                          Plan price
+                        </p>
+                        <p className="mt-1 text-3xl font-bold text-violet-950">
+                          {formatMoney(subscription.plan.monthly_price)}
+                        </p>
+                        <p className="text-sm font-medium text-violet-700">
+                          per month
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-violet-200 bg-violet-50 p-6 xl:border-l xl:border-t-0 lg:p-8">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-600">
+                      Company Launch Fee
+                    </p>
+
+                    <p className="mt-2 text-3xl font-bold text-violet-950">
+                      {formatMoney(launchFee)}
+                    </p>
+
+                    <p className="mt-3 text-sm leading-6 text-violet-800">
+                      A one-time company activation charge for workspace
+                      initialization, business infrastructure, and Firmic
+                      service provisioning.
+                    </p>
+
+                    <div className="mt-6 rounded-2xl border border-violet-200 bg-white p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                        Charge type
+                      </p>
+                      <p className="mt-1 font-bold text-slate-900">
+                        One time only
                       </p>
                     </div>
-                  ))}
-
-                  {!displayedServices.length && (
-                    <p className="text-slate-500">
-                      No active service charges.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {confirmedOrder?.paymentMethod && (
-                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-                  <h2 className="text-xl font-bold">Payment Method</h2>
-                  <div className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                    <p className="font-bold">{confirmedOrder.paymentMethod.brand} •••• {confirmedOrder.paymentMethod.last4}</p>
-                    <p className="text-sm text-slate-500 mt-1">{confirmedOrder.paymentMethod.cardholderName}</p>
-                    <p className="text-xs text-emerald-600 font-bold mt-3">Paid · MVP demo transaction</p>
                   </div>
                 </div>
-              )}
+              </section>
 
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-                <h2 className="text-xl font-bold">
-                  Tax Summary
-                </h2>
+              <section className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+                <div className="space-y-6">
+                  <ServiceSection
+                    title="Included Business Services"
+                    description="These services are covered by your current Firmic plan."
+                    items={includedServices}
+                    emptyMessage="No included services were found."
+                  />
 
-                <div className="grid grid-cols-2 gap-3 mt-5">
-                  <Mini title="Monthly Subtotal" value={`$${subtotal.toFixed(2)}`} />
-                  <Mini title="Monthly VAT" value={`$${tax.toFixed(2)}`} />
+                  <ServiceSection
+                    title="Additional Business Services"
+                    description="These services are billed separately from the base plan."
+                    items={additionalServices}
+                    emptyMessage="No additional recurring services are active."
+                  />
                 </div>
-              </div>
-            </div>
-          </section>
+
+                <div className="space-y-6">
+                  <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <p className="text-sm font-bold text-violet-700">
+                      AI Workforce Capacity
+                    </p>
+
+                    <h2 className="mt-2 text-2xl font-bold text-slate-950">
+                      {aiLimit === 0
+                        ? "Unlimited AI employees"
+                        : `${usedAIEmployees} of ${aiLimit} used`}
+                    </h2>
+
+                    <div className="mt-6 space-y-4">
+                      <InfoRow
+                        label="Included capacity"
+                        value={aiLimit === 0 ? "Unlimited" : String(aiLimit)}
+                      />
+
+                      <InfoRow
+                        label="Currently assigned"
+                        value={String(usedAIEmployees)}
+                      />
+
+                      <InfoRow
+                        label="Available"
+                        value={
+                          availableAIEmployees === null
+                            ? "Unlimited"
+                            : String(availableAIEmployees)
+                        }
+                      />
+                    </div>
+
+                    <a
+                      href="/ai-workforce"
+                      className="mt-6 block rounded-xl border border-violet-200 bg-violet-50 px-5 py-3 text-center font-bold text-violet-700 transition hover:bg-violet-100"
+                    >
+                      Manage AI Workforce
+                    </a>
+                  </section>
+
+                  <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <p className="text-sm font-bold text-violet-700">
+                      Monthly Summary
+                    </p>
+
+                    <div className="mt-5 space-y-4">
+                      <InfoRow
+                        label="Plan and services"
+                        value={formatMoney(subtotal)}
+                      />
+
+                      <InfoRow
+                        label="Discount"
+                        value={`-${formatMoney(discount)}`}
+                      />
+
+                      <InfoRow label="Tax" value={formatMoney(tax)} />
+
+                      <div className="border-t border-slate-200 pt-4">
+                        <InfoRow
+                          label="Monthly total"
+                          value={formatMoney(total)}
+                          strong
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-6 rounded-2xl bg-slate-50 p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                        Billing cycle
+                      </p>
+                      <p className="mt-1 font-bold text-slate-900">
+                        {formatStatus(subscription.billing_cycle)}
+                      </p>
+                    </div>
+                  </section>
+
+                  <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <p className="text-sm font-bold text-violet-700">
+                      Account Details
+                    </p>
+
+                    <div className="mt-5 space-y-4">
+                      <InfoRow
+                        label="Subscription status"
+                        value={formatStatus(subscription.status)}
+                      />
+
+                      <InfoRow
+                        label="Started"
+                        value={formatDate(subscription.started_at)}
+                      />
+
+                      <InfoRow label="Headquarters" value={officeLocation} />
+
+                      <InfoRow label="Currency" value={subscription.currency} />
+                    </div>
+                  </section>
+                </div>
+              </section>
+            </>
+          )}
         </main>
       </div>
     </ProtectedRoute>
   );
 }
 
-function labelService(value: string) {
-  return value
-    .split("_")
-    .map(
-      (part) =>
-        part.charAt(0).toUpperCase() +
-        part.slice(1)
-    )
-    .join(" ");
+function ServiceSection({
+  title,
+  description,
+  items,
+  emptyMessage,
+}: {
+  title: string;
+  description: string;
+  items: SubscriptionItem[];
+  emptyMessage: string;
+}) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div>
+        <h2 className="text-xl font-bold text-slate-950">{title}</h2>
+        <p className="mt-1 text-sm text-slate-500">{description}</p>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+          {emptyMessage}
+        </div>
+      ) : (
+        <div className="mt-6 space-y-3">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center"
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-bold text-slate-950">
+                    {item.service.name}
+                  </p>
+
+                  <Badge>{formatStatus(item.status)}</Badge>
+
+                  {isIncludedItem(item) && (
+                    <Badge tone="violet">Included</Badge>
+                  )}
+                </div>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {item.service.description || item.service.category}
+                </p>
+
+                <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Quantity {item.quantity} ·{" "}
+                  {item.provisioned ? "Provisioned" : "Provisioning pending"}
+                </p>
+              </div>
+
+              <div className="shrink-0 text-left sm:text-right">
+                <p className="font-bold text-slate-950">
+                  {isIncludedItem(item)
+                    ? "Included"
+                    : formatMoney(item.monthly_price)}
+                </p>
+
+                {!isIncludedItem(item) && (
+                  <p className="text-xs text-slate-500">per month</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
-function Stat({ title, value, sub, icon }: any) {
+function Stat({
+  title,
+  value,
+  sub,
+  icon,
+}: {
+  title: string;
+  value: string;
+  sub: string;
+  icon: string;
+}) {
   return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
-      <div className="text-3xl">{icon}</div>
-      <p className="text-sm text-slate-500 mt-3">{title}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
-      <p className="text-sm text-slate-500">{sub}</p>
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-bold text-slate-500">{title}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+          <p className="mt-1 text-sm text-slate-500">{sub}</p>
+        </div>
+
+        <span className="text-2xl">{icon}</span>
+      </div>
     </div>
   );
 }
 
-function Mini({ title, value }: any) {
+function Mini({ title, value }: { title: string; value: string }) {
   return (
-    <div className="bg-slate-50 rounded-2xl p-4 text-center overflow-hidden">
-      <p className="text-xs text-slate-500">{title}</p>
-      <p className="font-bold text-lg mt-1 truncate">{value}</p>
+    <div className="rounded-2xl bg-slate-50 p-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+        {title}
+      </p>
+      <p className="mt-1 truncate font-bold text-slate-950">{value}</p>
     </div>
   );
 }
 
-function Info({ title, value }: any) {
+function InfoRow({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
   return (
-    <div>
-      <p className="text-xs text-slate-500">{title}</p>
-      <p className="font-bold mt-1">{value}</p>
+    <div className="flex items-start justify-between gap-4">
+      <p
+        className={
+          strong ? "font-bold text-slate-950" : "text-sm text-slate-500"
+        }
+      >
+        {label}
+      </p>
+
+      <p
+        className={
+          strong
+            ? "text-lg font-bold text-slate-950"
+            : "text-right text-sm font-bold text-slate-900"
+        }
+      >
+        {value}
+      </p>
     </div>
+  );
+}
+
+function Badge({
+  children,
+  tone = "slate",
+}: {
+  children: React.ReactNode;
+  tone?: "slate" | "violet";
+}) {
+  const className =
+    tone === "violet"
+      ? "bg-violet-100 text-violet-700"
+      : "bg-slate-100 text-slate-600";
+
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+function Notice({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone: "warning" | "error";
+}) {
+  const className =
+    tone === "error"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : "border-amber-200 bg-amber-50 text-amber-700";
+
+  return (
+    <div className={`mt-6 rounded-2xl border p-4 ${className}`}>{children}</div>
   );
 }
