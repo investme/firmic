@@ -5,7 +5,7 @@ export default function SonnyChat({ company_id }: any) {
   const [input, setInput] = useState("");
 
   const askSonny = async () => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/sonny/ask`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://firmic-production.up.railway.app"}/api/sonny/ask`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

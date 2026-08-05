@@ -8,7 +8,7 @@ import { getActiveWorkspace } from "../src/utils/workspaceContext";
 import { getAuthToken } from "../services/authApi";
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL || "https://firmic-production.up.railway.app";
 
 type Risk = {
   severity: string;
