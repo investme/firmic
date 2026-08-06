@@ -5,6 +5,7 @@ import uuid
 from typing import Any
 
 from fastapi import HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
 from models.company import Company
@@ -60,8 +61,9 @@ def get_plan_by_code(
     db: Session,
     plan_code: str,
 ) -> Plan:
-    normalized_code = plan_code.strip().upper()
+    normalized_code = str(plan_code or "").strip().upper()
 
+    # Primary ORM lookup.
     plan = (
         db.query(Plan)
         .filter(
@@ -69,6 +71,64 @@ def get_plan_by_code(
             Plan.active.is_(True),
         )
         .first()
+    )
+
+    if plan:
+        return plan
+
+    # Production-safe fallback using the same database session.
+    raw_plan = (
+        db.execute(
+            text(
+                """
+                SELECT id
+                FROM plans
+                WHERE UPPER(TRIM(code)) = :plan_code
+                  AND active = TRUE
+                LIMIT 1
+                """
+            ),
+            {"plan_code": normalized_code},
+        )
+        .mappings()
+        .first()
+    )
+
+    if raw_plan:
+        plan = db.query(Plan).filter(Plan.id == raw_plan["id"]).first()
+
+        if plan:
+            return plan
+
+    available_plans = (
+        db.execute(
+            text(
+                """
+                SELECT code, active
+                FROM plans
+                ORDER BY code
+                """
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={
+            "message": "Subscription plan not found",
+            "received_plan_code": plan_code,
+            "normalized_plan_code": normalized_code,
+            "available_plans": [
+                {
+                    "code": row["code"],
+                    "active": row["active"],
+                }
+                for row in available_plans
+            ],
+            "backend_build": "subscription-plan-fix-2026-08-06",
+        },
     )
 
     if not plan:
