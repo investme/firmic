@@ -19,7 +19,17 @@ from models.company_ai_agent import CompanyAIAgent
 from models.activity_log import ActivityLog
 from models.usage_ledger import UsageLedger
 from models.support_ticket import SupportMessage, SupportTicket
+from models.launch import CompanyLaunch
 from services.ledger_service import record_usage
+from services.launch_service import (
+    ensure_company_launch,
+    get_launch_summary,
+    review_company_launch,
+    set_office_status,
+    synchronize_launch_state,
+    update_launch_requirement,
+    update_provisioning,
+)
 
 
 router = APIRouter(
@@ -1552,31 +1562,93 @@ def update_admin_support_ticket(
 
 
 # ------------------------------------------------------------------
-# Live Hermes Compliance Queue
+# Hermes Compliance Queue — Launch Engine controlled
 # ------------------------------------------------------------------
 
 REQUIRED_COMPLIANCE_DOCUMENTS = [
-    {"key": "trade_license", "label": "Trade License",
-     "aliases": ["trade license", "business license", "commercial license"]},
-    {"key": "passport", "label": "Passport Copy",
-     "aliases": ["passport", "passport copy", "owner passport"]},
-    {"key": "incorporation_certificate", "label": "Incorporation Certificate",
-     "aliases": ["incorporation certificate", "certificate of incorporation", "incorporation"]},
-    {"key": "proof_of_address", "label": "Proof of Address",
-     "aliases": ["proof of address", "address proof", "utility bill"]},
+    {
+        "key": "passport",
+        "label": "Passport Copy",
+        "aliases": [
+            "passport",
+            "passport copy",
+            "owner passport",
+            "government id",
+        ],
+    },
+    {
+        "key": "proof_of_address",
+        "label": "Proof of Address",
+        "aliases": [
+            "proof of address",
+            "address proof",
+            "utility bill",
+            "bank statement",
+            "tenancy contract",
+        ],
+    },
+    {
+        "key": "trade_license",
+        "label": "Trade License",
+        "aliases": [
+            "trade license",
+            "business license",
+            "commercial license",
+        ],
+    },
+    {
+        "key": "certificate_of_incorporation",
+        "label": "Company Formation Documents",
+        "aliases": [
+            "company formation",
+            "formation documents",
+            "incorporation certificate",
+            "certificate of incorporation",
+            "memorandum",
+            "articles of association",
+            "incorporation",
+        ],
+    },
+    {
+        "key": "beneficial_owner_declaration",
+        "label": "Beneficial Owner Declaration",
+        "aliases": [
+            "beneficial owner",
+            "beneficial owner declaration",
+            "ubo",
+            "ultimate beneficial owner",
+            "ownership declaration",
+        ],
+    },
 ]
 
 
 def _norm(value: Any) -> str:
-    return " ".join(str(value or "").lower().replace("_", " ").replace("-", " ").split())
+    return " ".join(
+        str(value or "")
+        .lower()
+        .replace("_", " ")
+        .replace("-", " ")
+        .split()
+    )
 
 
-def _document_matches(document: Document, requirement: dict[str, Any]) -> bool:
-    text_value = _norm(f"{document.name or ''} {document.type or ''}")
-    return any(_norm(alias) in text_value for alias in requirement["aliases"])
+def _document_matches(
+    document: Document,
+    requirement: dict[str, Any],
+) -> bool:
+    text_value = _norm(
+        f"{document.name or ''} {document.type or ''}"
+    )
+    return any(
+        _norm(alias) in text_value
+        for alias in requirement["aliases"]
+    )
 
 
-def _serialize_document(document: Document) -> dict[str, Any]:
+def _serialize_document(
+    document: Document,
+) -> dict[str, Any]:
     return {
         "id": document.id,
         "company_id": document.company_id,
@@ -1584,97 +1656,269 @@ def _serialize_document(document: Document) -> dict[str, Any]:
         "type": document.type,
         "status": document.status,
         "file_path": document.file_path,
-        "uploaded_at": document.uploaded_at.isoformat() if document.uploaded_at else None,
+        "uploaded_at": (
+            document.uploaded_at.isoformat()
+            if document.uploaded_at
+            else None
+        ),
     }
+
+
+def _get_company_launch(
+    db: Session,
+    company: Company,
+) -> CompanyLaunch:
+    launch = (
+        db.query(CompanyLaunch)
+        .filter(CompanyLaunch.company_id == company.id)
+        .first()
+    )
+
+    if launch:
+        return launch
+
+    return ensure_company_launch(
+        db,
+        company,
+        commit=False,
+    )
+
+
+def _synchronize_document_requirements(
+    launch: CompanyLaunch,
+    documents: list[Document],
+) -> None:
+    """
+    Mirror PostgreSQL document state into the Launch Engine.
+
+    The Launch Engine remains the source of truth for company access.
+    Document rows are evidence used to update its requirement fields.
+    """
+    for requirement in REQUIRED_COMPLIANCE_DOCUMENTS:
+        matches = [
+            document
+            for document in documents
+            if _document_matches(document, requirement)
+        ]
+
+        uploaded = bool(matches)
+        approved = any(
+            _norm(document.status)
+            in {
+                "approved",
+                "verified",
+                "complete",
+                "completed",
+            }
+            for document in matches
+        )
+
+        update_launch_requirement(
+            launch,
+            requirement["key"],
+            uploaded=uploaded,
+            approved=approved,
+        )
+
+    synchronize_launch_state(launch)
 
 
 def _build_compliance_item(
     company: Company,
+    launch: CompanyLaunch,
     documents: list[Document],
     tasks: list[Task],
     workflows: list[Workflow],
 ) -> dict[str, Any]:
-    required = []
-
-    for requirement in REQUIRED_COMPLIANCE_DOCUMENTS:
-        matches = [d for d in documents if _document_matches(d, requirement)]
-        verified = next(
-            (d for d in matches if _norm(d.status) in {"approved", "verified", "complete", "completed"}),
-            None,
-        )
-        uploaded = verified or (matches[0] if matches else None)
-        state = "verified" if verified else "uploaded" if uploaded else "missing"
-
-        required.append({
-            "key": requirement["key"],
-            "label": requirement["label"],
-            "state": state,
-            "document": _serialize_document(uploaded) if uploaded else None,
-        })
-
-    uploaded_count = sum(item["state"] in {"uploaded", "verified"} for item in required)
-    verified_count = sum(item["state"] == "verified" for item in required)
-    missing = [item["label"] for item in required if item["state"] == "missing"]
-
-    pending_tasks = [
-        task for task in tasks
-        if _norm(task.status) not in {"completed", "complete", "done", "closed"}
-    ]
-    running_workflows = [
-        workflow for workflow in workflows
-        if _norm(workflow.status) not in {"completed", "complete", "closed", "cancelled"}
-    ]
-    has_hq = bool(company.headquarters_office_code)
-
-    readiness = min(
-        100,
-        round(uploaded_count / len(REQUIRED_COMPLIANCE_DOCUMENTS) * 70)
-        + (15 if has_hq else 0)
-        + (10 if not pending_tasks else 0)
-        + (5 if not running_workflows else 0),
+    _synchronize_document_requirements(
+        launch,
+        documents,
     )
 
-    if missing or not has_hq:
-        queue_status = "review_needed"
-    elif verified_count < len(REQUIRED_COMPLIANCE_DOCUMENTS):
-        queue_status = "pending_verification"
-    elif pending_tasks or running_workflows:
-        queue_status = "in_progress"
-    else:
-        queue_status = "ready"
+    required: list[dict[str, Any]] = []
 
-    if not has_hq or len(missing) >= 2:
+    for requirement in REQUIRED_COMPLIANCE_DOCUMENTS:
+        matches = [
+            document
+            for document in documents
+            if _document_matches(document, requirement)
+        ]
+
+        verified = next(
+            (
+                document
+                for document in matches
+                if _norm(document.status)
+                in {
+                    "approved",
+                    "verified",
+                    "complete",
+                    "completed",
+                }
+            ),
+            None,
+        )
+
+        uploaded = verified or (
+            matches[0]
+            if matches
+            else None
+        )
+
+        state = (
+            "verified"
+            if verified
+            else "uploaded"
+            if uploaded
+            else "missing"
+        )
+
+        required.append(
+            {
+                "key": requirement["key"],
+                "label": requirement["label"],
+                "state": state,
+                "document": (
+                    _serialize_document(uploaded)
+                    if uploaded
+                    else None
+                ),
+            }
+        )
+
+    uploaded_count = sum(
+        item["state"] in {"uploaded", "verified"}
+        for item in required
+    )
+    verified_count = sum(
+        item["state"] == "verified"
+        for item in required
+    )
+    missing = [
+        item["label"]
+        for item in required
+        if item["state"] == "missing"
+    ]
+
+    pending_tasks = [
+        task
+        for task in tasks
+        if _norm(task.status)
+        not in {
+            "completed",
+            "complete",
+            "done",
+            "closed",
+            "cancelled",
+        }
+    ]
+    running_workflows = [
+        workflow
+        for workflow in workflows
+        if _norm(workflow.status)
+        not in {
+            "completed",
+            "complete",
+            "closed",
+            "cancelled",
+        }
+    ]
+
+    launch_summary = get_launch_summary(launch)
+    has_hq = bool(
+        company.headquarters_office_code
+        or launch.office_reserved
+    )
+    all_verified = (
+        verified_count
+        == len(REQUIRED_COMPLIANCE_DOCUMENTS)
+    )
+
+    if launch.status == "active":
+        queue_status = "approved"
+        priority = "low"
+    elif missing or not has_hq:
+        queue_status = "review_needed"
         priority = "high"
-    elif missing or pending_tasks or running_workflows:
+    elif not all_verified:
+        queue_status = "pending_verification"
+        priority = "medium"
+    elif launch.admin_approved:
+        queue_status = "provisioning"
         priority = "medium"
     else:
+        queue_status = "ready"
         priority = "low"
 
-    reasons = []
-    if not has_hq:
-        reasons.append("Headquarters has not been activated.")
-    if missing:
-        reasons.append("Missing: " + ", ".join(missing) + ".")
-    if pending_tasks:
-        reasons.append(f"{len(pending_tasks)} onboarding task(s) remain open.")
-    if running_workflows:
-        reasons.append(f"{len(running_workflows)} workflow(s) are still running.")
-    if not reasons:
-        reasons.append("All currently tracked compliance requirements are ready.")
+    reasons: list[str] = []
+
+    if launch.status == "active":
+        reasons.append(
+            "Compliance approved and company access unlocked."
+        )
+    else:
+        if not has_hq:
+            reasons.append(
+                "Headquarters has not been reserved."
+            )
+        if missing:
+            reasons.append(
+                "Missing: "
+                + ", ".join(missing)
+                + "."
+            )
+        if uploaded_count and not all_verified:
+            reasons.append(
+                f"{uploaded_count - verified_count} uploaded "
+                "document(s) await verification."
+            )
+        if all_verified and not launch.admin_approved:
+            reasons.append(
+                "All mandatory documents are verified. "
+                "Final Firmic approval is ready."
+            )
+        if launch.admin_approved and launch.status != "active":
+            reasons.append(
+                "Compliance is approved and infrastructure "
+                "provisioning is in progress."
+            )
+
+    readiness = int(
+        round(
+            float(
+                launch_summary.get(
+                    "progress_percent",
+                    0,
+                )
+            )
+        )
+    )
 
     return {
         "company": serialize_company(company),
+        "launch": launch_summary,
         "readiness_score": readiness,
         "queue_status": queue_status,
         "priority": priority,
         "documents": required,
         "document_count": len(documents),
-        "required_document_count": len(REQUIRED_COMPLIANCE_DOCUMENTS),
+        "required_document_count": len(
+            REQUIRED_COMPLIANCE_DOCUMENTS
+        ),
         "uploaded_required_count": uploaded_count,
         "verified_required_count": verified_count,
+        "all_required_verified": all_verified,
+        "admin_approved": bool(
+            launch.admin_approved
+        ),
+        "platform_unlocked": (
+            launch.status == "active"
+        ),
         "missing_documents": missing,
         "pending_task_count": len(pending_tasks),
-        "running_workflow_count": len(running_workflows),
+        "running_workflow_count": len(
+            running_workflows
+        ),
         "reasons": reasons,
     }
 
@@ -1690,62 +1934,187 @@ def get_admin_compliance_queue(
         .order_by(Company.name.asc())
         .all()
     )
-    ids = [company.id for company in companies]
-
-    documents = db.query(Document).filter(Document.company_id.in_(ids)).all() if ids else []
-    tasks = db.query(Task).filter(Task.company_id.in_(ids)).all() if ids else []
-    workflows = db.query(Workflow).filter(Workflow.company_id.in_(ids)).all() if ids else []
-
-    docs_by, tasks_by, workflows_by = {}, {}, {}
-    for item in documents:
-        docs_by.setdefault(item.company_id, []).append(item)
-    for item in tasks:
-        tasks_by.setdefault(item.company_id, []).append(item)
-    for item in workflows:
-        workflows_by.setdefault(item.company_id, []).append(item)
-
-    items = [
-        _build_compliance_item(
-            company,
-            docs_by.get(company.id, []),
-            tasks_by.get(company.id, []),
-            workflows_by.get(company.id, []),
-        )
+    ids = [
+        company.id
         for company in companies
     ]
 
-    order = {"high": 0, "medium": 1, "low": 2}
-    items.sort(key=lambda item: (
-        order.get(item["priority"], 9),
-        item["readiness_score"],
-        item["company"]["name"].lower(),
-    ))
+    documents = (
+        db.query(Document)
+        .filter(Document.company_id.in_(ids))
+        .all()
+        if ids
+        else []
+    )
+    tasks = (
+        db.query(Task)
+        .filter(Task.company_id.in_(ids))
+        .all()
+        if ids
+        else []
+    )
+    workflows = (
+        db.query(Workflow)
+        .filter(Workflow.company_id.in_(ids))
+        .all()
+        if ids
+        else []
+    )
+    launches = (
+        db.query(CompanyLaunch)
+        .filter(CompanyLaunch.company_id.in_(ids))
+        .all()
+        if ids
+        else []
+    )
+
+    docs_by: dict[str, list[Document]] = {}
+    tasks_by: dict[str, list[Task]] = {}
+    workflows_by: dict[str, list[Workflow]] = {}
+    launches_by = {
+        launch.company_id: launch
+        for launch in launches
+    }
+
+    for item in documents:
+        docs_by.setdefault(
+            item.company_id,
+            [],
+        ).append(item)
+
+    for item in tasks:
+        tasks_by.setdefault(
+            item.company_id,
+            [],
+        ).append(item)
+
+    for item in workflows:
+        workflows_by.setdefault(
+            item.company_id,
+            [],
+        ).append(item)
+
+    items: list[dict[str, Any]] = []
+
+    try:
+        for company in companies:
+            launch = launches_by.get(
+                company.id
+            ) or _get_company_launch(
+                db,
+                company,
+            )
+
+            items.append(
+                _build_compliance_item(
+                    company,
+                    launch,
+                    docs_by.get(
+                        company.id,
+                        [],
+                    ),
+                    tasks_by.get(
+                        company.id,
+                        [],
+                    ),
+                    workflows_by.get(
+                        company.id,
+                        [],
+                    ),
+                )
+            )
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
+
+    order = {
+        "high": 0,
+        "medium": 1,
+        "low": 2,
+    }
+    items.sort(
+        key=lambda item: (
+            order.get(
+                item["priority"],
+                9,
+            ),
+            item["readiness_score"],
+            item["company"]["name"].lower(),
+        )
+    )
 
     return {
         "metrics": {
             "queue_items": len(items),
-            "high_priority": sum(item["priority"] == "high" for item in items),
-            "review_needed": sum(item["queue_status"] == "review_needed" for item in items),
-            "ready": sum(item["queue_status"] == "ready" for item in items),
-            "missing_documents": sum(len(item["missing_documents"]) for item in items),
+            "high_priority": sum(
+                item["priority"] == "high"
+                for item in items
+            ),
+            "review_needed": sum(
+                item["queue_status"]
+                == "review_needed"
+                for item in items
+            ),
+            "ready": sum(
+                item["queue_status"]
+                == "ready"
+                for item in items
+            ),
+            "approved": sum(
+                item["queue_status"]
+                == "approved"
+                for item in items
+            ),
+            "missing_documents": sum(
+                len(item["missing_documents"])
+                for item in items
+            ),
         },
         "items": items,
     }
 
 
-@router.get("/compliance/company/{company_id}")
+@router.get(
+    "/compliance/company/{company_id}"
+)
 def get_admin_company_compliance(
     company_id: str,
     _: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    company = db.query(Company).filter(Company.id == company_id).first()
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
+    company = (
+        db.query(Company)
+        .filter(Company.id == company_id)
+        .first()
+    )
 
-    documents = db.query(Document).filter(Document.company_id == company_id).order_by(Document.uploaded_at.desc()).all()
-    tasks = db.query(Task).filter(Task.company_id == company_id).order_by(Task.created_at.desc()).all()
-    workflows = db.query(Workflow).filter(Workflow.company_id == company_id).order_by(Workflow.created_at.desc()).all()
+    if not company:
+        raise HTTPException(
+            status_code=404,
+            detail="Company not found",
+        )
+
+    documents = (
+        db.query(Document)
+        .filter(Document.company_id == company_id)
+        .order_by(Document.uploaded_at.desc())
+        .all()
+    )
+    tasks = (
+        db.query(Task)
+        .filter(Task.company_id == company_id)
+        .order_by(Task.created_at.desc())
+        .all()
+    )
+    workflows = (
+        db.query(Workflow)
+        .filter(Workflow.company_id == company_id)
+        .order_by(Workflow.created_at.desc())
+        .all()
+    )
     activity = (
         db.query(ActivityLog)
         .filter(ActivityLog.company_id == company_id)
@@ -1754,20 +2123,46 @@ def get_admin_company_compliance(
         .all()
     )
 
-    result = _build_compliance_item(company, documents, tasks, workflows)
-    result["activity"] = [{
-        "id": event.id,
-        "event_type": event.event_type,
-        "title": event.title,
-        "description": event.description,
-        "actor_type": event.actor_type,
-        "actor_id": event.actor_id,
-        "created_at": event.created_at.isoformat() if event.created_at else None,
-    } for event in activity]
+    try:
+        launch = _get_company_launch(
+            db,
+            company,
+        )
+        result = _build_compliance_item(
+            company,
+            launch,
+            documents,
+            tasks,
+            workflows,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    result["activity"] = [
+        {
+            "id": event.id,
+            "event_type": event.event_type,
+            "title": event.title,
+            "description": event.description,
+            "actor_type": event.actor_type,
+            "actor_id": event.actor_id,
+            "created_at": (
+                event.created_at.isoformat()
+                if event.created_at
+                else None
+            ),
+        }
+        for event in activity
+    ]
+
     return result
 
 
-@router.post("/compliance/company/{company_id}/request-documents")
+@router.post(
+    "/compliance/company/{company_id}/request-documents"
+)
 def request_admin_compliance_documents(
     company_id: str,
     token: dict = Depends(require_admin),
@@ -1793,21 +2188,24 @@ def request_admin_compliance_documents(
         .filter(Document.company_id == company_id)
         .all()
     )
-
     tasks = (
         db.query(Task)
         .filter(Task.company_id == company_id)
         .all()
     )
-
     workflows = (
         db.query(Workflow)
         .filter(Workflow.company_id == company_id)
         .all()
     )
 
+    launch = _get_company_launch(
+        db,
+        company,
+    )
     missing = _build_compliance_item(
         company,
+        launch,
         documents,
         tasks,
         workflows,
@@ -1815,7 +2213,10 @@ def request_admin_compliance_documents(
 
     if not missing:
         return {
-            "message": "No missing required documents were found.",
+            "message": (
+                "No missing mandatory documents "
+                "were found."
+            ),
             "created_tasks": [],
             "missing_documents": [],
         }
@@ -1830,7 +2231,8 @@ def request_admin_compliance_documents(
                 db.query(Task)
                 .filter(
                     Task.company_id == company_id,
-                    func.lower(Task.title) == title.lower(),
+                    func.lower(Task.title)
+                    == title.lower(),
                     func.lower(Task.status).notin_(
                         [
                             "completed",
@@ -1852,32 +2254,37 @@ def request_admin_compliance_documents(
                 company_id=company_id,
                 title=title,
                 description=(
-                    "Requested by Firmic Admin from the "
-                    "Hermes Compliance Queue."
+                    "Hermes requires this document "
+                    "before Firmic can approve and "
+                    "unlock the company."
                 ),
                 status="pending",
             )
-
             db.add(task)
             created_tasks.append(task)
 
         created_labels = [
-            task.title.replace("Upload ", "", 1)
+            task.title.replace(
+                "Upload ",
+                "",
+                1,
+            )
             for task in created_tasks
         ]
 
-        # Create a tenant notification only when at least one genuinely
-        # new request task was created. Repeated clicks therefore do not
-        # create duplicate ActivityLog messages.
         if created_labels:
             db.add(
                 ActivityLog(
                     id=str(uuid.uuid4()),
                     company_id=company_id,
-                    event_type="compliance_documents_requested",
-                    title="Compliance documents requested",
+                    event_type=(
+                        "compliance_documents_requested"
+                    ),
+                    title=(
+                        "Compliance documents requested"
+                    ),
                     description=(
-                        "Firmic Admin requested: "
+                        "Hermes requested: "
                         + ", ".join(created_labels)
                         + "."
                     ),
@@ -1890,24 +2297,28 @@ def request_admin_compliance_documents(
                     source_type="compliance_queue",
                     source_id=company_id,
                     event_metadata={
-                        "missing_documents": created_labels,
-                        "created_task_count": len(created_tasks),
+                        "missing_documents": (
+                            created_labels
+                        ),
+                        "created_task_count": len(
+                            created_tasks
+                        ),
                     },
                 )
             )
 
         db.commit()
 
-        if created_tasks:
-            message = "Missing document requests were created."
-        else:
-            message = (
-                "No new requests were created because matching "
-                "document requests are already open."
-            )
-
         return {
-            "message": message,
+            "message": (
+                "Missing document requests "
+                "were created."
+                if created_tasks
+                else (
+                    "Matching document requests "
+                    "are already open."
+                )
+            ),
             "created_tasks": [
                 {
                     "id": task.id,
@@ -1924,22 +2335,17 @@ def request_admin_compliance_documents(
         raise
 
 
-
-
 @router.post(
     "/compliance/documents/{document_id}/verify"
 )
 def verify_admin_compliance_document(
     document_id: str,
-    _: dict = Depends(require_admin),
-    token: dict = Depends(get_token_payload),
+    token: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     document = (
         db.query(Document)
-        .filter(
-            Document.id == document_id
-        )
+        .filter(Document.id == document_id)
         .first()
     )
 
@@ -1951,9 +2357,7 @@ def verify_admin_compliance_document(
 
     company = (
         db.query(Company)
-        .filter(
-            Company.id == document.company_id
-        )
+        .filter(Company.id == document.company_id)
         .first()
     )
 
@@ -1963,16 +2367,55 @@ def verify_admin_compliance_document(
             detail="Company not found",
         )
 
+    matching_requirement = next(
+        (
+            requirement
+            for requirement
+            in REQUIRED_COMPLIANCE_DOCUMENTS
+            if _document_matches(
+                document,
+                requirement,
+            )
+        ),
+        None,
+    )
+
+    if not matching_requirement:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This upload does not match a "
+                "mandatory Launch Engine "
+                "compliance requirement."
+            ),
+        )
+
     try:
         document.status = "approved"
+
+        launch = _get_company_launch(
+            db,
+            company,
+        )
+        update_launch_requirement(
+            launch,
+            matching_requirement["key"],
+            uploaded=True,
+            approved=True,
+        )
 
         event = ActivityLog(
             id=str(uuid.uuid4()),
             company_id=document.company_id,
-            event_type="compliance_document_verified",
+            event_type=(
+                "compliance_document_verified"
+            ),
             title=f"{document.name} verified",
             description=(
-                "Firmic Admin verified the uploaded compliance document."
+                "Firmic Admin verified the "
+                "uploaded compliance document. "
+                "The Launch Engine requirement "
+                "was approved."
             ),
             actor_type="admin",
             actor_id=str(
@@ -1985,17 +2428,29 @@ def verify_admin_compliance_document(
             event_metadata={
                 "document_name": document.name,
                 "document_type": document.type,
+                "requirement_key": (
+                    matching_requirement["key"]
+                ),
                 "verified_status": "approved",
             },
         )
 
+        db.add(launch)
         db.add(event)
         db.commit()
         db.refresh(document)
 
         return {
-            "message": "Document verified successfully.",
-            "document": _serialize_document(document),
+            "message": (
+                "Document verified and Launch "
+                "Engine requirement approved."
+            ),
+            "document": _serialize_document(
+                document
+            ),
+            "launch": get_launch_summary(
+                launch
+            ),
             "activity_id": event.id,
         }
 
@@ -2004,32 +2459,208 @@ def verify_admin_compliance_document(
         raise
 
 
-@router.post("/compliance/company/{company_id}/mark-reviewed")
-def mark_admin_compliance_reviewed(
+@router.post(
+    "/compliance/company/{company_id}/mark-reviewed"
+)
+def approve_admin_compliance_and_unlock(
     company_id: str,
     token: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    company = db.query(Company).filter(Company.id == company_id).first()
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
+    """
+    Final Hermes approval.
 
-    event = ActivityLog(
-        id=str(uuid.uuid4()),
-        company_id=company_id,
-        event_type="compliance_reviewed",
-        title="Compliance review completed",
-        description="Firmic Admin reviewed the live Hermes compliance record.",
-        actor_type="admin",
-        actor_id=str(token.get("sub") or token.get("email") or ""),
-        source_type="compliance_queue",
-        source_id=company_id,
-        event_metadata={"reviewed_at": datetime.datetime.utcnow().isoformat()},
+    Every mandatory document must first be verified. Approval is then
+    recorded in the Launch Engine, the MVP infrastructure bundle is
+    provisioned, and tenant access is unlocked.
+    """
+    company = (
+        db.query(Company)
+        .filter(
+            Company.id == company_id,
+            Company.status != "terminated",
+        )
+        .first()
     )
-    db.add(event)
-    db.commit()
-    return {"message": "Compliance review recorded.", "activity_id": event.id}
 
+    if not company:
+        raise HTTPException(
+            status_code=404,
+            detail="Company not found",
+        )
+
+    documents = (
+        db.query(Document)
+        .filter(Document.company_id == company_id)
+        .all()
+    )
+
+    required_states: list[dict[str, Any]] = []
+
+    for requirement in REQUIRED_COMPLIANCE_DOCUMENTS:
+        matches = [
+            document
+            for document in documents
+            if _document_matches(
+                document,
+                requirement,
+            )
+        ]
+        approved = any(
+            _norm(document.status)
+            in {
+                "approved",
+                "verified",
+                "complete",
+                "completed",
+            }
+            for document in matches
+        )
+        required_states.append(
+            {
+                "key": requirement["key"],
+                "label": requirement["label"],
+                "approved": approved,
+            }
+        )
+
+    unverified = [
+        item["label"]
+        for item in required_states
+        if not item["approved"]
+    ]
+
+    if unverified:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Verify every mandatory document "
+                "before approving the company. "
+                "Still required: "
+                + ", ".join(unverified)
+                + "."
+            ),
+        )
+
+    reviewer_id = str(
+        token.get("sub")
+        or token.get("email")
+        or ""
+    )
+
+    try:
+        launch = _get_company_launch(
+            db,
+            company,
+        )
+
+        for item in required_states:
+            update_launch_requirement(
+                launch,
+                item["key"],
+                uploaded=True,
+                approved=True,
+            )
+
+        review_company_launch(
+            launch,
+            approved=True,
+            reviewer_id=reviewer_id,
+        )
+
+        # MVP activation bundle. This keeps the Launch Engine as the
+        # single source of truth and unlocks the tenant only after the
+        # compliance package has been fully accepted.
+        update_provisioning(
+            launch,
+            headquarters_provisioned=True,
+            mailbox_provisioned=True,
+            voip_provisioned=True,
+            ai_workforce_provisioned=True,
+            workspace_provisioned=True,
+        )
+        set_office_status(
+            launch,
+            "active",
+        )
+        synchronize_launch_state(launch)
+
+        if launch.status != "active":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Compliance was approved, but "
+                    "the Launch Engine could not "
+                    "activate the company. Review "
+                    "the remaining launch gates."
+                ),
+            )
+
+        company.status = "active"
+
+        event = ActivityLog(
+            id=str(uuid.uuid4()),
+            company_id=company_id,
+            event_type=(
+                "company_compliance_approved"
+            ),
+            title=(
+                "Compliance approved — "
+                "company unlocked"
+            ),
+            description=(
+                "Hermes completed the compliance "
+                "review. Firmic activated the "
+                "company workspace and operating "
+                "infrastructure."
+            ),
+            actor_type="admin",
+            actor_id=reviewer_id,
+            source_type="company_launch",
+            source_id=launch.id,
+            event_metadata={
+                "launch_status": launch.status,
+                "office_status": (
+                    launch.office_status
+                ),
+                "platform_unlocked": True,
+                "approved_at": (
+                    launch.admin_approved_at.isoformat()
+                    if launch.admin_approved_at
+                    else None
+                ),
+            },
+        )
+
+        db.add(company)
+        db.add(launch)
+        db.add(event)
+        db.commit()
+        db.refresh(company)
+        db.refresh(launch)
+
+        return {
+            "message": (
+                "Compliance approved. The company "
+                "platform is now unlocked."
+            ),
+            "company": serialize_company(
+                company
+            ),
+            "launch": get_launch_summary(
+                launch
+            ),
+            "platform_unlocked": True,
+            "activity_id": event.id,
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.get("/summary/{module_name}")

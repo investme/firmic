@@ -140,8 +140,17 @@ export default function AdminCompliance() {
       setError("");
       setNotice("");
 
+      const confirmed = window.confirm(
+        "Approve this compliance package and unlock the company platform?"
+      );
+
+      if (!confirmed) return;
+
       const result = await markAdminComplianceReviewed(companyId);
-      setNotice(result?.message || "Compliance review recorded.");
+      setNotice(
+        result?.message ||
+          "Compliance approved. Company platform unlocked."
+      );
       await inspectCompany(companyId, false);
     } catch (err: any) {
       setError(err?.message || "Failed to record review.");
@@ -218,7 +227,7 @@ export default function AdminCompliance() {
             <Stat title="High Priority" value={metrics.high_priority || 0} icon="⚠️" />
             <Stat title="Review Needed" value={metrics.review_needed || 0} icon="🔎" />
             <Stat title="Ready" value={metrics.ready || 0} icon="✅" />
-            <Stat title="Missing Documents" value={metrics.missing_documents || 0} icon="📄" />
+            <Stat title="Approved" value={metrics.approved || 0} icon="🔓" />
           </section>
 
           <section className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm mt-8">
@@ -250,7 +259,9 @@ export default function AdminCompliance() {
                 <option value="review_needed">Review Needed</option>
                 <option value="pending_verification">Pending Verification</option>
                 <option value="in_progress">In Progress</option>
-                <option value="ready">Ready</option>
+                <option value="ready">Ready for Approval</option>
+                <option value="provisioning">Provisioning</option>
+                <option value="approved">Approved / Unlocked</option>
               </select>
             </div>
           </section>
@@ -325,7 +336,28 @@ export default function AdminCompliance() {
                         {selected.company?.name}
                       </p>
                       <p className="text-sm text-violet-700 mt-2">
-                        Readiness {selected.readiness_score}%
+                        Launch status:{" "}
+                        <strong>
+                          {String(
+                            selected.launch?.status ||
+                              selected.company?.status ||
+                              "pending"
+                          ).replaceAll("_", " ")}
+                        </strong>
+                      </p>
+                      <p className="text-sm mt-1">
+                        Platform:{" "}
+                        <strong
+                          className={
+                            selected.platform_unlocked
+                              ? "text-green-700"
+                              : "text-amber-700"
+                          }
+                        >
+                          {selected.platform_unlocked
+                            ? "Unlocked"
+                            : "Locked"}
+                        </strong>
                       </p>
                     </div>
 
@@ -404,10 +436,18 @@ export default function AdminCompliance() {
                       <button
                         type="button"
                         onClick={markReviewed}
-                        disabled={busy === "review"}
-                        className="border border-green-200 text-green-700 rounded-xl py-3 font-bold disabled:opacity-50"
+                        disabled={
+                          busy === "review" ||
+                          !selected.all_required_verified ||
+                          selected.platform_unlocked
+                        }
+                        className="bg-green-600 text-white rounded-xl py-3 font-bold disabled:bg-slate-300 disabled:text-slate-500"
                       >
-                        {busy === "review" ? "Recording..." : "Mark Reviewed"}
+                        {busy === "review"
+                          ? "Approving & Unlocking..."
+                          : selected.platform_unlocked
+                          ? "Company Unlocked"
+                          : "Approve & Unlock Company"}
                       </button>
 
                       <button
