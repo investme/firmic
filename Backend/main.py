@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from database import SessionLocal
+from models.subscription import Plan
 from routes import auth
 from sqlalchemy import text
 from database import engine
@@ -85,6 +86,65 @@ def debug_database():
         "search_path": search_path,
         "plans": [dict(plan) for plan in plans],
     }
+@app.get("/api/debug/plan/{plan_code}")
+def debug_plan_lookup(plan_code: str):
+    db = SessionLocal()
+
+    try:
+        normalized_code = plan_code.strip().upper()
+
+        all_plans = db.query(Plan).all()
+
+        exact_plan = (
+            db.query(Plan)
+            .filter(Plan.code == normalized_code)
+            .first()
+        )
+
+        active_plan = (
+            db.query(Plan)
+            .filter(
+                Plan.code == normalized_code,
+                Plan.active.is_(True),
+            )
+            .first()
+        )
+
+        return {
+            "received": repr(plan_code),
+            "normalized": repr(normalized_code),
+            "orm_table": Plan.__tablename__,
+            "all_plans": [
+                {
+                    "id": plan.id,
+                    "code": plan.code,
+                    "code_repr": repr(plan.code),
+                    "active": plan.active,
+                    "active_type": type(plan.active).__name__,
+                }
+                for plan in all_plans
+            ],
+            "exact_match": (
+                {
+                    "id": exact_plan.id,
+                    "code": exact_plan.code,
+                    "active": exact_plan.active,
+                }
+                if exact_plan
+                else None
+            ),
+            "active_match": (
+                {
+                    "id": active_plan.id,
+                    "code": active_plan.code,
+                    "active": active_plan.active,
+                }
+                if active_plan
+                else None
+            ),
+        }
+    finally:
+        db.close()
 
 app.add_middleware(
     CORSMiddleware,
