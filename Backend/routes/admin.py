@@ -446,9 +446,32 @@ def delete_company_dependencies(
     company_id: str,
     db: Session,
 ) -> list[str]:
+    """
+    Delete the complete database dependency tree for one company.
+
+    The previous implementation only removed rows whose foreign key pointed
+    directly at companies.id. That failed for nested relationships such as:
+
+        companies
+            -> company_subscriptions
+                -> subscription_events
+                -> subscription_items
+
+    This implementation walks PostgreSQL foreign-key relationships recursively,
+    deletes deepest child rows first, and only then allows the company row to
+    be deleted. The whole operation stays inside the caller's transaction.
+    """
     engine = db.get_bind()
     inspector = inspect(engine)
-    deleted_from: list[str] = []
+    preparer = engine.dialect.identifier_preparer
+
+    def quote(identifier: str) -> str:
+        return preparer.quote(identifier)
+
+    child_relationships: dict[
+        str,
+        list[tuple[str, str, str]],
+    ] = {}
 
     for table_name in inspector.get_table_names():
         if table_name == "companies":
@@ -457,41 +480,95 @@ def delete_company_dependencies(
         for foreign_key in inspector.get_foreign_keys(
             table_name
         ):
-            referred_table = foreign_key.get(
+            parent_table = foreign_key.get(
                 "referred_table"
             )
-
-            referred_columns = foreign_key.get(
-                "referred_columns"
-            ) or []
-
-            constrained_columns = foreign_key.get(
-                "constrained_columns"
-            ) or []
-
-            references_company_id = (
-                referred_table == "companies"
-                and "id" in referred_columns
-                and len(constrained_columns) == 1
+            parent_columns = (
+                foreign_key.get("referred_columns")
+                or []
+            )
+            child_columns = (
+                foreign_key.get("constrained_columns")
+                or []
             )
 
-            if not references_company_id:
+            if (
+                not parent_table
+                or len(parent_columns) != 1
+                or len(child_columns) != 1
+            ):
                 continue
 
-            column_name = constrained_columns[0]
-
-            db.execute(
-                text(
-                    f'DELETE FROM "{table_name}" '
-                    f'WHERE "{column_name}" = :company_id'
-                ),
-                {"company_id": company_id},
+            child_relationships.setdefault(
+                parent_table,
+                [],
+            ).append(
+                (
+                    table_name,
+                    child_columns[0],
+                    parent_columns[0],
+                )
             )
 
-            deleted_from.append(table_name)
-            break
+    deleted_tables: list[str] = []
+    deleted_table_set: set[str] = set()
 
-    return deleted_from
+    def delete_children(
+        parent_table: str,
+        parent_where: str,
+        params: dict[str, Any],
+        ancestry: tuple[str, ...],
+    ) -> None:
+        for (
+            child_table,
+            child_column,
+            parent_column,
+        ) in child_relationships.get(
+            parent_table,
+            [],
+        ):
+            if child_table in ancestry:
+                continue
+
+            child_where = (
+                f"{quote(child_column)} IN ("
+                f"SELECT {quote(parent_column)} "
+                f"FROM {quote(parent_table)} "
+                f"WHERE {parent_where}"
+                f")"
+            )
+
+            delete_children(
+                child_table,
+                child_where,
+                params,
+                ancestry + (child_table,),
+            )
+
+            result = db.execute(
+                text(
+                    f"DELETE FROM {quote(child_table)} "
+                    f"WHERE {child_where}"
+                ),
+                params,
+            )
+
+            if (
+                result.rowcount
+                and result.rowcount > 0
+                and child_table not in deleted_table_set
+            ):
+                deleted_table_set.add(child_table)
+                deleted_tables.append(child_table)
+
+    delete_children(
+        "companies",
+        f"{quote('id')} = :company_id",
+        {"company_id": company_id},
+        ("companies",),
+    )
+
+    return deleted_tables
 
 
 @router.delete("/companies/{company_id}")
