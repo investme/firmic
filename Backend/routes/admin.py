@@ -38,18 +38,19 @@ router = APIRouter(
 )
 
 
-HOOKUP_FEE_USD = 49.0
+COMPANY_ACTIVATION_FEE_USD = 79.0
 
 
-def ensure_company_hookup_fee(
+def ensure_company_activation_fee(
     db: Session,
     company: Company,
 ) -> tuple[UsageLedger, bool]:
     """
-    Return the company's one-time hookup fee and whether it was created.
+    Ensure one lifetime Firmic Company Activation Fee exists for the company.
 
-    This check is lifetime-scoped and therefore does not depend on invoice
-    month or current payment status.
+    Legacy MVP records used the name "Hookup Fee" and the action
+    "hookup_fee". If one of those records already exists, it is migrated
+    in place instead of creating a duplicate charge.
     """
     existing = (
         db.query(UsageLedger)
@@ -57,15 +58,44 @@ def ensure_company_hookup_fee(
             UsageLedger.company_id == company.id,
             UsageLedger.service == "firmic_setup",
             UsageLedger.category == "one_time",
-            UsageLedger.action == "hookup_fee",
+            UsageLedger.action.in_(
+                {
+                    "activation_fee",
+                    "hookup_fee",
+                }
+            ),
             UsageLedger.source_type == "company",
             UsageLedger.source_id == company.id,
             UsageLedger.status != "void",
         )
+        .order_by(UsageLedger.created_at.asc())
         .first()
     )
 
     if existing:
+        metadata = dict(existing.metadata_json or {})
+        metadata.update(
+            {
+                "company_name": company.name,
+                "charge_type": "one_time",
+                "fee_type": "company_activation",
+                "description": (
+                    "One-time Firmic company activation fee."
+                ),
+            }
+        )
+
+        existing.resource = "Firmic Company Activation Fee"
+        existing.action = "activation_fee"
+        existing.unit = "company_activation"
+        existing.unit_price = COMPANY_ACTIVATION_FEE_USD
+        existing.total_amount = round(
+            float(existing.quantity or 1)
+            * COMPANY_ACTIVATION_FEE_USD,
+            2,
+        )
+        existing.metadata_json = metadata
+
         return existing, False
 
     entry = record_usage(
@@ -73,11 +103,11 @@ def ensure_company_hookup_fee(
         company_id=company.id,
         service="firmic_setup",
         category="one_time",
-        resource="Firmic Hookup Fee",
-        action="hookup_fee",
+        resource="Firmic Company Activation Fee",
+        action="activation_fee",
         quantity=1,
-        unit="company_setup",
-        unit_price=HOOKUP_FEE_USD,
+        unit="company_activation",
+        unit_price=COMPANY_ACTIVATION_FEE_USD,
         currency="USD",
         tax_rate=0.0,
         status="unbilled",
@@ -86,7 +116,10 @@ def ensure_company_hookup_fee(
         metadata={
             "company_name": company.name,
             "charge_type": "one_time",
-            "description": "Firmic company onboarding and infrastructure hookup fee",
+            "fee_type": "company_activation",
+            "description": (
+                "One-time Firmic company activation fee."
+            ),
         },
         commit=False,
     )
@@ -94,14 +127,15 @@ def ensure_company_hookup_fee(
     return entry, True
 
 
-
-
-def synchronize_missing_hookup_fees(
+def synchronize_company_activation_fees(
     db: Session,
-) -> dict[str, int]:
+) -> dict[str, int | float]:
     """
-    Ensure every non-terminated company has exactly one lifetime setup fee.
-    Existing paid/billed/unbilled fees are recognized and never duplicated.
+    Ensure every non-terminated company has one Company Activation Fee.
+
+    Legacy $49 Hookup Fee records are upgraded in place to the current
+    $79 Company Activation Fee, so running this function cannot create a
+    duplicate one-time charge.
     """
     companies = (
         db.query(Company)
@@ -114,19 +148,27 @@ def synchronize_missing_hookup_fees(
     existing_count = 0
 
     for company in companies:
-        _, was_created = ensure_company_hookup_fee(db, company)
+        _, was_created = ensure_company_activation_fee(
+            db,
+            company,
+        )
         if was_created:
             created_count += 1
         else:
             existing_count += 1
 
-    if created_count:
+    if created_count or existing_count:
         db.commit()
 
     return {
         "created_count": created_count,
-        "already_present_count": existing_count,
+        "updated_or_existing_count": existing_count,
+        "activation_fee_usd": COMPANY_ACTIVATION_FEE_USD,
     }
+
+
+# Backward-compatible internal alias while older callers are phased out.
+synchronize_missing_hookup_fees = synchronize_company_activation_fees
 
 
 def require_admin(
@@ -1154,7 +1196,7 @@ def get_admin_analytics(
     _: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    synchronize_missing_hookup_fees(db)
+    synchronize_company_activation_fees(db)
 
     companies = db.query(Company).all()
     offices = db.query(Office).all()
@@ -2780,22 +2822,23 @@ def admin_module_summary(
 
 
 
-@router.post("/billing/backfill-hookup-fees")
-def backfill_missing_hookup_fees(
+@router.post("/billing/backfill-activation-fees")
+@router.post("/billing/backfill-hookup-fees", include_in_schema=False)
+def backfill_company_activation_fees(
     _: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     try:
-        result = synchronize_missing_hookup_fees(db)
+        result = synchronize_company_activation_fees(db)
         return {
-            "message": "Hookup fee synchronization complete",
+            "message": "Company Activation Fee synchronization complete",
             **result,
         }
     except Exception as error:
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Hookup fee synchronization failed: {str(error)}",
+            detail=f"Activation fee synchronization failed: {str(error)}",
         ) from error
 
 
@@ -2930,7 +2973,7 @@ def get_live_admin_billing(
     _: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    synchronize_missing_hookup_fees(db)
+    synchronize_company_activation_fees(db)
 
     return {
         "summary": build_admin_billing_summary(db),
@@ -2944,7 +2987,7 @@ def get_live_admin_company_billing(
     _: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    synchronize_missing_hookup_fees(db)
+    synchronize_company_activation_fees(db)
 
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
