@@ -285,7 +285,7 @@ export default function AdminOffices() {
 
                         {office.company ? (
                           <a
-                            href={`/admin-companies?company_id=${office.company.id}`}
+                            href={`/admin-company?company_id=${office.company.id}`}
                             className="bg-violet-600 text-white px-4 py-3 rounded-xl font-bold text-center"
                           >
                             Open Company

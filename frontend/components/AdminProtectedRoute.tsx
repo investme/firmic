@@ -1,31 +1,107 @@
-import { ReactNode, useEffect, useState } from "react";
-import { getAuthToken, getAuthUser } from "../services/authApi";
+import {
+  ReactNode,
+  useEffect,
+  useState,
+} from "react";
+import { useRouter } from "next/router";
+
+import { API_URL } from "../services/config";
+import {
+  clearAdminSession,
+  getAdminToken,
+  getAdminUser,
+} from "../services/adminSession";
 
 type Props = {
   children: ReactNode;
 };
 
-export default function AdminProtectedRoute({ children }: Props) {
-  const [checkingAuth, setCheckingAuth] = useState(true);
-  const [authorized, setAuthorized] = useState(false);
+export default function AdminProtectedRoute({
+  children,
+}: Props) {
+  const router = useRouter();
+
+  const [checkingAuth, setCheckingAuth] =
+    useState(true);
+
+  const [authorized, setAuthorized] =
+    useState(false);
 
   useEffect(() => {
-    const token = getAuthToken();
-    const user = getAuthUser();
+    let cancelled = false;
 
-    const isAuthorized =
-      Boolean(token) && user?.role === "admin";
+    async function verifyAdmin() {
+      const token = getAdminToken();
+      const cachedUser = getAdminUser();
 
-    if (!isAuthorized) {
-      setAuthorized(false);
-      setCheckingAuth(false);
-      window.location.href = "/admin-login";
-      return;
+      const cachedRole =
+        String(
+          cachedUser?.role || ""
+        ).toLowerCase();
+
+      if (!token || cachedRole !== "admin") {
+        clearAdminSession();
+
+        if (!cancelled) {
+          setAuthorized(false);
+          setCheckingAuth(false);
+          void router.replace("/admin-login");
+        }
+
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `${API_URL}/api/auth/me`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            cache: "no-store",
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            "Admin session expired."
+          );
+        }
+
+        const user = await response.json();
+
+        if (
+          String(
+            user?.role || ""
+          ).toLowerCase() !== "admin"
+        ) {
+          throw new Error(
+            "Admin role required."
+          );
+        }
+
+        if (!cancelled) {
+          setAuthorized(true);
+          setCheckingAuth(false);
+        }
+      } catch {
+        clearAdminSession();
+
+        if (!cancelled) {
+          setAuthorized(false);
+          setCheckingAuth(false);
+          void router.replace("/admin-login");
+        }
+      }
     }
 
-    setAuthorized(true);
-    setCheckingAuth(false);
-  }, []);
+    void verifyAdmin();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   if (checkingAuth) {
     return (
@@ -34,7 +110,7 @@ export default function AdminProtectedRoute({ children }: Props) {
           <div className="h-12 w-12 rounded-full border-4 border-violet-500 border-t-transparent animate-spin mx-auto" />
 
           <p className="mt-6 text-slate-400 font-medium">
-            Verifying admin access...
+            Verifying Firmic Admin access...
           </p>
         </div>
       </div>

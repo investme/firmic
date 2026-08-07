@@ -131,9 +131,9 @@ export default function AdminAnalytics() {
       },
       {
         key: "firmic_setup",
-        label: "Firmic Setup Fees",
+        label: "Company Activation Fees",
         description:
-          "One-time company onboarding and infrastructure hookup fees.",
+          "One-time Firmic company activation fees.",
         value:
           revenue.firmic_setup ||
           0,

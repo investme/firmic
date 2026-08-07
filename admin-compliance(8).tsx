@@ -147,30 +147,11 @@ export default function AdminCompliance() {
       if (!confirmed) return;
 
       const result = await markAdminComplianceReviewed(companyId);
-
-      setSelected((current: any) => ({
-        ...(current || {}),
-        company:
-          result?.company ||
-          current?.company,
-        launch:
-          result?.launch ||
-          current?.launch,
-        admin_approved:
-          result?.launch?.admin_approved ??
-          current?.admin_approved ??
-          true,
-        platform_unlocked:
-          result?.platform_unlocked === true ||
-          result?.launch?.status === "active",
-      }));
-
       setNotice(
         result?.message ||
-          "Compliance approved. Company platform activated."
+          "Compliance approved. Company platform unlocked."
       );
-
-      await loadQueue(companyId);
+      await inspectCompany(companyId, false);
     } catch (err: any) {
       setError(err?.message || "Failed to record review.");
     } finally {
@@ -180,19 +161,6 @@ export default function AdminCompliance() {
 
   const items = data?.items || [];
   const metrics = data?.metrics || {};
-
-  const platformActive = Boolean(
-    selected?.platform_unlocked === true ||
-      selected?.launch?.status === "active"
-  );
-
-  const missingDocuments: string[] =
-    Array.isArray(selected?.missing_documents)
-      ? selected.missing_documents
-      : [];
-
-  const missingDocumentCount =
-    missingDocuments.length;
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -381,13 +349,13 @@ export default function AdminCompliance() {
                         Platform:{" "}
                         <strong
                           className={
-                            platformActive
+                            selected.platform_unlocked
                               ? "text-green-700"
                               : "text-amber-700"
                           }
                         >
-                          {platformActive
-                            ? "Active"
+                          {selected.platform_unlocked
+                            ? "Unlocked"
                             : "Locked"}
                         </strong>
                       </p>
@@ -453,55 +421,16 @@ export default function AdminCompliance() {
                       />
                     </div>
 
-                    {missingDocumentCount > 0 && (
-                      <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                        <p className="font-bold text-amber-900">
-                          Compliance action required
-                        </p>
-
-                        <p className="mt-2 text-sm leading-6 text-amber-800">
-                          Missing: {missingDocuments.join(", ")}.
-                        </p>
-
-                        <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm leading-6 text-amber-800">
-                          <li>
-                            Request the missing document from this page.
-                          </li>
-                          <li>
-                            The tenant opens the Firmic Document Vault at
-                            <strong> /documents</strong> and submits the requested item.
-                          </li>
-                          <li>
-                            Return here and press <strong>Verify</strong> beside the uploaded document.
-                          </li>
-                          <li>
-                            When every required document is verified, press
-                            <strong> Approve & Activate Company</strong>.
-                          </li>
-                        </ol>
-                      </div>
-                    )}
-
                     <div className="grid grid-cols-1 gap-3 mt-6">
                       <button
                         type="button"
                         onClick={requestDocuments}
-                        disabled={
-                          busy === "request" ||
-                          missingDocumentCount === 0 ||
-                          platformActive
-                        }
+                        disabled={busy === "request"}
                         className="bg-violet-600 text-white rounded-xl py-3 font-bold disabled:bg-slate-300"
                       >
                         {busy === "request"
                           ? "Creating Requests..."
-                          : missingDocumentCount === 0
-                          ? "No Missing Documents"
-                          : `Request ${missingDocumentCount} Missing ${
-                              missingDocumentCount === 1
-                                ? "Document"
-                                : "Documents"
-                            }`}
+                          : "Request Missing Documents"}
                       </button>
 
                       <button
@@ -510,15 +439,15 @@ export default function AdminCompliance() {
                         disabled={
                           busy === "review" ||
                           !selected.all_required_verified ||
-                          platformActive
+                          selected.platform_unlocked
                         }
                         className="bg-green-600 text-white rounded-xl py-3 font-bold disabled:bg-slate-300 disabled:text-slate-500"
                       >
                         {busy === "review"
-                          ? "Approving & Activating..."
-                          : platformActive
-                          ? "Company Active"
-                          : "Approve & Activate Company"}
+                          ? "Approving & Unlocking..."
+                          : selected.platform_unlocked
+                          ? "Company Unlocked"
+                          : "Approve & Unlock Company"}
                       </button>
 
                       <button

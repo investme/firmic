@@ -7,7 +7,7 @@ import {
   getAdminCompanyBilling,
   markAdminCompanyBilled,
   markAdminCompanyPaid,
-  backfillAdminHookupFees,
+  backfillAdminActivationFees,
 } from "../services/adminApi";
 
 type CompanyBillingRow = {
@@ -115,24 +115,24 @@ export default function AdminBilling() {
     }
   }
 
-  async function syncHookupFees() {
+  async function syncActivationFees() {
     try {
       setSyncingFees(true);
       setError("");
       setNotice("");
 
-      const result = await backfillAdminHookupFees();
+      const result = await backfillAdminActivationFees();
 
       setNotice(
-        `Hookup fee sync complete: ${result?.created_count || 0} created, ` +
-        `${result?.already_present_count || 0} already present.`
+        `Activation fee sync complete: ${result?.created_count || 0} created, ` +
+        `${result?.migrated_or_existing_count || 0} migrated or already present.`
       );
 
       await load(selectedId);
     } catch (err: any) {
       setError(
         err?.message ||
-          "Failed to synchronize hookup fees."
+          "Failed to synchronize activation fees."
       );
     } finally {
       setSyncingFees(false);
@@ -178,13 +178,13 @@ export default function AdminBilling() {
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={syncHookupFees}
+                onClick={syncActivationFees}
                 disabled={syncingFees || loading}
                 className="border border-violet-200 bg-white text-violet-700 px-5 py-3 rounded-xl font-bold disabled:opacity-50"
               >
                 {syncingFees
-                  ? "Syncing Setup Fees..."
-                  : "Sync Missing Setup Fees"}
+                  ? "Syncing Activation Fees..."
+                  : "Sync Activation Fees"}
               </button>
 
               <button

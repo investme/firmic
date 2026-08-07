@@ -241,7 +241,7 @@ export default function AdminDashboard() {
                                   </a>
 
                                   <a
-                                    href={`/admin-companies?company_id=${company.id}`}
+                                    href={`/admin-company?company_id=${company.id}`}
                                     className="bg-violet-600 text-white px-4 py-2 rounded-xl font-bold text-center"
                                   >
                                     Open
@@ -428,6 +428,21 @@ export default function AdminDashboard() {
                     <Action
                       href="/admin-analytics"
                       text="Open Admin Reports"
+                    />
+
+                    <Action
+                      href="/admin-ai-workforce"
+                      text="Open AI Workforce"
+                    />
+
+                    <Action
+                      href="/admin-users"
+                      text="Manage Admin Users"
+                    />
+
+                    <Action
+                      href="/admin-settings"
+                      text="Open Platform Settings"
                     />
                   </Panel>
 

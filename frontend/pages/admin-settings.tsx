@@ -23,6 +23,7 @@ type SettingsData = {
     tenant_isolation_enabled?: boolean;
   };
   pricing?: {
+    activation_fee_usd?: number;
     hookup_fee_usd?: number;
     default_office_monthly_usd?: number;
     meeting_room_hourly_usd?: number;
@@ -122,12 +123,12 @@ export default function AdminSettings() {
   const pricingRows = [
     {
       label:
-        "Firmic One-Time Hookup Fee",
+        "Firmic Company Activation Fee",
       value: money(
-        pricing.hookup_fee_usd
+        (pricing.activation_fee_usd ?? pricing.hookup_fee_usd)
       ),
       description:
-        "Charged once when a company is created.",
+        "Charged once to activate a company on Firmic.",
       icon: "🔌",
       status: "Live",
     },
@@ -239,9 +240,9 @@ export default function AdminSettings() {
 
           <section className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-8">
             <Stat
-              title="Hookup Fee"
+              title="Activation Fee"
               value={money(
-                pricing.hookup_fee_usd
+                (pricing.activation_fee_usd ?? pricing.hookup_fee_usd)
               )}
               icon="🔌"
             />
@@ -506,7 +507,7 @@ export default function AdminSettings() {
 
                 <div className="space-y-3 mt-5 text-sm text-violet-800">
                   <Check text="Editable VAT percentage" />
-                  <Check text="Editable hookup fee" />
+                  <Check text="Editable company activation fee" />
                   <Check text="Office pricing defaults" />
                   <Check text="AI employee templates and pricing" />
                   <Check text="VoIP and answering-service pricing" />

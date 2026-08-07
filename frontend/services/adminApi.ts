@@ -1,13 +1,13 @@
 import { API_URL } from "./config";
+import { getAdminToken } from "./adminSession";
 
 function getHeaders(): Record<string, string> {
-  const token =
-    typeof window !== "undefined"
-      ? localStorage.getItem("firmic_token")
-      : null;
+  const token = getAdminToken();
 
   if (!token) {
-    throw new Error("Admin authentication required.");
+    throw new Error(
+      "Admin authentication required."
+    );
   }
 
   return {
@@ -154,14 +154,18 @@ export function markAdminCompanyPaid(
   );
 }
 
-export function backfillAdminHookupFees() {
+export function backfillAdminActivationFees() {
   return request(
-    "/api/admin/billing/backfill-hookup-fees",
+    "/api/admin/billing/backfill-activation-fees",
     {
       method: "POST",
     }
   );
 }
+
+// Temporary compatibility alias for older callers.
+export const backfillAdminHookupFees =
+  backfillAdminActivationFees;
 
 /* =========================================================
    Compliance / Hermes

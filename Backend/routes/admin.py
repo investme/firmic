@@ -20,6 +20,7 @@ from models.activity_log import ActivityLog
 from models.usage_ledger import UsageLedger
 from models.support_ticket import SupportMessage, SupportTicket
 from models.launch import CompanyLaunch
+from models.subscription import CompanySubscription
 from services.ledger_service import record_usage
 from services.launch_service import (
     ensure_company_launch,
@@ -46,11 +47,11 @@ def ensure_company_activation_fee(
     company: Company,
 ) -> tuple[UsageLedger, bool]:
     """
-    Ensure one lifetime Firmic Company Activation Fee exists for the company.
+    Ensure one lifetime Firmic Company Activation Fee exists.
 
-    Legacy MVP records used the name "Hookup Fee" and the action
-    "hookup_fee". If one of those records already exists, it is migrated
-    in place instead of creating a duplicate charge.
+    Legacy MVP rows used the label/action "Hookup Fee" / "hookup_fee".
+    Existing legacy rows are renamed in place so a company never receives
+    a duplicate one-time charge.
     """
     existing = (
         db.query(UsageLedger)
@@ -68,12 +69,37 @@ def ensure_company_activation_fee(
             UsageLedger.source_id == company.id,
             UsageLedger.status != "void",
         )
-        .order_by(UsageLedger.created_at.asc())
         .first()
     )
 
     if existing:
-        metadata = dict(existing.metadata_json or {})
+        existing.resource = "Firmic Company Activation Fee"
+        existing.action = "activation_fee"
+        existing.unit = "company_activation"
+        existing.unit_price = COMPANY_ACTIVATION_FEE_USD
+
+        quantity = float(existing.quantity or 1)
+        tax_rate = float(existing.tax_rate or 0)
+        amount = round(
+            quantity * COMPANY_ACTIVATION_FEE_USD,
+            2,
+        )
+        tax_amount = round(
+            amount * tax_rate,
+            2,
+        )
+
+        existing.amount = amount
+        existing.tax_amount = tax_amount
+        existing.total_amount = round(
+            amount + tax_amount,
+            2,
+        )
+
+        metadata = dict(
+            getattr(existing, "entry_metadata", None)
+            or {}
+        )
         metadata.update(
             {
                 "company_name": company.name,
@@ -82,19 +108,12 @@ def ensure_company_activation_fee(
                 "description": (
                     "One-time Firmic company activation fee."
                 ),
+                "activation_fee_usd": (
+                    COMPANY_ACTIVATION_FEE_USD
+                ),
             }
         )
-
-        existing.resource = "Firmic Company Activation Fee"
-        existing.action = "activation_fee"
-        existing.unit = "company_activation"
-        existing.unit_price = COMPANY_ACTIVATION_FEE_USD
-        existing.total_amount = round(
-            float(existing.quantity or 1)
-            * COMPANY_ACTIVATION_FEE_USD,
-            2,
-        )
-        existing.metadata_json = metadata
+        existing.entry_metadata = metadata
 
         return existing, False
 
@@ -131,11 +150,9 @@ def synchronize_company_activation_fees(
     db: Session,
 ) -> dict[str, int | float]:
     """
-    Ensure every non-terminated company has one Company Activation Fee.
+    Ensure every non-terminated company has one USD 79 Company Activation Fee.
 
-    Legacy $49 Hookup Fee records are upgraded in place to the current
-    $79 Company Activation Fee, so running this function cannot create a
-    duplicate one-time charge.
+    Legacy Hookup Fee rows are migrated in place and are not duplicated.
     """
     companies = (
         db.query(Company)
@@ -145,7 +162,7 @@ def synchronize_company_activation_fees(
     )
 
     created_count = 0
-    existing_count = 0
+    migrated_or_existing_count = 0
 
     for company in companies:
         _, was_created = ensure_company_activation_fee(
@@ -155,19 +172,19 @@ def synchronize_company_activation_fees(
         if was_created:
             created_count += 1
         else:
-            existing_count += 1
+            migrated_or_existing_count += 1
 
-    if created_count or existing_count:
+    if created_count or migrated_or_existing_count:
         db.commit()
 
     return {
         "created_count": created_count,
-        "updated_or_existing_count": existing_count,
+        "migrated_or_existing_count": migrated_or_existing_count,
         "activation_fee_usd": COMPANY_ACTIVATION_FEE_USD,
     }
 
 
-# Backward-compatible internal alias while older callers are phased out.
+# Compatibility alias during the transition.
 synchronize_missing_hookup_fees = synchronize_company_activation_fees
 
 
@@ -1159,7 +1176,9 @@ def get_admin_settings(
             "tenant_isolation_enabled": True,
         },
         "pricing": {
-            "hookup_fee_usd": HOOKUP_FEE_USD,
+            "activation_fee_usd": COMPANY_ACTIVATION_FEE_USD,
+            # Compatibility for older frontend builds.
+            "hookup_fee_usd": COMPANY_ACTIVATION_FEE_USD,
             "default_office_monthly_usd": (
                 round(sum(office_prices) / len(office_prices), 2)
                 if office_prices
@@ -1783,23 +1802,94 @@ def _serialize_document(
     }
 
 
+def _synchronize_launch_operational_state(
+    db: Session,
+    company: Company,
+    launch: CompanyLaunch,
+) -> CompanyLaunch:
+    """
+    Reconcile Launch Engine foundation gates with authoritative live data.
+
+    CompanyLaunch can become stale when a company reserves headquarters or
+    activates a subscription through flows that predate the Launch Engine.
+    Compliance approval must not fail simply because those mirrored flags
+    were never updated.
+
+    Sources of truth:
+    - Company identity -> company profile completion
+    - CompanySubscription -> subscription completion
+    - Company headquarters assignment -> office reservation
+
+    Compliance approval and infrastructure provisioning remain controlled by
+    the Launch Engine and are NOT inferred here.
+    """
+    launch.company_profile_completed = bool(
+        launch.company_profile_completed
+        or (
+            bool(company.name)
+            and bool(company.user_id)
+        )
+    )
+
+    subscription = (
+        db.query(CompanySubscription)
+        .filter(
+            CompanySubscription.company_id
+            == company.id
+        )
+        .first()
+    )
+
+    subscription_status = _norm(
+        subscription.status
+        if subscription
+        else None
+    )
+
+    launch.subscription_completed = (
+        subscription_status
+        in {
+            "active",
+            "trial",
+        }
+    )
+
+    launch.office_reserved = bool(
+        company.headquarters_office_code
+    )
+
+    # Recalculate the derived launch state after the foundation gates have
+    # been synchronized. This does not grant admin approval or provision
+    # infrastructure; those remain explicit later steps.
+    synchronize_launch_state(launch)
+
+    return launch
+
+
 def _get_company_launch(
     db: Session,
     company: Company,
 ) -> CompanyLaunch:
     launch = (
         db.query(CompanyLaunch)
-        .filter(CompanyLaunch.company_id == company.id)
+        .filter(
+            CompanyLaunch.company_id
+            == company.id
+        )
         .first()
     )
 
-    if launch:
-        return launch
+    if not launch:
+        launch = ensure_company_launch(
+            db,
+            company,
+            commit=False,
+        )
 
-    return ensure_company_launch(
+    return _synchronize_launch_operational_state(
         db,
         company,
-        commit=False,
+        launch,
     )
 
 
@@ -2705,13 +2795,22 @@ def approve_admin_compliance_and_unlock(
         synchronize_launch_state(launch)
 
         if launch.status != "active":
+            launch_summary = get_launch_summary(
+                launch
+            )
+
+            next_step = (
+                launch_summary.get("next_step")
+                or "an incomplete launch requirement"
+            )
+
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
                     "Compliance was approved, but "
                     "the Launch Engine could not "
-                    "activate the company. Review "
-                    "the remaining launch gates."
+                    "activate the company. "
+                    f"Remaining gate: {next_step}."
                 ),
             )
 

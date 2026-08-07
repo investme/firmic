@@ -10,13 +10,10 @@ TENANT_EMAIL = "hmatar63@gmail.com"
 TENANT_PASSWORD = "Firmic123"
 
 
-def reset_mvp_accounts():
+def reset_mvp_accounts() -> None:
     db = SessionLocal()
 
     try:
-        # -------------------------
-        # ADMIN
-        # -------------------------
         admin = (
             db.query(User)
             .filter(User.email == ADMIN_EMAIL)
@@ -31,16 +28,13 @@ def reset_mvp_accounts():
                 role="admin",
             )
             db.add(admin)
-            print("✅ Admin account created.")
+            print("Admin account created.")
         else:
             admin.full_name = "Firmic Administrator"
             admin.password_hash = hash_password(ADMIN_PASSWORD)
             admin.role = "admin"
-            print("✅ Admin account updated.")
+            print("Admin account updated.")
 
-        # -------------------------
-        # TENANT
-        # -------------------------
         tenant = (
             db.query(User)
             .filter(User.email == TENANT_EMAIL)
@@ -52,21 +46,21 @@ def reset_mvp_accounts():
                 full_name="MVP Tenant",
                 email=TENANT_EMAIL,
                 password_hash=hash_password(TENANT_PASSWORD),
-                role="tenant",
+                role="owner",
             )
             db.add(tenant)
-            print("✅ Tenant account created.")
+            print("Tenant account created.")
         else:
             tenant.password_hash = hash_password(TENANT_PASSWORD)
-            tenant.role = "tenant"
-            print("✅ Tenant account updated.")
+            tenant.role = "owner"
+            print("Tenant account updated.")
 
         db.commit()
-        print("🎉 MVP authentication accounts are ready.")
+        print("MVP authentication accounts are ready.")
 
-    except Exception as e:
+    except Exception as error:
         db.rollback()
-        print("❌ Failed:", e)
+        print("Password reset failed:", error)
         raise
 
     finally:
