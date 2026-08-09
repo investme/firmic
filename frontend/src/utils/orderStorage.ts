@@ -1,4 +1,4 @@
-import { AED_RATE, pricing } from "../data/pricing";
+import { AED_RATE } from "../data/pricing";
 import {
   getPlanEntitlement,
   normalizePlanCode,
@@ -149,10 +149,7 @@ export function buildFirmicOrder(input: {
       billing: "monthly",
       unitPriceUsd: plan.monthlyPriceUsd,
       quantity: 1,
-      note:
-        plan.includedAIWorkers === "unlimited"
-          ? "Includes headquarters and unlimited AI workforce"
-          : `Includes headquarters and ${plan.includedAIWorkers} AI workers`,
+      note: `Includes headquarters and ${plan.includedAIWorkers} AI workers`,
     },
     {
       key: "headquarters-included",
@@ -212,12 +209,13 @@ export function buildFirmicOrder(input: {
       ? []
       : [
           {
-            key: "hookup-fee",
-            name: pricing.hookupFee.name,
+            key: "company-launch-fee",
+            name: "Firmic Company Launch Fee",
             category: "fee" as const,
             billing: "one-time" as const,
-            unitPriceUsd: pricing.hookupFee.usd,
+            unitPriceUsd: plan.launchFeeUsd,
             quantity: 1,
+            note: "One-time company launch fee",
           },
         ]),
   ];
@@ -319,11 +317,29 @@ export function reconcileOrderWithActiveHeadquarters(
     return order;
   }
 
-  const items = order.items.filter(
-    (item) => item.key !== "hookup-fee",
-  );
+  /*
+   * IMPORTANT:
+   * Having an active/reserved headquarters does NOT mean
+   * the one-time Company Launch Fee has already been paid.
+   *
+   * Initial launch:
+   * - Keep the $79 Company Launch Fee.
+   *
+   * Upgrade:
+   * - Remove the launch fee because the company already
+   *   completed its original paid launch.
+   */
+  const items =
+    order.orderType === "upgrade"
+      ? order.items.filter(
+          (item) =>
+            item.key !== "company-launch-fee" &&
+            item.key !== "hookup-fee",
+        )
+      : order.items;
 
   const totals = calculate(items, order.vatRate);
+
   const chargeKeys = new Set(
     order.chargeItemKeys || [],
   );
@@ -338,19 +354,23 @@ export function reconcileOrderWithActiveHeadquarters(
         )
       : items.filter(
           (item) =>
-            !item.included && item.unitPriceUsd > 0,
+            !item.included &&
+            item.unitPriceUsd > 0,
         );
 
-  const amountDueSubtotalUsd = chargeItems.reduce(
-    (sum, item) =>
-      sum + item.unitPriceUsd * item.quantity,
-    0,
-  );
+  const amountDueSubtotalUsd =
+    chargeItems.reduce(
+      (sum, item) =>
+        sum + item.unitPriceUsd * item.quantity,
+      0,
+    );
 
   const amountDueVatUsd = Number(
     (
       chargeItems
-        .filter((item) => item.billing === "monthly")
+        .filter(
+          (item) => item.billing === "monthly",
+        )
         .reduce(
           (sum, item) =>
             sum + item.unitPriceUsd * item.quantity,
@@ -382,9 +402,11 @@ export function reconcileOrderWithActiveHeadquarters(
         ? amountDueUsd
         : initialDue,
     firstPaymentAed: Math.round(
-      (order.orderType === "upgrade"
-        ? amountDueUsd
-        : initialDue) * AED_RATE,
+      (
+        order.orderType === "upgrade"
+          ? amountDueUsd
+          : initialDue
+      ) * AED_RATE,
     ),
     monthlyTotalAed: Math.round(
       totals.monthlyTotalUsd * AED_RATE,

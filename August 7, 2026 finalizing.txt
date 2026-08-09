@@ -1,0 +1,89 @@
+Hermes Voice Compliance
+🎙️ Hermes voice assistant for compliance.
+Natural conversations instead of static messages.
+Examples:
+"Hi Mark, I'm still waiting for your Beneficial Owner Declaration."
+"I've verified your passport."
+"Your company has now been approved by Firmic."
+"Your workspace is ready."
+Intelligent Document Requests
+One-click "Request Missing Documents."
+Email + in-app notification.
+Sonny notified.
+Hermes follows up automatically.
+Tenant dashboard updates in real time.
+Help Center
+
+A proper Help Center, not just a contact page.
+
+Sections such as:
+
+Getting Started
+Compliance & KYC
+Headquarters
+Billing
+AI Workforce
+Microsoft 365
+Mailbox
+Phone Support
+FAQs
+Live Chat
+Submit Ticket
+24/7 Assistance
+
+I'd make this feel like a premium concierge service.
+
+For example:
+
+Need immediate assistance?
+
+📞 UAE Operations
++971 XX XXX XXXX
+
+📧 support@firmic.io
+
+💬 Live Chat
+
+🤖 Speak with Sonny
+
+🛡 Speak with Hermes
+
+Business customers should always feel that help is one click away.
+
+Sprint 2 — Admin Experience
+Replace browser confirmations with beautiful Firmic modals.
+Email approvals/rejections.
+Notification center.
+Provisioning timeline.
+Activity log.
+Audit history.
+Admin analytics.
+Sprint 3 — Platform Polish
+AI Workforce improvements.
+Sonny COO.
+Hermes Compliance.
+Billing.
+Office inventory.
+Deployment.
+firmic.io.
+
+I also want to introduce something I think will make Firmic stand out.
+
+Instead of tenants feeling like they're dealing with a dashboard, they'll feel like they're dealing with an operations team:
+
+Sonny → Chief Operating Officer (business operations and guidance)
+Hermes → Compliance Officer (documents, KYC, approvals)
+Atlas → Infrastructure Manager (mailboxes, headquarters, provisioning)
+Athena → Legal & Corporate Secretary (future phase)
+
+Each AI has a clear responsibility, making the platform feel like a real company supporting the tenant rather than a collection of software tools.
+
+Enjoy your break. When you're back, we'll pick up from this stable checkpoint and continue turning Firmic into a polished production platform
+
+
+
+Firmic is the world's first AI-native business operating system, where every company receives its own headquarters, infrastructure, and an entire AI executive team.
+
+Firmic is the AI Operating System for Modern Companies.
+
+Firmic is the digital headquarters for modern companies. Whether your business has no office, one office, or hundreds of offices worldwide, Firmic becomes the centralized operating system that connects your people, infrastructure, compliance, communications, and AI workforce into one intelligent platform

@@ -17,6 +17,11 @@ import {
   type FirmicWorkspace,
 } from "../src/utils/workspaceContext";
 
+import {
+  speakHermesIntro,
+  speakHermesReview,
+} from "../src/utils/firmicVoice";
+
 type DocumentRecord = {
   id: string;
   name: string;
@@ -141,51 +146,6 @@ function writeJson(key: string, value: unknown) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-function speakHermesMessage(
-  companyName: string,
-  onStart?: () => void,
-  onEnd?: () => void,
-) {
-  if (
-    typeof window === "undefined" ||
-    !("speechSynthesis" in window)
-  ) {
-    return;
-  }
-
-  window.speechSynthesis.cancel();
-
-  const text = `Hello. I am Hermes. I have received the compliance package for ${companyName}. Your submitted identity, company, ownership, licensing, and KYC documents are now being verified. Most reviews are completed within twenty four hours. I will notify you if the package is approved, rejected, or requires another document. Your company remains securely locked during this review.`;
-
-  const utterance =
-    new SpeechSynthesisUtterance(text);
-
-  const voices =
-    window.speechSynthesis.getVoices();
-
-  const voice =
-    voices.find((candidate) =>
-      /george|daniel|david|james|oliver|male/i.test(
-        candidate.name,
-      ),
-    ) ||
-    voices.find((candidate) =>
-      /^en(-|_)/i.test(candidate.lang),
-    ) ||
-    voices[0];
-
-  if (voice) utterance.voice = voice;
-
-  utterance.rate = 0.94;
-  utterance.pitch = 0.9;
-  utterance.volume = 1;
-  utterance.onstart = () => onStart?.();
-  utterance.onend = () => onEnd?.();
-  utterance.onerror = () => onEnd?.();
-
-  window.speechSynthesis.speak(utterance);
-}
-
 export default function Documents() {
   const router = useRouter();
 
@@ -240,6 +200,49 @@ export default function Documents() {
   const onboarding =
     router.query.onboarding === "1" ||
     router.query.source === "hermes";
+
+  /*
+   * Hermes greets the tenant when Sonny first hands the
+   * company into compliance. Play only once per company/session.
+   */
+  useEffect(() => {
+    if (
+      !router.isReady ||
+      !onboarding ||
+      !workspace?.id
+    ) {
+      return;
+    }
+
+    const greetingKey =
+      `firmic_hermes_intro:${workspace.id}`;
+
+    if (
+      sessionStorage.getItem(greetingKey) === "1"
+    ) {
+      return;
+    }
+
+    sessionStorage.setItem(
+      greetingKey,
+      "1",
+    );
+
+    void speakHermesIntro(
+      workspace.name || "your company",
+      {
+        onStart: () =>
+          setHermesSpeaking(true),
+        onEnd: () =>
+          setHermesSpeaking(false),
+      },
+    );
+  }, [
+    onboarding,
+    router.isReady,
+    workspace?.id,
+    workspace?.name,
+  ]);
 
   useEffect(() => {
     function synchronizeWorkspace() {
@@ -723,10 +726,14 @@ export default function Documents() {
 
     setHermesOpen(true);
 
-    speakHermesMessage(
+    void speakHermesReview(
       companyName,
-      () => setHermesSpeaking(true),
-      () => setHermesSpeaking(false),
+      {
+        onStart: () =>
+          setHermesSpeaking(true),
+        onEnd: () =>
+          setHermesSpeaking(false),
+      },
     );
 
     window.setTimeout(() => {
@@ -966,10 +973,14 @@ export default function Documents() {
             type="button"
             onClick={() => {
               setHermesOpen(true);
-              speakHermesMessage(
+              void speakHermesIntro(
                 companyName,
-                () => setHermesSpeaking(true),
-                () => setHermesSpeaking(false),
+                {
+                  onStart: () =>
+                    setHermesSpeaking(true),
+                  onEnd: () =>
+                    setHermesSpeaking(false),
+                },
               );
             }}
             className="rounded-xl border border-violet-200 px-5 py-3 text-center font-bold text-violet-700"
@@ -1380,10 +1391,14 @@ export default function Documents() {
                 <button
                   type="button"
                   onClick={() =>
-                    speakHermesMessage(
+                    void speakHermesReview(
                       companyName,
-                      () => setHermesSpeaking(true),
-                      () => setHermesSpeaking(false),
+                      {
+                        onStart: () =>
+                          setHermesSpeaking(true),
+                        onEnd: () =>
+                          setHermesSpeaking(false),
+                      },
                     )
                   }
                   className="rounded-2xl bg-violet-500 px-6 py-4 font-black text-white"

@@ -12,7 +12,8 @@ export type FirmicPlanEntitlement = {
   code: FirmicPlanCode;
   name: FirmicPlanName;
   monthlyPriceUsd: number;
-  includedAIWorkers: number | "unlimited";
+  launchFeeUsd: number;
+  includedAIWorkers: number;
   includedAddons: string[];
   headquartersIncluded: true;
 };
@@ -25,6 +26,7 @@ export const FIRMIC_PLAN_ENTITLEMENTS: Record<
     code: "PLAN_STARTER",
     name: "Starter",
     monthlyPriceUsd: 149,
+    launchFeeUsd: 79,
     includedAIWorkers: 5,
     includedAddons: [
       "Mailbox",
@@ -32,10 +34,12 @@ export const FIRMIC_PLAN_ENTITLEMENTS: Record<
     ],
     headquartersIncluded: true,
   },
+
   PLAN_BUSINESS: {
     code: "PLAN_BUSINESS",
     name: "Business",
     monthlyPriceUsd: 399,
+    launchFeeUsd: 79,
     includedAIWorkers: 25,
     includedAddons: [
       "Mailbox",
@@ -47,11 +51,13 @@ export const FIRMIC_PLAN_ENTITLEMENTS: Record<
     ],
     headquartersIncluded: true,
   },
+
   PLAN_ENTERPRISE: {
     code: "PLAN_ENTERPRISE",
     name: "Enterprise",
     monthlyPriceUsd: 999,
-    includedAIWorkers: "unlimited",
+    launchFeeUsd: 79,
+    includedAIWorkers: 25,
     includedAddons: [
       "Mailbox",
       "VoIP Number",
@@ -71,11 +77,25 @@ export function normalizePlanCode(
     .trim()
     .toUpperCase();
 
+  // Next.js prerenders pages before client workspace/localStorage exists.
+  // Empty only is safe to treat as Starter for SSR. Unknown non-empty
+  // values still fail loudly.
+  if (!normalized) {
+    return "PLAN_STARTER";
+  }
+
   if (
     normalized === "PLAN_STARTER" ||
     normalized === "STARTER"
   ) {
     return "PLAN_STARTER";
+  }
+
+  if (
+    normalized === "PLAN_BUSINESS" ||
+    normalized === "BUSINESS"
+  ) {
+    return "PLAN_BUSINESS";
   }
 
   if (
@@ -85,7 +105,9 @@ export function normalizePlanCode(
     return "PLAN_ENTERPRISE";
   }
 
-  return "PLAN_BUSINESS";
+  throw new Error(
+    `Invalid Firmic plan: "${value ?? ""}"`,
+  );
 }
 
 export function getPlanEntitlement(
@@ -107,7 +129,7 @@ export function isAddonIncluded(
 
 export function getIncludedAICount(
   planValue?: string | null,
-): number | "unlimited" {
+): number {
   return getPlanEntitlement(
     planValue,
   ).includedAIWorkers;
@@ -117,11 +139,8 @@ export function getExtraAIAgents<T>(
   planValue: string | null | undefined,
   selectedAgents: T[],
 ): T[] {
-  const allowance = getIncludedAICount(planValue);
-
-  if (allowance === "unlimited") {
-    return [];
-  }
+  const allowance =
+    getIncludedAICount(planValue);
 
   return selectedAgents.slice(allowance);
 }

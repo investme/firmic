@@ -18,6 +18,17 @@ from services.sonny.executive_actions import execute_action
 from services.executive_intelligence.executive_engine import generate_executive_intelligence
 from services.sonny.executive_intelligence_bridge import answer_from_executive_intelligence
 from services.sonny.navigation import resolve_navigation
+from services.intelligence.engine import (
+    accept_handoff,
+    build_memory_context as build_intelligence_memory_context,
+    record_action_outcome,
+    record_agent_reply,
+    remember_founder_signal,
+)
+from services.intelligence.personas import (
+    get_voice_profile,
+    sonny_handoff_spoken_message,
+)
 
 
 router = APIRouter()
@@ -118,6 +129,13 @@ def sonny_chat(
         message=message,
     )
 
+    remember_founder_signal(
+        db=db,
+        company_id=company.id,
+        message=message,
+        actor_id=actor_id,
+    )
+
     navigation = resolve_navigation(message)
     if navigation.get("has_navigation"):
         reply = str(navigation.get("reply") or "Opening the requested destination.")
@@ -129,6 +147,14 @@ def sonny_chat(
             title="Sonny navigation reply",
             content=reply,
             source="sonny",
+        )
+
+        record_agent_reply(
+            db,
+            company_id=company.id,
+            agent="sonny",
+            reply=reply,
+            source_id=actor_id,
         )
 
         return {
@@ -152,6 +178,25 @@ def sonny_chat(
         activity_limit=20,
         memory_limit=20,
     )
+
+    structured_memory = build_intelligence_memory_context(
+        db,
+        company_id=company.id,
+        agent="sonny",
+        limit=12,
+    )
+    context["firmic_intelligence"] = structured_memory
+
+    prompt_context = str(context.get("prompt_context") or "")
+    memory_lines = [
+        f"- [{item.get('status')}] {item.get('title')}: {item.get('content')} "
+        f"(confidence {item.get('confidence')})"
+        for item in (structured_memory.get("memories") or [])
+    ]
+    if memory_lines:
+        context["prompt_context"] = (
+            prompt_context + "\n\n## FIRMIC COMPANY BRAIN\n" + "\n".join(memory_lines)
+        )
 
     intelligence = generate_executive_intelligence(
         db=db,
@@ -193,6 +238,17 @@ def sonny_chat(
         )
         reply = action_result["message"]
 
+        record_action_outcome(
+            db,
+            company_id=company.id,
+            agent="sonny",
+            action=str(
+                (plan or {}).get("action")
+                or "executive_action"
+            ),
+            result=action_result,
+        )
+
     elif planner["has_action"] and planner["missing_fields"]:
         missing = ", ".join(
             field.replace("_", " ")
@@ -221,9 +277,34 @@ def sonny_chat(
         source="sonny",
     )
 
+    record_agent_reply(
+        db,
+        company_id=company.id,
+        agent="sonny",
+        reply=reply,
+        source_id=actor_id,
+    )
+
+    hermes_handoff = accept_handoff(
+        db,
+        company_id=company.id,
+        to_agent="sonny",
+        handoff_key=(
+            "hermes_compliance_to_sonny"
+        ),
+    )
+
+    spoken_reply = (
+        sonny_handoff_spoken_message(company.name)
+        if hermes_handoff
+        else reply
+    )
+
     return {
         "reply": reply,
-        "speech": reply,
+        "speech": spoken_reply,
+        "voice_profile": get_voice_profile("sonny"),
+        "structured_memory": structured_memory,
         "actions": [],
         "company_id": company.id,
         "memory_saved": True,
@@ -241,4 +322,15 @@ def sonny_chat(
         ),
         "missing_fields": planner["missing_fields"],
         "action_result": action_result,
+        "hermes_handoff": (
+            {
+                "id": hermes_handoff.id,
+                "status": hermes_handoff.status,
+                "summary": hermes_handoff.summary,
+                "payload": hermes_handoff.payload or {},
+            }
+            if hermes_handoff
+            else None
+        ),
+        "intelligence_engine": "v1.2",
     }

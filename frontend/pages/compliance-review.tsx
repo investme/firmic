@@ -13,6 +13,10 @@ import {
   type FirmicWorkspace,
 } from "../src/utils/workspaceContext";
 
+import {
+  speakHermesReview,
+} from "../src/utils/firmicVoice";
+
 type DocumentRecord = {
   id: string;
   name: string;
@@ -65,51 +69,6 @@ function normalizeStatus(value?: string) {
   return String(value || "")
     .trim()
     .toLowerCase();
-}
-
-function speakHermes(
-  companyName: string,
-  onStart?: () => void,
-  onEnd?: () => void,
-) {
-  if (
-    typeof window === "undefined" ||
-    !("speechSynthesis" in window)
-  ) {
-    return;
-  }
-
-  window.speechSynthesis.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(
-    `Hello. I am Hermes. I have received the compliance package for ${companyName}. Your submitted documents are being verified by Firmic Compliance. For security and regulatory assurance, access to your company platform remains locked until every applicable document has been accepted. Most reviews are completed within twenty four hours. As soon as your company is approved, Firmic will send you an email with a secure login link. Sonny will then welcome you back and begin provisioning your company.`,
-  );
-
-  const voices = window.speechSynthesis.getVoices();
-
-  const preferredVoice =
-    voices.find((voice) =>
-      /george|daniel|david|james|oliver|male/i.test(
-        voice.name,
-      ),
-    ) ||
-    voices.find((voice) =>
-      /^en(-|_)/i.test(voice.lang),
-    ) ||
-    voices[0];
-
-  if (preferredVoice) {
-    utterance.voice = preferredVoice;
-  }
-
-  utterance.rate = 0.94;
-  utterance.pitch = 0.9;
-  utterance.volume = 1;
-  utterance.onstart = () => onStart?.();
-  utterance.onend = () => onEnd?.();
-  utterance.onerror = () => onEnd?.();
-
-  window.speechSynthesis.speak(utterance);
 }
 
 export default function ComplianceReviewPage() {
@@ -179,10 +138,14 @@ export default function ComplianceReviewPage() {
     }
 
     const timer = window.setTimeout(() => {
-      speakHermes(
+      void speakHermesReview(
         workspace.name,
-        () => setSpeaking(true),
-        () => setSpeaking(false),
+        {
+          onStart: () =>
+            setSpeaking(true),
+          onEnd: () =>
+            setSpeaking(false),
+        },
       );
     }, 700);
 
@@ -263,10 +226,12 @@ export default function ComplianceReviewPage() {
       return;
     }
 
-    speakHermes(
+    void speakHermesReview(
       workspace.name,
-      () => setSpeaking(true),
-      () => setSpeaking(false),
+      {
+        onStart: () => setSpeaking(true),
+        onEnd: () => setSpeaking(false),
+      },
     );
   }
 
@@ -536,7 +501,7 @@ export default function ComplianceReviewPage() {
                   type="button"
                   onClick={() =>
                     void router.push(
-                      "/documents?onboarding=1&source=hermes",
+                      "/documents",
                     )
                   }
                   className="w-full rounded-2xl border border-violet-200 bg-violet-50 px-6 py-4 font-black text-violet-700"

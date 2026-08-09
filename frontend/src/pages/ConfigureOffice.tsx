@@ -4,6 +4,7 @@ import { aiAgents } from "../data/aiAgents";
 import { pricing, toAED } from "../data/pricing";
 import {
   getActiveWorkspace,
+  updateActiveWorkspace,
 } from "../utils/workspaceContext";
 import {
   buildFirmicOrder,
@@ -119,9 +120,31 @@ export default function ConfigureOffice() {
 
     setHeadquarters(selectedHeadquarters);
 
+    /*
+     * The launch-plan key is written at the exact moment the tenant
+     * chooses Starter / Business / Enterprise. It is authoritative
+     * during onboarding and prevents headquarters/workspace refreshes
+     * from silently changing Business back to Starter.
+     */
+    const launchPlanCode =
+      localStorage.getItem(
+        `firmic_launch_plan:${String(currentWorkspace.id)}`,
+      ) || currentWorkspace.plan;
+
     const plan = getPlanEntitlement(
-      currentWorkspace.plan,
+      launchPlanCode,
     );
+
+    if (currentWorkspace.plan !== plan.code) {
+      const repairedWorkspace =
+        updateActiveWorkspace({
+          plan: plan.code,
+        });
+
+      if (repairedWorkspace) {
+        setWorkspace(repairedWorkspace);
+      }
+    }
 
     const initialAddons = addons
       .filter((addon) =>
@@ -129,13 +152,10 @@ export default function ConfigureOffice() {
       )
       .map((addon) => addon.name);
 
-    const initialAgentCount =
-      plan.includedAIWorkers === "unlimited"
-        ? aiAgents.length
-        : Math.min(
-            plan.includedAIWorkers,
-            aiAgents.length,
-          );
+    const initialAgentCount = Math.min(
+      plan.includedAIWorkers,
+      aiAgents.length,
+    );
 
     setSelectedAddons(initialAddons);
     setSelectedAgents(
@@ -154,31 +174,18 @@ export default function ConfigureOffice() {
   const includedAgentAllowance =
     plan.includedAIWorkers;
 
-  const includedSelectedAgents = useMemo(() => {
-    if (includedAgentAllowance === "unlimited") {
-      return aiAgents.filter((agent) =>
-        selectedAgents.includes(agent.name),
-      );
-    }
+  const includedSelectedAgents = useMemo(
+    () =>
+      aiAgents
+        .filter((agent) => selectedAgents.includes(agent.name))
+        .slice(0, includedAgentAllowance),
+    [includedAgentAllowance, selectedAgents],
+  );
 
-    return aiAgents
-      .filter((agent) =>
-        selectedAgents.includes(agent.name),
-      )
-      .slice(0, includedAgentAllowance);
-  }, [includedAgentAllowance, selectedAgents]);
-
-  const extraSelectedAgents = useMemo(() => {
-    if (includedAgentAllowance === "unlimited") {
-      return [];
-    }
-
-    return aiAgents
-      .filter((agent) =>
-        selectedAgents.includes(agent.name),
-      )
-      .slice(includedAgentAllowance);
-  }, [includedAgentAllowance, selectedAgents]);
+  // Firmic plans have a hard AI-worker entitlement:
+  // Starter = 5, Business = 25, Enterprise = 25.
+  // Workers above the plan allowance cannot be selected as paid extras.
+  const extraSelectedAgents: Agent[] = [];
 
   const includedSelectedAddons = addons.filter(
     (addon) =>
@@ -192,15 +199,10 @@ export default function ConfigureOffice() {
       !isAddonIncluded(workspace?.plan, addon.name),
   );
 
-  const extrasMonthlyUsd =
-    paidSelectedAddons.reduce(
-      (sum, addon) => sum + addon.usd,
-      0,
-    ) +
-    extraSelectedAgents.reduce(
-      (sum, agent) => sum + agent.price,
-      0,
-    );
+  const extrasMonthlyUsd = paidSelectedAddons.reduce(
+    (sum, addon) => sum + addon.usd,
+    0,
+  );
 
   const monthlySubtotalUsd =
     plan.monthlyPriceUsd + extrasMonthlyUsd;
@@ -232,9 +234,11 @@ export default function ConfigureOffice() {
   function toggleAgent(agent: Agent) {
     setSelectedAgents((current) => {
       if (current.includes(agent.name)) {
-        return current.filter(
-          (name) => name !== agent.name,
-        );
+        return current.filter((name) => name !== agent.name);
+      }
+
+      if (current.length >= includedAgentAllowance) {
+        return current;
       }
 
       return [...current, agent.name];
@@ -258,16 +262,44 @@ export default function ConfigureOffice() {
       String(currentWorkspace.id),
     );
 
+    // Recovery path: payment was already confirmed for this company's
+    // initial launch, but the user did not complete the Sonny -> Hermes
+    // handoff. Do not generate a $0 upgrade order or charge again.
+    if (
+      previousOrder?.paymentStatus === "paid_demo" &&
+      previousOrder.orderType === "initial"
+    ) {
+      localStorage.setItem(
+        "firmic_sonny_handoff",
+        JSON.stringify({
+          companyId: String(currentWorkspace.id),
+          from: "checkout-recovery",
+          to: "hermes",
+          status: "payment_confirmed",
+          message:
+            "Payment was already confirmed. Resume Sonny's handoff to Hermes for mandatory compliance verification.",
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      await router.push("/checkout?resume=handoff");
+      return;
+    }
+
     const order = buildFirmicOrder({
       companyId: String(currentWorkspace.id),
       headquarters,
-      planCode: currentWorkspace.plan,
+      planCode:
+        localStorage.getItem(
+          `firmic_launch_plan:${String(currentWorkspace.id)}`,
+        ) || currentWorkspace.plan,
       selectedAddons: paidSelectedAddons,
       selectedAgents: extraSelectedAgents,
       includedAddons: includedSelectedAddons,
       includedAgents: includedSelectedAgents,
-      includeHookupFee:
-        !currentWorkspace.headquarters?.office_code,
+
+      // Initial company launch always carries the one-time $79 fee.
+      includeHookupFee: true,
       previousOrder,
     });
 
@@ -286,9 +318,7 @@ export default function ConfigureOffice() {
   }
 
   const includedLabel =
-    includedAgentAllowance === "unlimited"
-      ? "Unlimited AI workforce included"
-      : `${includedAgentAllowance} AI workers included`;
+    `${includedAgentAllowance} AI workers included`;
 
   return (
     <div className="min-h-screen bg-[#f3f7f8] px-5 py-8 text-[#09233d] sm:px-8 lg:px-10">
@@ -421,11 +451,7 @@ export default function ConfigureOffice() {
               <SectionHeader
                 eyebrow="AI Workforce"
                 title="Assemble your operating team"
-                description={
-                  includedAgentAllowance === "unlimited"
-                    ? "Every AI worker is included with Enterprise."
-                    : `Your first ${includedAgentAllowance} selected AI workers are included. Only workers beyond that allowance add to the monthly price.`
-                }
+                description={`Your ${plan.name} plan includes up to ${includedAgentAllowance} AI workers. You may choose any ${includedAgentAllowance} workers from the Firmic AI team, but this plan cannot exceed that limit.`}
               />
 
               <div className="mt-7 grid gap-4 md:grid-cols-2">
@@ -437,10 +463,11 @@ export default function ConfigureOffice() {
                       selectedAgents.indexOf(agent.name);
                     const included =
                       selected &&
-                      (includedAgentAllowance ===
-                        "unlimited" ||
-                        selectedPosition <
-                          includedAgentAllowance);
+                      selectedPosition < includedAgentAllowance;
+
+                    const atLimit =
+                      !selected &&
+                      selectedAgents.length >= includedAgentAllowance;
 
                     return (
                       <button
@@ -449,11 +476,14 @@ export default function ConfigureOffice() {
                         onClick={() =>
                           toggleAgent(agent)
                         }
+                        disabled={atLimit}
                         className={[
                           "rounded-[1.4rem] border p-5 text-left transition",
                           selected
                             ? "border-[#0f8f91] bg-[#0f8f91]/5 ring-4 ring-[#0f8f91]/8"
-                            : "border-[#09233d]/10 bg-[#f8fbfb] hover:border-[#0f8f91]/40",
+                            : atLimit
+                              ? "cursor-not-allowed border-[#09233d]/10 bg-[#f3f6f7] opacity-55"
+                              : "border-[#09233d]/10 bg-[#f8fbfb] hover:border-[#0f8f91]/40",
                         ].join(" ")}
                       >
                         <div className="flex items-start justify-between gap-4">
@@ -476,13 +506,13 @@ export default function ConfigureOffice() {
                         <div className="mt-4">
                           {included ? (
                             <IncludedBadge label="Included" />
-                          ) : selected ? (
-                            <p className="text-sm font-black">
-                              ${agent.price}/month extra
+                          ) : atLimit ? (
+                            <p className="text-sm font-bold text-[#8a9ca8]">
+                              Plan limit reached
                             </p>
                           ) : (
                             <p className="text-sm font-bold text-[#698296]">
-                              Select to add
+                              Select worker
                             </p>
                           )}
                         </div>
@@ -510,29 +540,8 @@ export default function ConfigureOffice() {
                   value="Included"
                 />
                 <SummaryRow
-                  label="Included AI Workers"
-                  value={
-                    includedAgentAllowance ===
-                    "unlimited"
-                      ? "Unlimited"
-                      : String(
-                          includedSelectedAgents.length,
-                        )
-                  }
-                />
-                <SummaryRow
-                  label="Paid AI Extras"
-                  value={
-                    extraSelectedAgents.length
-                      ? `$${extraSelectedAgents
-                          .reduce(
-                            (sum, agent) =>
-                              sum + agent.price,
-                            0,
-                          )
-                          .toFixed(2)}`
-                      : "$0"
-                  }
+                  label="AI Workers"
+                  value={`${includedSelectedAgents.length} / ${includedAgentAllowance}`}
                 />
                 <SummaryRow
                   label="Paid Tool Extras"
@@ -585,12 +594,12 @@ export default function ConfigureOffice() {
                 onClick={continueToCheckout}
                 className="mt-6 w-full rounded-2xl bg-[#20b9b5] px-6 py-4 font-black text-[#09233d] transition hover:-translate-y-0.5 hover:bg-[#38cbc7]"
               >
-                Continue to Activation Checkout →
+                Continue to Launch Checkout →
               </button>
 
               <p className="mt-4 text-xs leading-5 text-white/45">
-                A one-time $49 hookup fee is added only
-                during initial activation.
+                A one-time $79 company launch fee is charged only
+                on the initial company launch.
               </p>
             </div>
           </aside>

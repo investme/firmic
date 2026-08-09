@@ -17,6 +17,7 @@ from routes import progress
 from routes import hermes
 from routes import support
 from routes import executive_intelligence
+from routes import intelligence
 
 from routes.admin import router as admin_router
 from routes.usage_ledger import router as usage_ledger_router
@@ -226,6 +227,10 @@ app.include_router(
 )
 
 app.include_router(
+    intelligence.router,
+)
+
+app.include_router(
     launch_center_router,
     prefix="/api/launch-center",
     tags=["Launch Center"],
@@ -296,4 +301,5 @@ def version():
         "ai": "Sonny",
         "sonny_memory": "enabled",
         "sonny_knowledge": "enabled",
+        "firmic_intelligence_engine": "v1",
     }

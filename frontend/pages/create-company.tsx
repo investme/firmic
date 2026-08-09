@@ -1,26 +1,33 @@
 import Head from "next/head";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { createCompany, isAuthenticated } from "../services/companyApi";
+import { FormEvent, useEffect, useState } from "react";
+import { createCompany } from "../services/companyApi";
+import {
+  clearAuthSession,
+  getAuthToken,
+  getMe,
+  loginUser,
+  registerUser,
+  type AuthUser,
+} from "../services/authApi";
 import { saveActiveWorkspace } from "../src/utils/workspaceContext";
-
-type PlanCode =
-  | "PLAN_STARTER"
-  | "PLAN_BUSINESS"
-  | "PLAN_ENTERPRISE";
-
-type LaunchStep = "welcome" | "identity" | "plan" | "creating";
 
 type CompanyDraft = {
   name: string;
   industry: string;
   jurisdiction: string;
-  planCode: PlanCode;
 };
 
-type PlanOption = {
+type AccountMode = "signin" | "create";
+type CompanyStage = "identity" | "plan";
+type PlanCode =
+  | "PLAN_STARTER"
+  | "PLAN_BUSINESS"
+  | "PLAN_ENTERPRISE";
+
+type PlanDefinition = {
   code: PlanCode;
-  name: "Starter" | "Business" | "Enterprise";
+  name: string;
   price: number;
   workforce: string;
   description: string;
@@ -34,14 +41,15 @@ const defaultDraft: CompanyDraft = {
   name: "",
   industry: "Technology",
   jurisdiction: "Abu Dhabi",
-  planCode: "PLAN_BUSINESS",
 };
 
-const plans: PlanOption[] = [
+const COMPANY_ACTIVATION_FEE_USD = 79;
+
+const PLANS: PlanDefinition[] = [
   {
     code: "PLAN_STARTER",
     name: "Starter",
-    price: 149,
+    price: 99,
     workforce: "5 AI Workers",
     description:
       "A focused operating team for founders launching their first AI-native company.",
@@ -83,86 +91,86 @@ const plans: PlanOption[] = [
   },
 ];
 
-const progressByStep: Record<LaunchStep, number> = {
-  welcome: 0,
-  identity: 20,
-  plan: 40,
-  creating: 50,
-};
-
 export default function CreateCompany() {
   const [draft, setDraft] = useState<CompanyDraft>(defaultDraft);
-  const [step, setStep] = useState<LaunchStep>("welcome");
   const [hydrated, setHydrated] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [creationStage, setCreationStage] = useState(0);
 
-  const selectedPlan = useMemo(
-    () =>
-      plans.find((plan) => plan.code === draft.planCode) ??
-      plans[1],
-    [draft.planCode],
-  );
+  const [accountUser, setAccountUser] = useState<AuthUser | null>(null);
+  const [accountConfirmed, setAccountConfirmed] = useState(false);
+  const [accountMode, setAccountMode] = useState<AccountMode>("signin");
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [accountError, setAccountError] = useState("");
+
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [companyStage, setCompanyStage] =
+    useState<CompanyStage>("identity");
+  const [selectedPlan, setSelectedPlan] =
+    useState<PlanCode | null>(null);
+  const [companyLoading, setCompanyLoading] = useState(false);
+  const [companyError, setCompanyError] = useState("");
 
   useEffect(() => {
-    setAuthenticated(isAuthenticated());
+    let cancelled = false;
 
-    try {
-      const savedDraft = localStorage.getItem(DRAFT_KEY);
+    async function initialize() {
+      try {
+        const savedDraft = localStorage.getItem(DRAFT_KEY);
 
-      if (savedDraft) {
-        const parsed = JSON.parse(savedDraft) as Partial<CompanyDraft> & {
-          plan?: string;
-        };
-
-        let planCode = defaultDraft.planCode;
-
-        if (
-          parsed.planCode === "PLAN_STARTER" ||
-          parsed.planCode === "PLAN_BUSINESS" ||
-          parsed.planCode === "PLAN_ENTERPRISE"
-        ) {
-          planCode = parsed.planCode;
-        } else if (parsed.plan === "Starter") {
-          planCode = "PLAN_STARTER";
-        } else if (
-          parsed.plan === "Business" ||
-          parsed.plan === "Premium"
-        ) {
-          planCode = "PLAN_BUSINESS";
-        } else if (parsed.plan === "Enterprise") {
-          planCode = "PLAN_ENTERPRISE";
+        if (savedDraft && !cancelled) {
+          const parsed = JSON.parse(savedDraft) as Partial<CompanyDraft>;
+          setDraft({
+            ...defaultDraft,
+            ...parsed,
+          });
         }
+      } catch (error) {
+        console.warn("Could not restore company draft:", error);
+      }
 
-        const restored: CompanyDraft = {
-          ...defaultDraft,
-          ...parsed,
-          planCode,
-        };
+      const token = getAuthToken();
 
-        setDraft(restored);
+      if (!token) {
+        if (!cancelled) {
+          setAccountUser(null);
+          setAccountConfirmed(false);
+          setHydrated(true);
+        }
+        return;
+      }
 
-        if (restored.name.trim()) {
-          setStep("identity");
+      try {
+        const verifiedUser = (await getMe()) as AuthUser;
+
+        if (!cancelled) {
+          setAccountUser(verifiedUser);
+          setEmail(verifiedUser.email || "");
+          setFullName(verifiedUser.full_name || "");
+          setAccountConfirmed(false);
+        }
+      } catch (error) {
+        console.warn("Stored Firmic session is invalid:", error);
+        clearAuthSession();
+
+        if (!cancelled) {
+          setAccountUser(null);
+          setAccountConfirmed(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setHydrated(true);
         }
       }
-    } catch (error) {
-      console.warn("Could not restore company draft:", error);
-    } finally {
-      setHydrated(true);
     }
-  }, []);
 
-  function persistDraft(nextDraft: CompanyDraft) {
-    localStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({
-        ...nextDraft,
-        name: nextDraft.name.trimStart(),
-      }),
-    );
-  }
+    void initialize();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function updateDraft<K extends keyof CompanyDraft>(
     key: K,
@@ -174,55 +182,212 @@ export default function CreateCompany() {
         [key]: value,
       };
 
-      persistDraft(updated);
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(updated));
       return updated;
     });
   }
 
-  function continueFromIdentity() {
-    if (!draft.name.trim()) {
-      alert("Enter your company name to continue.");
-      return;
-    }
-
-    persistDraft({
-      ...draft,
-      name: draft.name.trim(),
-    });
-
-    setStep("plan");
+  function saveDraft() {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        ...draft,
+        name: draft.name.trim(),
+      }),
+    );
   }
 
-  async function handleCreateCompany() {
-    const companyName = draft.name.trim();
+  function useDifferentAccount() {
+    saveDraft();
+    clearAuthSession();
 
-    if (!companyName) {
-      setStep("identity");
-      alert("Enter your company name to continue.");
-      return;
-    }
+    setAccountUser(null);
+    setAccountConfirmed(false);
+    setAccountMode("signin");
+    setFullName("");
+    setEmail("");
+    setPassword("");
+    setAccountError("");
+    setCompanyError("");
+    setCompanyStage("identity");
+    setSelectedPlan(null);
+  }
 
-    persistDraft({
-      ...draft,
-      name: companyName,
-    });
+  async function verifyCurrentSession() {
+    const user = (await getMe()) as AuthUser;
+    setAccountUser(user);
+    setFullName(user.full_name || "");
+    setEmail(user.email || "");
+    return user;
+  }
 
-    if (!isAuthenticated()) {
-      window.location.href = "/signup?next=/create-company";
+  async function handleSignIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAccountError("");
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail || !password) {
+      setAccountError("Enter your email address and password.");
       return;
     }
 
     try {
-      setLoading(true);
-      setCreationStage(0);
-      setStep("creating");
+      setAccountLoading(true);
 
-      await wait(450);
-      setCreationStage(1);
+      const result = await loginUser({
+        email: normalizedEmail,
+        password,
+      });
+
+      if (String(result.user?.role || "").toLowerCase() === "admin") {
+        clearAuthSession();
+        setAccountError(
+          "Administrator accounts must use the separate Firmic Admin Login.",
+        );
+        return;
+      }
+
+      const verifiedUser = await verifyCurrentSession();
+      setPassword("");
+      setAccountConfirmed(false);
+
+      if (!verifiedUser.full_name) {
+        setAccountError(
+          "This account has no tenant name. Please contact Firmic support before creating a company.",
+        );
+      }
+    } catch (error) {
+      setAccountError(
+        error instanceof Error ? error.message : "Sign in failed.",
+      );
+    } finally {
+      setAccountLoading(false);
+    }
+  }
+
+  async function handleCreateAccount(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    setAccountError("");
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedName = fullName.trim();
+
+    if (!normalizedName) {
+      setAccountError("Enter your full name.");
+      return;
+    }
+
+    if (!normalizedEmail) {
+      setAccountError("Enter your email address.");
+      return;
+    }
+
+    if (password.length < 8) {
+      setAccountError(
+        "Your password must contain at least 8 characters.",
+      );
+      return;
+    }
+
+    try {
+      setAccountLoading(true);
+
+      await registerUser({
+        full_name: normalizedName,
+        email: normalizedEmail,
+        password,
+      });
+
+      await verifyCurrentSession();
+      setPassword("");
+      setAccountConfirmed(false);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Account creation failed.";
+
+      const normalizedMessage = message.toLowerCase();
+
+      if (
+        normalizedMessage.includes("email already registered") ||
+        normalizedMessage.includes("email already exists") ||
+        normalizedMessage.includes("account already exists")
+      ) {
+        setAccountMode("signin");
+        setPassword("");
+        setAccountError(
+          "A Firmic account already exists with this email. Sign in with its password to continue.",
+        );
+        return;
+      }
+
+      setAccountError(message);
+    } finally {
+      setAccountLoading(false);
+    }
+  }
+
+  function continueToPlans() {
+    setCompanyError("");
+
+    if (!draft.name.trim()) {
+      setCompanyError("Enter your company name to continue.");
+      return;
+    }
+
+    saveDraft();
+    setCompanyStage("plan");
+  }
+
+  async function handleCreateCompany() {
+    setCompanyError("");
+
+    const companyName = draft.name.trim();
+
+    if (!accountUser || !accountConfirmed) {
+      setCompanyError(
+        "Confirm the Firmic account that will own this company first.",
+      );
+      return;
+    }
+
+    if (!companyName) {
+      setCompanyError("Enter your company name to continue.");
+      setCompanyStage("identity");
+      return;
+    }
+
+    if (!selectedPlan) {
+      setCompanyError(
+        "Choose Starter, Business, or Enterprise before creating the company.",
+      );
+      return;
+    }
+
+    saveDraft();
+
+    try {
+      setCompanyLoading(true);
+
+      const verifiedUser = (await getMe()) as AuthUser;
+
+      if (
+        String(verifiedUser.id) !== String(accountUser.id) ||
+        verifiedUser.email.toLowerCase() !==
+          accountUser.email.toLowerCase()
+      ) {
+        throw new Error(
+          "Your authenticated account changed. Confirm your account again.",
+        );
+      }
 
       const response = await createCompany({
         name: companyName,
-        plan_code: draft.planCode,
+        plan_code: selectedPlan,
       });
 
       const companyId = response?.company?.id || response?.id;
@@ -232,14 +397,24 @@ export default function CreateCompany() {
         throw new Error("The backend returned no company ID.");
       }
 
-      setCreationStage(2);
+      /*
+       * PLAN SOURCE OF TRUTH
+       *
+       * Keep the canonical plan code selected by the tenant.
+       * Do not convert PLAN_BUSINESS -> "Business" and do not
+       * allow a later onboarding page to silently fall back to Starter.
+       */
+      localStorage.setItem(
+        `firmic_launch_plan:${String(companyId)}`,
+        selectedPlan,
+      );
 
       const workspace = saveActiveWorkspace({
         id: String(companyId),
         name: response?.company?.name || companyName,
         industry: draft.industry,
         jurisdiction: draft.jurisdiction,
-        plan: selectedPlan.name,
+        plan: selectedPlan,
         status: response?.company?.status || "draft",
         headquarters: null,
       });
@@ -250,12 +425,7 @@ export default function CreateCompany() {
         );
       }
 
-      await wait(550);
-      setCreationStage(3);
-
       localStorage.removeItem(DRAFT_KEY);
-
-      await wait(850);
       window.location.href = "/headquarters?onboarding=1";
     } catch (error) {
       console.error("CREATE COMPANY ERROR:", error);
@@ -265,10 +435,21 @@ export default function CreateCompany() {
           ? error.message
           : "Firmic could not create the company.";
 
-      alert(message);
-      setStep("plan");
+      setCompanyError(message);
+
+      if (
+        message.toLowerCase().includes("authenticated") ||
+        message.toLowerCase().includes("token") ||
+        message.toLowerCase().includes("access denied")
+      ) {
+        clearAuthSession();
+        setAccountUser(null);
+        setAccountConfirmed(false);
+        setCompanyStage("identity");
+        setSelectedPlan(null);
+      }
     } finally {
-      setLoading(false);
+      setCompanyLoading(false);
     }
   }
 
@@ -277,7 +458,9 @@ export default function CreateCompany() {
       <div className="flex min-h-screen items-center justify-center bg-[#f3f7f8] px-6 text-[#09233d]">
         <div className="text-center">
           <div className="mx-auto h-11 w-11 animate-spin rounded-full border-4 border-[#0f8f91]/20 border-t-[#0f8f91]" />
-          <p className="mt-5 font-bold">Preparing the Launch Engine...</p>
+          <p className="mt-5 font-bold">
+            Verifying your Firmic account...
+          </p>
         </div>
       </div>
     );
@@ -286,10 +469,10 @@ export default function CreateCompany() {
   return (
     <>
       <Head>
-        <title>Launch your company | Firmic</title>
+        <title>Create a company | Firmic</title>
         <meta
           name="description"
-          content="Create and configure your AI-native company with the Firmic Launch Engine."
+          content="Verify your Firmic account, choose a company plan, review the one-time activation fee, and begin the Firmic launch process."
         />
       </Head>
 
@@ -303,235 +486,449 @@ export default function CreateCompany() {
               FIRMIC
             </Link>
 
-            <div className="flex items-center gap-4">
-              <div className="hidden items-center gap-2 rounded-full border border-[#0f8f91]/15 bg-[#0f8f91]/5 px-4 py-2 text-xs font-black uppercase tracking-[0.13em] text-[#0f7779] sm:flex">
-                <span className="h-2 w-2 rounded-full bg-[#0f8f91]" />
-                Launch Engine
-              </div>
-
-              <Link
-                href={authenticated ? "/companies" : "/login"}
-                className="text-sm font-bold text-[#587286] transition hover:text-[#0f8f91]"
-              >
-                {authenticated ? "My companies" : "Sign in"}
-              </Link>
-            </div>
+            <Link
+              href="/companies"
+              className="text-sm font-bold text-[#587286] transition hover:text-[#0f8f91]"
+            >
+              My companies
+            </Link>
           </div>
         </header>
 
-        <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:py-12">
-          <LaunchProgress step={step} />
-
-          <div
-            key={step}
-            className="mt-8 animate-[firmicEnter_420ms_ease-out]"
-          >
-            {step === "welcome" && (
-              <WelcomeStep onContinue={() => setStep("identity")} />
-            )}
-
-            {step === "identity" && (
-              <IdentityStep
-                draft={draft}
-                onChange={updateDraft}
-                onBack={() => setStep("welcome")}
-                onContinue={continueFromIdentity}
-              />
-            )}
-
-            {step === "plan" && (
-              <PlanStep
-                draft={draft}
-                selectedPlan={selectedPlan}
-                authenticated={authenticated}
-                loading={loading}
-                onChange={updateDraft}
-                onBack={() => setStep("identity")}
-                onContinue={handleCreateCompany}
-              />
-            )}
-
-            {step === "creating" && (
-              <CreatingStep
-                companyName={draft.name.trim()}
-                plan={selectedPlan}
-                stage={creationStage}
-              />
-            )}
-          </div>
+        <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 lg:py-16">
+          {!accountUser || !accountConfirmed ? (
+            <AccountGateway
+              accountUser={accountUser}
+              accountMode={accountMode}
+              accountLoading={accountLoading}
+              accountError={accountError}
+              fullName={fullName}
+              email={email}
+              password={password}
+              onFullNameChange={setFullName}
+              onEmailChange={setEmail}
+              onPasswordChange={setPassword}
+              onModeChange={(mode) => {
+                setAccountMode(mode);
+                setAccountError("");
+                setPassword("");
+              }}
+              onSignIn={handleSignIn}
+              onCreateAccount={handleCreateAccount}
+              onConfirmAccount={() => {
+                setAccountError("");
+                setAccountConfirmed(true);
+                setCompanyStage("identity");
+              }}
+              onUseDifferentAccount={useDifferentAccount}
+            />
+          ) : companyStage === "identity" ? (
+            <CompanyIdentity
+              draft={draft}
+              accountUser={accountUser}
+              error={companyError}
+              onChange={updateDraft}
+              onBack={() => setAccountConfirmed(false)}
+              onContinue={continueToPlans}
+              onUseDifferentAccount={useDifferentAccount}
+            />
+          ) : (
+            <PlanSelection
+              draft={draft}
+              accountUser={accountUser}
+              selectedPlan={selectedPlan}
+              loading={companyLoading}
+              error={companyError}
+              onSelect={setSelectedPlan}
+              onBack={() => {
+                setCompanyError("");
+                setCompanyStage("identity");
+              }}
+              onCreate={handleCreateCompany}
+            />
+          )}
         </main>
-
-        <style jsx global>{`
-          @keyframes firmicEnter {
-            from {
-              opacity: 0;
-              transform: translateY(18px) scale(0.992);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0) scale(1);
-            }
-          }
-        `}</style>
       </div>
     </>
   );
 }
 
-function LaunchProgress({ step }: { step: LaunchStep }) {
-  const progress = progressByStep[step];
-
-  const label =
-    step === "welcome"
-      ? "Ready to begin"
-      : step === "identity"
-        ? "Creating company identity"
-        : step === "plan"
-          ? "Building your AI workforce"
-          : "Initializing your company";
-
-  return (
-    <div className="rounded-[1.6rem] border border-[#09233d]/10 bg-white px-5 py-4 shadow-[0_14px_40px_rgba(9,35,61,0.05)] sm:px-6">
-      <div className="flex items-center justify-between gap-5">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#0f8f91]">
-            Firmic Company Launch
-          </p>
-          <p className="mt-1 text-sm font-bold text-[#698296]">
-            {label}
-          </p>
-        </div>
-
-        <p className="text-xl font-black">{progress}%</p>
-      </div>
-
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#dce8eb]">
-        <div
-          className="h-full rounded-full bg-[#0f8f91] transition-all duration-700"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function WelcomeStep({
-  onContinue,
+function AccountGateway({
+  accountUser,
+  accountMode,
+  accountLoading,
+  accountError,
+  fullName,
+  email,
+  password,
+  onFullNameChange,
+  onEmailChange,
+  onPasswordChange,
+  onModeChange,
+  onSignIn,
+  onCreateAccount,
+  onConfirmAccount,
+  onUseDifferentAccount,
 }: {
-  onContinue: () => void;
+  accountUser: AuthUser | null;
+  accountMode: AccountMode;
+  accountLoading: boolean;
+  accountError: string;
+  fullName: string;
+  email: string;
+  password: string;
+  onFullNameChange: (value: string) => void;
+  onEmailChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
+  onModeChange: (mode: AccountMode) => void;
+  onSignIn: (event: FormEvent<HTMLFormElement>) => void;
+  onCreateAccount: (event: FormEvent<HTMLFormElement>) => void;
+  onConfirmAccount: () => void;
+  onUseDifferentAccount: () => void;
 }) {
-  return (
-    <section className="relative overflow-hidden rounded-[2.3rem] bg-[#09233d] px-6 py-10 text-white shadow-[0_30px_90px_rgba(9,35,61,0.22)] sm:px-10 sm:py-14 lg:px-16 lg:py-16">
-      <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-[#20b9b5]/20 blur-3xl" />
-      <div className="absolute -bottom-32 left-1/3 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
+  if (accountUser) {
+    return (
+      <section className="mx-auto max-w-4xl">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="rounded-[2rem] border border-[#09233d]/10 bg-white p-7 shadow-[0_24px_70px_rgba(9,35,61,0.08)] sm:p-10">
+            <p className="text-xs font-black uppercase tracking-[0.17em] text-[#0f8f91]">
+              Step 0 · Account identity
+            </p>
 
-      <div className="relative grid gap-12 lg:grid-cols-[minmax(0,1fr)_370px] lg:items-center">
-        <div>
-          <div className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-[#8de6e2]">
-            Powered by Sonny AI COO
+            <h1 className="mt-4 text-4xl font-black tracking-[-0.05em] sm:text-5xl">
+              Who is creating this company?
+            </h1>
+
+            <p className="mt-4 max-w-2xl text-lg leading-8 text-[#60798b]">
+              Firmic verified the current browser session with the backend.
+              Confirm this identity before any company is created.
+            </p>
+
+            <div className="mt-8 rounded-3xl border border-[#0f8f91]/20 bg-[#eefafa] p-6">
+              <p className="text-xs font-black uppercase tracking-[0.15em] text-[#0f8f91]">
+                Authenticated Firmic account
+              </p>
+
+              <p className="mt-3 text-2xl font-black">
+                {accountUser.full_name || "Firmic Tenant"}
+              </p>
+
+              <p className="mt-1 font-bold text-[#587286]">
+                {accountUser.email}
+              </p>
+
+              <p className="mt-4 text-sm leading-6 text-[#698296]">
+                The new company will belong to this authenticated tenant
+                account inside Firmic.
+              </p>
+            </div>
+
+            {accountError && (
+              <ErrorBox message={accountError} />
+            )}
+
+            <button
+              type="button"
+              onClick={onConfirmAccount}
+              className="mt-7 inline-flex min-h-[58px] w-full items-center justify-center rounded-2xl bg-[#09233d] px-7 py-4 font-black text-white transition hover:bg-[#0f8f91]"
+            >
+              Continue as {accountUser.full_name || accountUser.email}
+              <span className="ml-3 text-xl">→</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onUseDifferentAccount}
+              className="mt-4 w-full text-sm font-black text-violet-700 hover:underline"
+            >
+              Use a different Firmic account
+            </button>
           </div>
 
-          <h1 className="mt-7 max-w-3xl text-5xl font-black tracking-[-0.06em] sm:text-6xl lg:text-7xl">
-            Build an AI-native company.
+          <AccountAside />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mx-auto max-w-4xl">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="rounded-[2rem] border border-[#09233d]/10 bg-white p-7 shadow-[0_24px_70px_rgba(9,35,61,0.08)] sm:p-10">
+          <p className="text-xs font-black uppercase tracking-[0.17em] text-[#0f8f91]">
+            Step 0 · Account identity
+          </p>
+
+          <h1 className="mt-4 text-4xl font-black tracking-[-0.05em] sm:text-5xl">
+            Identify the company owner first.
           </h1>
 
-          <div className="mt-8 max-w-2xl space-y-4 text-lg leading-8 text-white/70">
-            <p>Welcome. I&apos;m Sonny.</p>
-            <p>
-              I&apos;ll guide you through creating your company, choosing
-              its operating capacity, reserving headquarters and assembling
-              the infrastructure it needs.
-            </p>
-            <p>
-              Your company will be created first. You will configure it,
-              review it and activate it before entering the Command Center.
-            </p>
+          <p className="mt-4 max-w-2xl text-lg leading-8 text-[#60798b]">
+            A company cannot be created until its Firmic account is
+            securely authenticated.
+          </p>
+
+          <div className="mt-8 grid grid-cols-2 rounded-2xl bg-[#edf3f4] p-1.5">
+            <button
+              type="button"
+              onClick={() => onModeChange("signin")}
+              className={[
+                "rounded-xl px-4 py-3 text-sm font-black transition",
+                accountMode === "signin"
+                  ? "bg-white text-[#09233d] shadow-sm"
+                  : "text-[#698296]",
+              ].join(" ")}
+            >
+              Existing account
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onModeChange("create")}
+              className={[
+                "rounded-xl px-4 py-3 text-sm font-black transition",
+                accountMode === "create"
+                  ? "bg-white text-[#09233d] shadow-sm"
+                  : "text-[#698296]",
+              ].join(" ")}
+            >
+              New account
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={onContinue}
-            className="mt-10 inline-flex min-h-[58px] items-center justify-center rounded-2xl bg-[#20b9b5] px-8 py-4 text-base font-black text-[#09233d] shadow-[0_18px_40px_rgba(32,185,181,0.24)] transition hover:-translate-y-0.5 hover:bg-[#3acbc7]"
-          >
-            Begin Company Launch
-            <span className="ml-3 text-xl">→</span>
-          </button>
+          {accountMode === "signin" ? (
+            <form onSubmit={onSignIn} className="mt-7 space-y-5">
+              <Field
+                label="Email address"
+                description="Use the email registered to your Firmic tenant account."
+              >
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => onEmailChange(event.target.value)}
+                  placeholder="you@company.com"
+                  autoComplete="email"
+                  className={inputClassName}
+                  required
+                />
+              </Field>
+
+              <Field label="Password">
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => onPasswordChange(event.target.value)}
+                  placeholder="Your password"
+                  autoComplete="current-password"
+                  className={inputClassName}
+                  required
+                />
+              </Field>
+
+              {accountError && <ErrorBox message={accountError} />}
+
+              <button
+                type="submit"
+                disabled={accountLoading}
+                className="inline-flex min-h-[58px] w-full items-center justify-center rounded-2xl bg-[#09233d] px-7 py-4 font-black text-white transition hover:bg-[#0f8f91] disabled:bg-[#b7c5cb]"
+              >
+                {accountLoading ? "Signing in..." : "Sign in securely"}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={onCreateAccount} className="mt-7 space-y-5">
+              <Field label="Full name">
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(event) =>
+                    onFullNameChange(event.target.value)
+                  }
+                  placeholder="Your full name"
+                  autoComplete="name"
+                  className={inputClassName}
+                  required
+                />
+              </Field>
+
+              <Field label="Email address">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => onEmailChange(event.target.value)}
+                  placeholder="you@company.com"
+                  autoComplete="email"
+                  className={inputClassName}
+                  required
+                />
+              </Field>
+
+              <Field
+                label="Create password"
+                description="Minimum 8 characters."
+              >
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) =>
+                    onPasswordChange(event.target.value)
+                  }
+                  placeholder="At least 8 characters"
+                  autoComplete="new-password"
+                  minLength={8}
+                  className={inputClassName}
+                  required
+                />
+              </Field>
+
+              {accountError && <ErrorBox message={accountError} />}
+
+              <button
+                type="submit"
+                disabled={accountLoading}
+                className="inline-flex min-h-[58px] w-full items-center justify-center rounded-2xl bg-[#09233d] px-7 py-4 font-black text-white transition hover:bg-[#0f8f91] disabled:bg-[#b7c5cb]"
+              >
+                {accountLoading
+                  ? "Creating account..."
+                  : "Create account securely"}
+              </button>
+
+              <p className="text-center text-xs leading-5 text-[#698296]">
+                If this email already belongs to a Firmic account, Firmic
+                stops here and requires secure sign-in.
+              </p>
+            </form>
+          )}
         </div>
 
-        <div className="rounded-[2rem] border border-white/15 bg-white/10 p-6 backdrop-blur-xl">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#20b9b5] text-lg font-black text-[#09233d]">
-              S
-            </div>
-
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8de6e2]">
-                Your AI COO
-              </p>
-              <p className="mt-1 text-xl font-black">Sonny</p>
-              <p className="text-sm text-white/55">
-                Coordinating your company launch
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-7 space-y-3">
-            <JourneyItem number="01" label="Create company" active />
-            <JourneyItem number="02" label="Choose headquarters" />
-            <JourneyItem number="03" label="Configure office" />
-            <JourneyItem number="04" label="Build AI workforce" />
-            <JourneyItem number="05" label="Add business tools" />
-            <JourneyItem number="06" label="Review and activate" />
-          </div>
-        </div>
+        <AccountAside />
       </div>
     </section>
   );
 }
 
-function IdentityStep({
+function AccountAside() {
+  return (
+    <aside className="space-y-5">
+      <div className="rounded-[2rem] bg-[#09233d] p-7 text-white shadow-[0_24px_70px_rgba(9,35,61,0.16)]">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#20b9b5] font-black text-[#09233d]">
+          S
+        </div>
+
+        <p className="mt-6 text-xs font-black uppercase tracking-[0.16em] text-[#8de6e2]">
+          Sonny says
+        </p>
+
+        <h2 className="mt-3 text-2xl font-black">
+          Identity before company.
+        </h2>
+
+        <p className="mt-4 text-sm leading-7 text-white/65">
+          I will not create or attach a company until Firmic verifies the
+          account that will own it.
+        </p>
+      </div>
+
+      <div className="rounded-[2rem] border border-[#09233d]/10 bg-white p-6">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-[#0f8f91]">
+          Secure sequence
+        </p>
+
+        <div className="mt-4 space-y-3 text-sm font-bold text-[#587286]">
+          <p>00 · Verify account</p>
+          <p>01 · Company identity</p>
+          <p>02 · Select plan</p>
+          <p>03 · Headquarters</p>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function CompanyIdentity({
   draft,
+  accountUser,
+  error,
   onChange,
   onBack,
   onContinue,
+  onUseDifferentAccount,
 }: {
   draft: CompanyDraft;
+  accountUser: AuthUser;
+  error: string;
   onChange: <K extends keyof CompanyDraft>(
     key: K,
     value: CompanyDraft[K],
   ) => void;
   onBack: () => void;
   onContinue: () => void;
+  onUseDifferentAccount: () => void;
 }) {
   return (
-    <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_350px]">
-      <div className="rounded-[2rem] border border-[#09233d]/10 bg-white p-6 shadow-[0_24px_70px_rgba(9,35,61,0.08)] sm:p-9">
-        <StepHeader
-          eyebrow="Company Identity"
-          title="Give your company an identity."
-          description="This creates the foundation that Sonny and the Launch Engine will use throughout the rest of the journey."
-        />
+    <section className="w-full">
+      <StepHeader
+        label="Company setup"
+        step="Step 1"
+        progress="16%"
+        onBack={onBack}
+        backLabel="Account"
+      />
 
-        <div className="mt-9 space-y-6">
-          <Field
-            label="Company name"
-            description="Your company’s legal or operating name."
-          >
-            <input
-              value={draft.name}
-              onChange={(event) =>
-                onChange("name", event.target.value)
-              }
-              placeholder="Example: C50 Labs"
-              autoComplete="organization"
-              className={inputClassName}
-            />
-          </Field>
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="rounded-[2rem] border border-[#09233d]/10 bg-white p-6 shadow-[0_24px_70px_rgba(9,35,61,0.08)] sm:p-9">
+          <p className="text-xs font-black uppercase tracking-[0.17em] text-[#0f8f91]">
+            Company Identity
+          </p>
 
-          <div className="grid gap-5 md:grid-cols-2">
+          <h1 className="mt-4 text-4xl font-black tracking-[-0.05em] sm:text-5xl">
+            Let&apos;s create your company.
+          </h1>
+
+          <p className="mt-4 max-w-2xl text-lg leading-8 text-[#60798b]">
+            The account owner is verified. Now define the company that
+            Sonny will help you build.
+          </p>
+
+          <div className="mt-8 rounded-2xl border border-[#0f8f91]/20 bg-[#eefafa] p-5">
+            <p className="text-xs font-black uppercase tracking-[0.15em] text-[#0f8f91]">
+              Confirmed owner
+            </p>
+            <p className="mt-2 text-lg font-black">
+              {accountUser.full_name || "Firmic Tenant"}
+            </p>
+            <p className="mt-1 text-sm font-bold text-[#587286]">
+              {accountUser.email}
+            </p>
+
+            <button
+              type="button"
+              onClick={onUseDifferentAccount}
+              className="mt-4 text-sm font-black text-violet-700 hover:underline"
+            >
+              Use a different account
+            </button>
+          </div>
+
+          <div className="mt-9 space-y-6">
+            <Field
+              label="Company name"
+              description="Your company’s legal or operating name."
+            >
+              <input
+                value={draft.name}
+                onChange={(event) =>
+                  onChange("name", event.target.value)
+                }
+                placeholder="Example: C50 Labs"
+                autoComplete="organization"
+                className={inputClassName}
+              />
+            </Field>
+
             <Field
               label="Industry"
-              description="Used to prepare your operating environment."
+              description="This helps Sonny prepare the right operating environment."
             >
               <select
                 value={draft.industry}
@@ -553,7 +950,7 @@ function IdentityStep({
 
             <Field
               label="Jurisdiction"
-              description="Where the company will begin operating."
+              description="Choose where your company will begin operating."
             >
               <select
                 value={draft.jurisdiction}
@@ -567,9 +964,7 @@ function IdentityStep({
                 <option value="Ras Al Khaimah">
                   🇦🇪 Ras Al Khaimah
                 </option>
-                <option value="UAE Mainland">
-                  🇦🇪 UAE Mainland
-                </option>
+                <option value="UAE Mainland">🇦🇪 UAE Mainland</option>
                 <option value="Qatar">🇶🇦 Qatar</option>
                 <option value="Saudi Arabia" disabled>
                   🇸🇦 Saudi Arabia — Coming Soon
@@ -592,436 +987,248 @@ function IdentityStep({
               </select>
             </Field>
           </div>
+
+          {error && <ErrorBox message={error} />}
+
+          <button
+            type="button"
+            onClick={onContinue}
+            disabled={!draft.name.trim()}
+            className="mt-9 inline-flex min-h-[58px] w-full items-center justify-center rounded-2xl bg-[#09233d] px-7 py-4 text-base font-black text-white transition hover:bg-[#0f8f91] disabled:bg-[#b7c5cb]"
+          >
+            Continue to Plan Selection
+            <span className="ml-3 text-xl">→</span>
+          </button>
         </div>
 
-        <NavigationButtons
-          backLabel="Back to Sonny"
-          continueLabel="Choose AI Workforce"
-          continueDisabled={!draft.name.trim()}
-          onBack={onBack}
-          onContinue={onContinue}
-        />
+        <aside className="space-y-5">
+          <div className="rounded-[2rem] bg-[#09233d] p-7 text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#20b9b5] font-black text-[#09233d]">
+              S
+            </div>
+            <p className="mt-6 text-xs font-black uppercase tracking-[0.16em] text-[#8de6e2]">
+              Sonny says
+            </p>
+            <h2 className="mt-3 text-2xl font-black">
+              Company first. Capacity next.
+            </h2>
+            <p className="mt-4 text-sm leading-7 text-white/65">
+              After defining the company, choose Starter, Business, or
+              Enterprise before Firmic creates the company subscription.
+            </p>
+          </div>
+        </aside>
       </div>
-
-      <SonnyPanel
-        title="This is the company foundation."
-        body="Next, choose the operating capacity of the company. That selection determines its AI workforce and monthly Firmic plan."
-        next="Choose operating plan"
-      />
     </section>
   );
 }
 
-function PlanStep({
+function PlanSelection({
   draft,
+  accountUser,
   selectedPlan,
-  authenticated,
   loading,
-  onChange,
+  error,
+  onSelect,
   onBack,
-  onContinue,
+  onCreate,
 }: {
   draft: CompanyDraft;
-  selectedPlan: PlanOption;
-  authenticated: boolean;
+  accountUser: AuthUser;
+  selectedPlan: PlanCode | null;
   loading: boolean;
-  onChange: <K extends keyof CompanyDraft>(
-    key: K,
-    value: CompanyDraft[K],
-  ) => void;
+  error: string;
+  onSelect: (plan: PlanCode) => void;
   onBack: () => void;
-  onContinue: () => void;
+  onCreate: () => void;
 }) {
-  return (
-    <section>
-      <div className="rounded-[2rem] border border-[#09233d]/10 bg-white p-6 shadow-[0_24px_70px_rgba(9,35,61,0.08)] sm:p-9">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <StepHeader
-            eyebrow="AI Workforce"
-            title="Choose your company’s operating capacity."
-            description="You are not selecting generic software. You are deciding how large your AI organization will be when the company is activated."
-          />
-
-          <div className="shrink-0 rounded-2xl border border-[#0f8f91]/15 bg-[#0f8f91]/5 px-5 py-4">
-            <p className="text-xs font-black uppercase tracking-[0.14em] text-[#0f7779]">
-              Selected
-            </p>
-            <p className="mt-1 font-black">
-              {selectedPlan.name} · ${selectedPlan.price}/month
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-9 grid gap-5 lg:grid-cols-3">
-          {plans.map((plan) => {
-            const selected = draft.planCode === plan.code;
-
-            return (
-              <button
-                key={plan.code}
-                type="button"
-                onClick={() => onChange("planCode", plan.code)}
-                className={[
-                  "relative flex h-full flex-col rounded-[1.8rem] border p-6 text-left transition",
-                  selected
-                    ? "border-[#0f8f91] bg-[#0f8f91]/5 shadow-[0_18px_50px_rgba(15,143,145,0.14)] ring-4 ring-[#0f8f91]/10"
-                    : "border-[#09233d]/10 bg-[#f8fbfb] hover:-translate-y-1 hover:border-[#0f8f91]/40 hover:bg-white",
-                ].join(" ")}
-              >
-                {plan.recommended && (
-                  <span className="absolute -top-3 right-5 rounded-full bg-[#09233d] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.13em] text-white">
-                    Recommended
-                  </span>
-                )}
-
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xl font-black">{plan.name}</p>
-                    <p className="mt-2 text-sm font-black text-[#0f8f91]">
-                      {plan.workforce}
-                    </p>
-                  </div>
-
-                  <span
-                    className={[
-                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
-                      selected
-                        ? "border-[#0f8f91] bg-[#0f8f91]"
-                        : "border-[#9bb0bc] bg-white",
-                    ].join(" ")}
-                  >
-                    {selected && (
-                      <span className="h-2 w-2 rounded-full bg-white" />
-                    )}
-                  </span>
-                </div>
-
-                <div className="mt-7">
-                  <span className="text-4xl font-black tracking-[-0.05em]">
-                    ${plan.price}
-                  </span>
-                  <span className="ml-1 text-sm font-bold text-[#698296]">
-                    /month
-                  </span>
-                </div>
-
-                <p className="mt-5 min-h-[72px] text-sm leading-6 text-[#60798b]">
-                  {plan.description}
-                </p>
-
-                <div className="mt-6 space-y-3 border-t border-[#09233d]/10 pt-5">
-                  {plan.features.map((feature) => (
-                    <div
-                      key={feature}
-                      className="flex items-start gap-2.5 text-sm font-bold text-[#405d72]"
-                    >
-                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0f8f91]/10 text-[11px] font-black text-[#0f8f91]">
-                        ✓
-                      </span>
-                      <span>{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-8 rounded-[1.7rem] bg-[#09233d] p-6 text-white">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8de6e2]">
-                Create company
-              </p>
-              <h3 className="mt-2 text-2xl font-black">
-                {draft.name.trim()} · {selectedPlan.name}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-white/60">
-                The company will be created in draft status. Next, Sonny
-                will take you to headquarters, office configuration,
-                business tools and final activation checkout.
-              </p>
-            </div>
-
-            <div className="shrink-0 text-left lg:text-right">
-              <p className="text-3xl font-black">
-                ${selectedPlan.price}
-                <span className="text-sm text-white/55">/month</span>
-              </p>
-              <p className="mt-1 text-sm font-bold text-[#8de6e2]">
-                {selectedPlan.workforce}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <NavigationButtons
-          backLabel="Edit company identity"
-          continueLabel={
-            loading
-              ? "Creating Company..."
-              : authenticated
-                ? "Create Company"
-                : "Continue to Account Creation"
-          }
-          continueDisabled={loading}
-          onBack={onBack}
-          onContinue={onContinue}
-        />
-
-        {!authenticated && (
-          <p className="mt-4 text-center text-sm leading-6 text-[#698296]">
-            Your company and selected plan remain saved while you create
-            or sign in to your Firmic account.
-          </p>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function CreatingStep({
-  companyName,
-  plan,
-  stage,
-}: {
-  companyName: string;
-  plan: PlanOption;
-  stage: number;
-}) {
-  const stages = [
-    "Creating company record",
-    "Initializing Launch Engine",
-    "Preparing company workspace",
-    "Company created — opening headquarters",
-  ];
+  const selected = PLANS.find((plan) => plan.code === selectedPlan);
 
   return (
-    <section className="relative overflow-hidden rounded-[2.3rem] bg-[#09233d] px-6 py-14 text-white shadow-[0_30px_90px_rgba(9,35,61,0.22)] sm:px-10 lg:px-16 lg:py-20">
-      <div className="absolute -right-20 -top-28 h-80 w-80 rounded-full bg-[#20b9b5]/20 blur-3xl" />
+    <section className="w-full">
+      <StepHeader
+        label="AI workforce"
+        step="Step 2"
+        progress="32%"
+        onBack={onBack}
+        backLabel="Company identity"
+      />
 
-      <div className="relative mx-auto max-w-3xl text-center">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[1.8rem] bg-[#20b9b5] text-3xl font-black text-[#09233d] shadow-[0_20px_50px_rgba(32,185,181,0.25)]">
-          {stage >= 3 ? "✓" : "F"}
-        </div>
-
-        <p className="mt-8 text-xs font-black uppercase tracking-[0.18em] text-[#8de6e2]">
-          Firmic Launch Engine
+      <div className="rounded-[2.25rem] bg-[#09233d] p-7 text-white sm:p-10">
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8de6e2]">
+          Firmic Company Plan
         </p>
 
         <h1 className="mt-4 text-4xl font-black tracking-[-0.05em] sm:text-5xl">
-          {stage >= 3
-            ? `${companyName} has been created.`
-            : `Creating ${companyName}.`}
+          Choose your company&apos;s operating capacity.
         </h1>
 
-        <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-white/65">
-          {stage >= 3
-            ? "The company now exists in draft status. Sonny is moving you into headquarters configuration before office, business tools and activation checkout."
-            : "Sonny is preparing the foundation of your AI-native company. Platform access remains locked until the configuration journey and checkout are complete."}
+        <p className="mt-4 max-w-3xl text-lg leading-8 text-white/65">
+          {draft.name} will be owned by{" "}
+          <strong className="text-white">
+            {accountUser.full_name || accountUser.email}
+          </strong>
+          . Choose the plan Firmic should attach to the company when it is
+          created.
         </p>
+      </div>
 
-        <div className="mx-auto mt-9 max-w-xl rounded-[1.8rem] border border-white/12 bg-white/8 p-6 text-left backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-5 border-b border-white/10 pb-5">
-            <div>
-              <p className="text-sm font-black">{companyName}</p>
-              <p className="mt-1 text-sm text-white/50">
-                {plan.name} · {plan.workforce}
+      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+        {PLANS.map((plan) => {
+          const active = selectedPlan === plan.code;
+
+          return (
+            <button
+              key={plan.code}
+              type="button"
+              onClick={() => onSelect(plan.code)}
+              className={[
+                "relative flex h-full flex-col rounded-[2rem] border bg-white p-7 text-left shadow-[0_20px_60px_rgba(9,35,61,0.07)] transition",
+                active
+                  ? "border-[#0f8f91] ring-4 ring-[#0f8f91]/10"
+                  : "border-[#09233d]/10 hover:-translate-y-1 hover:border-[#0f8f91]/40",
+              ].join(" ")}
+            >
+              {plan.recommended && (
+                <span className="absolute right-5 top-5 rounded-full bg-[#20b9b5] px-3 py-1 text-xs font-black text-[#09233d]">
+                  Recommended
+                </span>
+              )}
+
+              <p className="text-sm font-black uppercase tracking-[0.16em] text-[#0f8f91]">
+                {plan.name}
               </p>
-            </div>
 
-            <p className="font-black text-[#8de6e2]">
-              ${plan.price}/month
-            </p>
-          </div>
+              <p className="mt-5 text-4xl font-black">
+                ${plan.price}
+                <span className="text-base font-bold text-[#698296]">
+                  /month
+                </span>
+              </p>
 
-          <div className="mt-5 space-y-4">
-            {stages.map((label, index) => {
-              const complete = stage > index;
-              const active = stage === index;
+              <p className="mt-2 text-sm font-black text-[#0f8f91]">
+                + ${COMPANY_ACTIVATION_FEE_USD} one-time activation fee
+              </p>
 
-              return (
-                <div
-                  key={label}
-                  className="flex items-center gap-3"
-                >
-                  <span
-                    className={[
-                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black",
-                      complete
-                        ? "bg-[#20b9b5] text-[#09233d]"
-                        : active
-                          ? "border border-[#20b9b5] bg-[#20b9b5]/10 text-[#8de6e2]"
-                          : "border border-white/15 bg-white/5 text-white/30",
-                    ].join(" ")}
-                  >
-                    {complete ? "✓" : index + 1}
-                  </span>
+              <p className="mt-3 text-lg font-black">
+                {plan.workforce}
+              </p>
 
+              <p className="mt-4 min-h-[72px] text-sm leading-6 text-[#60798b]">
+                {plan.description}
+              </p>
+
+              <div className="mt-6 space-y-3 border-t border-[#09233d]/10 pt-5">
+                {plan.features.map((feature) => (
                   <p
-                    className={[
-                      "text-sm font-bold",
-                      complete || active
-                        ? "text-white"
-                        : "text-white/35",
-                    ].join(" ")}
+                    key={feature}
+                    className="text-sm font-bold text-[#36546a]"
                   >
-                    {label}
+                    ✓ {feature}
                   </p>
-                </div>
-              );
-            })}
-          </div>
+                ))}
+              </div>
+
+              <div
+                className={[
+                  "mt-7 rounded-2xl px-4 py-3 text-center text-sm font-black",
+                  active
+                    ? "bg-[#0f8f91] text-white"
+                    : "bg-[#edf3f4] text-[#587286]",
+                ].join(" ")}
+              >
+                {active ? "Selected" : `Choose ${plan.name}`}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {error && <ErrorBox message={error} />}
+
+      <div className="mt-8 rounded-[2rem] border border-[#09233d]/10 bg-white p-6 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-6">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#0f8f91]">
+            Create company
+          </p>
+
+          <h2 className="mt-2 text-2xl font-black">
+            {draft.name}
+            {selected ? ` · ${selected.name}` : ""}
+          </h2>
+
+          <p className="mt-2 text-sm text-[#698296]">
+            {selected
+              ? `$${selected.price}/month + $${COMPANY_ACTIVATION_FEE_USD} one-time activation fee · ${selected.workforce}. The activation fee is charged once and is not part of the recurring monthly subscription. The company will remain in launch status until payment, Hermes compliance, Firmic approval, and provisioning are complete.`
+              : "Select a plan before Firmic creates the company."}
+          </p>
         </div>
 
-        <div className="mx-auto mt-8 h-2 max-w-xl overflow-hidden rounded-full bg-white/10">
-          <div
-            className="h-full rounded-full bg-[#20b9b5] transition-all duration-500"
-            style={{ width: `${Math.min(100, (stage + 1) * 25)}%` }}
-          />
-        </div>
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={loading || !selectedPlan}
+          className="mt-5 inline-flex min-h-[56px] min-w-[220px] items-center justify-center rounded-2xl bg-[#09233d] px-6 py-4 font-black text-white transition hover:bg-[#0f8f91] disabled:bg-[#b7c5cb] sm:mt-0"
+        >
+          {loading ? "Creating Company..." : "Create Company"}
+          {!loading && <span className="ml-3 text-xl">→</span>}
+        </button>
       </div>
     </section>
   );
 }
 
 function StepHeader({
-  eyebrow,
-  title,
-  description,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div>
-      <p className="text-xs font-black uppercase tracking-[0.17em] text-[#0f8f91]">
-        {eyebrow}
-      </p>
-      <h1 className="mt-4 text-4xl font-black tracking-[-0.05em] sm:text-5xl">
-        {title}
-      </h1>
-      <p className="mt-4 max-w-3xl text-lg leading-8 text-[#60798b]">
-        {description}
-      </p>
-    </div>
-  );
-}
-
-function SonnyPanel({
-  title,
-  body,
-  next,
-}: {
-  title: string;
-  body: string;
-  next: string;
-}) {
-  return (
-    <aside className="space-y-5">
-      <div className="rounded-[2rem] bg-[#09233d] p-7 text-white shadow-[0_24px_70px_rgba(9,35,61,0.16)]">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#20b9b5] font-black text-[#09233d]">
-          S
-        </div>
-        <p className="mt-6 text-xs font-black uppercase tracking-[0.16em] text-[#8de6e2]">
-          Sonny says
-        </p>
-        <h2 className="mt-3 text-2xl font-black tracking-[-0.03em]">
-          {title}
-        </h2>
-        <p className="mt-4 text-sm leading-7 text-white/65">
-          {body}
-        </p>
-      </div>
-
-      <div className="rounded-[2rem] border border-[#09233d]/10 bg-white p-6">
-        <p className="text-xs font-black uppercase tracking-[0.16em] text-[#0f8f91]">
-          Next transition
-        </p>
-        <h3 className="mt-3 text-xl font-black">{next}</h3>
-        <p className="mt-3 text-sm leading-6 text-[#698296]">
-          Each stage remains focused on one company-building decision.
-        </p>
-      </div>
-    </aside>
-  );
-}
-
-function JourneyItem({
-  number,
   label,
-  active = false,
+  step,
+  progress,
+  onBack,
+  backLabel,
 }: {
-  number: string;
   label: string;
-  active?: boolean;
+  step: string;
+  progress: string;
+  onBack: () => void;
+  backLabel: string;
 }) {
+  return (
+    <>
+      <div className="mb-7 flex items-center justify-between gap-5">
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-sm font-black text-[#587286] transition hover:text-[#0f8f91]"
+        >
+          ← {backLabel}
+        </button>
+
+        <div className="text-right">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#0f8f91]">
+            {label}
+          </p>
+          <p className="mt-1 text-sm font-bold text-[#698296]">
+            {step}
+          </p>
+        </div>
+      </div>
+
+      <div className="mb-8 h-2 overflow-hidden rounded-full bg-[#dce8eb]">
+        <div
+          className="h-full rounded-full bg-[#0f8f91]"
+          style={{ width: progress }}
+        />
+      </div>
+    </>
+  );
+}
+
+function ErrorBox({ message }: { message: string }) {
   return (
     <div
-      className={[
-        "flex items-center gap-4 rounded-2xl border px-4 py-3",
-        active
-          ? "border-[#20b9b5]/40 bg-[#20b9b5]/10"
-          : "border-white/10 bg-white/5",
-      ].join(" ")}
+      role="alert"
+      className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700"
     >
-      <span
-        className={[
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-black",
-          active
-            ? "bg-[#20b9b5] text-[#09233d]"
-            : "bg-white/10 text-white/45",
-        ].join(" ")}
-      >
-        {number}
-      </span>
-      <p
-        className={[
-          "text-sm font-bold",
-          active ? "text-white" : "text-white/50",
-        ].join(" ")}
-      >
-        {label}
-      </p>
-    </div>
-  );
-}
-
-function NavigationButtons({
-  backLabel,
-  continueLabel,
-  continueDisabled = false,
-  onBack,
-  onContinue,
-}: {
-  backLabel: string;
-  continueLabel: string;
-  continueDisabled?: boolean;
-  onBack: () => void;
-  onContinue: () => void;
-}) {
-  return (
-    <div className="mt-9 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <button
-        type="button"
-        onClick={onBack}
-        className="min-h-[54px] rounded-2xl border border-[#09233d]/12 bg-white px-6 py-3 text-sm font-black text-[#587286] transition hover:border-[#0f8f91]/35 hover:text-[#0f8f91]"
-      >
-        ← {backLabel}
-      </button>
-
-      <button
-        type="button"
-        onClick={onContinue}
-        disabled={continueDisabled}
-        className="inline-flex min-h-[56px] items-center justify-center rounded-2xl bg-[#09233d] px-7 py-4 text-base font-black text-white shadow-[0_18px_40px_rgba(9,35,61,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0f8f91] disabled:cursor-not-allowed disabled:bg-[#b7c5cb] disabled:shadow-none"
-      >
-        {continueLabel}
-        {!continueLabel.includes("...") && (
-          <span className="ml-3 text-xl">→</span>
-        )}
-      </button>
+      {message}
     </div>
   );
 }
@@ -1040,20 +1247,16 @@ function Field({
       <span className="text-sm font-black text-[#203f57]">
         {label}
       </span>
+
       {description && (
         <span className="mt-1 block text-xs leading-5 text-[#7b91a0]">
           {description}
         </span>
       )}
+
       <span className="mt-3 block">{children}</span>
     </label>
   );
-}
-
-function wait(milliseconds: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, milliseconds);
-  });
 }
 
 const inputClassName =

@@ -9,8 +9,7 @@ import {
 } from "../utils/workspaceContext";
 import {
   confirmOrder,
-  FirmicOrder,
-  getConfirmedOrder,
+  FirmicOrder,getConfirmedOrder,
   getPendingOrder,
   reconcileOrderWithActiveHeadquarters,
   savePendingOrder,
@@ -29,41 +28,40 @@ function detectBrand(cardNumber: string) {
 }
 
 function normalizeLaunchFee(order: FirmicOrder): FirmicOrder {
-  const launchFeeItem: FirmicOrder["items"][number] = {
-    key: "company-launch-fee",
-    name: "Company Launch Fee",
-    category: "fee",
-    billing: "one-time",
-    unitPriceUsd: COMPANY_LAUNCH_FEE_USD,
-    quantity: 1,
-    included: false,
-    note: "One-time company activation and compliance setup",
-  };
+  const launchFeeItem = {
+  key: "company-launch-fee",
+  name: "Company Launch Fee",
+  category: "fee" as const,
+  billing: "one-time" as const,
+  unitPriceUsd: COMPANY_LAUNCH_FEE_USD,
+  quantity: 1,
+  included: false,
+  note: "One-time company launch and compliance setup",
+};
 
-  const itemsWithoutLegacyFee: FirmicOrder["items"] =
-    order.items.filter(
-      (item) =>
-        item.key !== "hookup-fee" &&
-        item.key !== "company-launch-fee" &&
-        item.name.toLowerCase() !== "hookup fee" &&
-        item.name.toLowerCase() !== "company launch fee",
-    );
+  const itemsWithoutLegacyFee = order.items.filter(
+    (item) =>
+      item.key !== "hookup-fee" &&
+      item.key !== "company-launch-fee" &&
+      item.name.toLowerCase() !== "hookup fee" &&
+      item.name.toLowerCase() !== "company launch fee",
+  );
 
-  const items: FirmicOrder["items"] =
+  const items =
     order.orderType === "upgrade"
       ? itemsWithoutLegacyFee
       : [...itemsWithoutLegacyFee, launchFeeItem];
 
   const monthlyBillableItems = items.filter(
     (item) =>
-      item.included !== true &&
+      !item.included &&
       item.billing === "monthly" &&
       item.unitPriceUsd > 0,
   );
 
   const oneTimeBillableItems = items.filter(
     (item) =>
-      item.included !== true &&
+      !item.included &&
       item.billing === "one-time" &&
       item.unitPriceUsd > 0,
   );
@@ -98,8 +96,7 @@ function normalizeLaunchFee(order: FirmicOrder): FirmicOrder {
       : items
           .filter(
             (item) =>
-              item.included !== true &&
-              item.unitPriceUsd > 0,
+              !item.included && item.unitPriceUsd > 0,
           )
           .map((item) => item.key);
 
@@ -110,8 +107,7 @@ function normalizeLaunchFee(order: FirmicOrder): FirmicOrder {
       ? items.filter((item) => chargeKeySet.has(item.key))
       : items.filter(
           (item) =>
-            item.included !== true &&
-            item.unitPriceUsd > 0,
+            !item.included && item.unitPriceUsd > 0,
         );
 
   const amountDueSubtotalUsd = chargeItems.reduce(
@@ -148,123 +144,24 @@ function normalizeLaunchFee(order: FirmicOrder): FirmicOrder {
     monthlySubtotalUsd,
     monthlyVatUsd,
     monthlyTotalUsd,
-    monthlyTotalAed: Math.round(monthlyTotalUsd * 3.67),
+    monthlyTotalAed: Math.round(
+      monthlyTotalUsd * 3.67,
+    ),
     oneTimeSubtotalUsd,
     oneTimeVatUsd,
     oneTimeTotalUsd,
     firstPaymentUsd,
-    firstPaymentAed: Math.round(firstPaymentUsd * 3.67),
+    firstPaymentAed: Math.round(
+      firstPaymentUsd * 3.67,
+    ),
     chargeItemKeys,
     amountDueSubtotalUsd,
     amountDueVatUsd,
     amountDueUsd,
-    amountDueAed: Math.round(amountDueUsd * 3.67),
+    amountDueAed: Math.round(
+      amountDueUsd * 3.67,
+    ),
   };
-}
-
-
-function scoreSonnyVoice(
-  voice: SpeechSynthesisVoice,
-) {
-  const name = voice.name.toLowerCase();
-  const lang = (voice.lang || "").toLowerCase();
-
-  if (!lang.startsWith("en")) return -1000;
-
-  let score = 0;
-
-  if (/(ryan|guy|daniel|alex|male)/i.test(name)) {
-    score += 180;
-  }
-
-  if (/(natural|online|enhanced|premium)/i.test(name)) {
-    score += 60;
-  }
-
-  if (lang === "en-us") score += 35;
-  if (lang === "en-gb") score += 30;
-
-  return score;
-}
-
-async function getSpeechVoices() {
-  if (
-    typeof window === "undefined" ||
-    !("speechSynthesis" in window)
-  ) {
-    return [] as SpeechSynthesisVoice[];
-  }
-
-  const immediate =
-    window.speechSynthesis.getVoices();
-
-  if (immediate.length) {
-    return immediate;
-  }
-
-  return await new Promise<SpeechSynthesisVoice[]>(
-    (resolve) => {
-      const finish = () => {
-        window.speechSynthesis.removeEventListener(
-          "voiceschanged",
-          finish,
-        );
-
-        resolve(
-          window.speechSynthesis.getVoices(),
-        );
-      };
-
-      window.speechSynthesis.addEventListener(
-        "voiceschanged",
-        finish,
-      );
-
-      window.setTimeout(finish, 1200);
-    },
-  );
-}
-
-async function speakSonnyLaunch(
-  companyName: string,
-) {
-  if (
-    typeof window === "undefined" ||
-    !("speechSynthesis" in window)
-  ) {
-    return;
-  }
-
-  const voices =
-    await getSpeechVoices();
-
-  const preferred =
-    [...voices].sort(
-      (a, b) =>
-        scoreSonnyVoice(b) -
-        scoreSonnyVoice(a),
-    )[0] || null;
-
-  const text =
-    `Congratulations. ${companyName} has completed payment and your Firmic launch package has been submitted. ` +
-    `I'm Sonny, your AI COO. Before I can open your operating workspace, there is one mandatory step left. ` +
-    `I'm introducing you to Hermes, your Compliance AI. She will guide you through identity, ownership, licensing and KYC verification.`;
-
-  window.speechSynthesis.cancel();
-
-  const utterance =
-    new SpeechSynthesisUtterance(text);
-
-  utterance.lang = "en-US";
-  utterance.rate = 0.92;
-  utterance.pitch = 0.94;
-  utterance.volume = 1;
-
-  if (preferred) {
-    utterance.voice = preferred;
-  }
-
-  window.speechSynthesis.speak(utterance);
 }
 
 export default function Checkout() {
@@ -274,7 +171,7 @@ export default function Checkout() {
   const [order, setOrder] = useState<FirmicOrder | null>(
     null,
   );
-  const [activating, setActivating] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
   const [error, setError] = useState("");
   const [cardholderName, setCardholderName] =
     useState("");
@@ -286,10 +183,6 @@ export default function Checkout() {
   >("checkout");
 
   useEffect(() => {
-    if (!router.isReady) {
-      return;
-    }
-
     const workspace = getActiveWorkspace();
 
     if (!workspace?.id) {
@@ -299,48 +192,32 @@ export default function Checkout() {
       return;
     }
 
-    const companyId = String(workspace.id);
+    const pendingOrder = getPendingOrder(
+      String(workspace.id),
+    );
 
-    const pendingOrder =
-      getPendingOrder(companyId);
-
-    if (pendingOrder) {
-      const reconciledOrder =
-        workspace.headquarters?.office_code
-          ? reconcileOrderWithActiveHeadquarters(
-              pendingOrder,
-              workspace.headquarters,
-            )
-          : pendingOrder;
-
-      const normalizedOrder =
-        normalizeLaunchFee(reconciledOrder);
-
-      savePendingOrder(normalizedOrder);
-
-      localStorage.removeItem(
-        "firmic_selected_headquarters",
-      );
-
-      setOrder(normalizedOrder);
-      setPaymentStage("checkout");
+    if (!pendingOrder) {
+      setOrder(null);
       return;
     }
 
-    const confirmedOrder =
-      getConfirmedOrder(companyId);
+    const reconciledOrder =
+      workspace.headquarters?.office_code
+        ? reconcileOrderWithActiveHeadquarters(
+            pendingOrder,
+            workspace.headquarters,
+          )
+        : pendingOrder;
 
-    if (
-      confirmedOrder &&
-      confirmedOrder.paymentStatus === "paid_demo"
-    ) {
-      setOrder(confirmedOrder);
-      setPaymentStage("handoff");
-      return;
-    }
+    const normalizedOrder =
+      normalizeLaunchFee(reconciledOrder);
 
-    setOrder(null);
-  }, [router.isReady]);
+    savePendingOrder(normalizedOrder);
+    localStorage.removeItem(
+      "firmic_selected_headquarters",
+    );
+    setOrder(normalizedOrder);
+  }, [router]);
 
   const monthlyItems = useMemo(
     () =>
@@ -432,14 +309,36 @@ export default function Checkout() {
   }
 
   async function completePayment() {
-    if (activating) return;
+    if (processingPayment) return;
 
     try {
-      setActivating(true);
+      setProcessingPayment(true);
       setError("");
       validatePayment();
 
       const workspace = getActiveWorkspace();
+      const resumeHandoff =
+      router.query.resume ===
+      "handoff";
+
+       if (
+       resumeHandoff &&
+       workspace?.id
+) {
+       const confirmedOrder =
+       getConfirmedOrder(
+       String(workspace.id),
+    );
+
+        if (
+        confirmedOrder?.paymentStatus ===
+        "paid_demo"
+  )   {
+        setOrder(confirmedOrder);
+        setPaymentStage("handoff");
+        return;
+  }
+}
 
       if (!workspace?.id) {
         throw new Error(
@@ -487,19 +386,14 @@ export default function Checkout() {
             )
           : normalizeLaunchFee(order);
 
-      const confirmedOrder = confirmOrder(
-        finalOrder,
-        {
-          type: "card",
-          brand: detectBrand(cardNumber),
-          last4: cardNumber
-            .replace(/\D/g, "")
-            .slice(-4),
-          cardholderName: cardholderName.trim(),
-        },
-      );
-
-      setOrder(confirmedOrder);
+      confirmOrder(finalOrder, {
+        type: "card",
+        brand: detectBrand(cardNumber),
+        last4: cardNumber
+          .replace(/\D/g, "")
+          .slice(-4),
+        cardholderName: cardholderName.trim(),
+      });
 
       setActiveHeadquarters(
         workspace.headquarters ||
@@ -550,7 +444,7 @@ export default function Checkout() {
           : "Checkout failed.",
       );
     } finally {
-      setActivating(false);
+      setProcessingPayment(false);
     }
   }
 
@@ -568,7 +462,7 @@ export default function Checkout() {
 
           <p className="mt-3 text-[#60798b]">
             Return to company configuration so Sonny can
-            prepare the activation order.
+            prepare the launch checkout order.
           </p>
 
           <button
@@ -611,18 +505,20 @@ export default function Checkout() {
           <div className="relative grid gap-7 lg:grid-cols-[1fr_360px] lg:items-center">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.17em] text-[#8de6e2]">
-                Sonny · Company Activation
+                Sonny · Launch Checkout
               </p>
 
               <h1 className="mt-4 text-4xl font-black tracking-[-0.05em] sm:text-5xl">
-                Review and activate your company.
+                Review and submit your company.
               </h1>
 
               <p className="mt-4 max-w-3xl text-lg leading-8 text-white/65">
                 I&apos;ve prepared your Firmic subscription,
-                headquarters and included infrastructure. After
-                payment, I&apos;ll introduce you to Hermes for
-                mandatory compliance verification.
+                headquarters and included infrastructure. Complete
+                payment to submit your launch package and continue
+                to Hermes for mandatory compliance review. Your
+                workspace will be activated only after Firmic
+                approves the compliance package.
               </p>
             </div>
 
@@ -917,13 +813,13 @@ export default function Checkout() {
                 type="button"
                 onClick={completePayment}
                 disabled={
-                  activating ||
+                  processingPayment ||
                   (order.orderType === "upgrade" &&
                     amountDue <= 0)
                 }
                 className="mt-7 w-full rounded-2xl bg-[#20b9b5] px-6 py-4 font-black text-[#09233d] transition hover:-translate-y-0.5 hover:bg-[#38cbc7] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {activating
+                {processingPayment
                   ? "Processing Payment..."
                   : order.orderType === "upgrade"
                     ? `Pay $${amountDue.toFixed(
@@ -931,7 +827,7 @@ export default function Checkout() {
                       )} & Update Subscription`
                     : `Pay $${amountDue.toFixed(
                         2,
-                      )} & Begin Compliance`}
+                      )} & Continue to Compliance`}
               </button>
 
               <p className="mt-4 text-center text-xs leading-5 text-white/40">
@@ -956,39 +852,19 @@ function PaymentTransition({
   companyName: string;
   onContinueToHermes: () => void;
 }) {
-  useEffect(() => {
-    if (stage !== "handoff") {
-      return;
-    }
-
-    const key =
-      `firmic_sonny_launch_greeting:${companyName}`;
-
-    const alreadyPlayed =
-      sessionStorage.getItem(key) === "1";
-
-    if (!alreadyPlayed) {
-      sessionStorage.setItem(key, "1");
-      void speakSonnyLaunch(companyName);
-    }
-
-    return () => {
-      window.speechSynthesis?.cancel?.();
-    };
-  }, [companyName, stage]);
   const title =
     stage === "processing"
-      ? "Processing your company activation."
+      ? "Finalizing your launch payment."
       : stage === "paid"
-        ? "Payment confirmed."
+        ? `Congratulations — ${companyName} is ready for compliance.`
         : "Meet Hermes, your Compliance AI.";
 
   const body =
     stage === "processing"
-      ? "Sonny is confirming the subscription and reserving your company headquarters."
+      ? "Sonny is confirming your Firmic subscription, headquarters, company tools and AI workforce."
       : stage === "paid"
-        ? `${companyName} is now paid and ready for mandatory compliance verification.`
-        : `${companyName} has completed company setup and payment. I’m Sonny, your AI COO. I’m now handing you to Hermes, your Compliance AI. She will guide you through the mandatory identity, ownership, licensing and KYC verification required before your company can become operational.`;
+        ? `You've completed your company setup and credentials for ${companyName}. I’m Sonny, your AI COO, and the next step is mandatory compliance verification.`
+        : "I’m handing you to Hermes. She will guide you through the required company, ownership, identity and KYC documents, explain anything that needs attention, and keep your company locked until Firmic Compliance approves the package.";
 
   const progress =
     stage === "processing"
@@ -1014,7 +890,7 @@ function PaymentTransition({
           <p className="mt-8 text-xs font-black uppercase tracking-[0.18em] text-[#8de6e2]">
             {stage === "handoff"
               ? "Sonny → Hermes"
-              : "Sonny · Launch Engine"}
+              : "Sonny · AI COO"}
           </p>
 
           <h1 className="mt-4 text-4xl font-black tracking-[-0.05em] sm:text-5xl">
@@ -1025,6 +901,23 @@ function PaymentTransition({
             {body}
           </p>
 
+          {stage === "handoff" && (
+            <div className="mx-auto mt-7 max-w-2xl rounded-3xl border border-white/10 bg-white/8 p-6 text-left">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8de6e2]">
+                Sonny says
+              </p>
+              <p className="mt-3 text-lg font-black">
+                “Your company foundation is complete.”
+              </p>
+              <p className="mt-3 leading-7 text-white/65">
+                Hermes is now responsible for your compliance review. Follow
+                her instructions, submit the required documents, and Firmic
+                will notify you when your company is approved and operational
+                access can be unlocked.
+              </p>
+            </div>
+          )}
+
           <div className="mx-auto mt-9 h-2 max-w-xl overflow-hidden rounded-full bg-white/10">
             <div
               className="h-full rounded-full bg-[#20b9b5] transition-all duration-700"
@@ -1033,31 +926,19 @@ function PaymentTransition({
           </div>
 
           {stage === "handoff" ? (
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() =>
-                  void speakSonnyLaunch(companyName)
-                }
-                className="inline-flex min-h-[58px] items-center justify-center rounded-2xl border border-white/15 bg-white/8 px-6 py-4 text-sm font-black text-white transition hover:bg-white/12"
-              >
-                🔊 Replay Sonny
-              </button>
-
-              <button
-                type="button"
-                onClick={onContinueToHermes}
-                className="inline-flex min-h-[58px] items-center justify-center rounded-2xl bg-[#20b9b5] px-8 py-4 text-base font-black text-[#09233d] transition hover:bg-[#38cbc7]"
-              >
-                Continue with Hermes
-                <span className="ml-3 text-xl">→</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={onContinueToHermes}
+              className="mt-8 inline-flex min-h-[58px] items-center justify-center rounded-2xl bg-[#20b9b5] px-8 py-4 text-base font-black text-[#09233d] transition hover:bg-[#3acbc7]"
+            >
+              Continue with Hermes
+              <span className="ml-3 text-xl">→</span>
+            </button>
           ) : (
             <p className="mt-4 text-sm font-bold text-white/45">
               {stage === "processing"
-                ? "Confirming payment"
-                : "Payment complete"}
+                ? "Confirming payment and launch package"
+                : "Preparing your compliance handoff"}
             </p>
           )}
         </div>
