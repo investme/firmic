@@ -18,30 +18,13 @@ router = APIRouter()
 
 REQUIRED_COMPLIANCE_DOCUMENTS = [
     {
-        "key": "trade_license",
-        "label": "Trade License",
-        "aliases": [
-            "trade license",
-            "business license",
-            "commercial license",
-        ],
-    },
-    {
         "key": "passport",
         "label": "Passport Copy",
         "aliases": [
             "passport",
             "passport copy",
             "owner passport",
-        ],
-    },
-    {
-        "key": "incorporation_certificate",
-        "label": "Incorporation Certificate",
-        "aliases": [
-            "incorporation certificate",
-            "certificate of incorporation",
-            "incorporation",
+            "government id",
         ],
     },
     {
@@ -51,9 +34,83 @@ REQUIRED_COMPLIANCE_DOCUMENTS = [
             "proof of address",
             "address proof",
             "utility bill",
+            "bank statement",
+            "tenancy contract",
+        ],
+    },
+    {
+        "key": "trade_license",
+        "label": "Trade License",
+        "aliases": [
+            "trade license",
+            "business license",
+            "commercial license",
+        ],
+    },
+    {
+        "key": "certificate_of_incorporation",
+        "label": "Company Formation Documents",
+        "aliases": [
+            "company formation",
+            "formation documents",
+            "incorporation certificate",
+            "certificate of incorporation",
+            "memorandum",
+            "articles of association",
+            "incorporation",
+        ],
+    },
+    {
+        "key": "beneficial_owner_declaration",
+        "label": "Beneficial Owner Declaration",
+        "aliases": [
+            "beneficial owner",
+            "beneficial owner declaration",
+            "ubo",
+            "ultimate beneficial owner",
+            "ownership declaration",
+        ],
+    },
+    {
+        "key": "emirates_id",
+        "label": "Emirates ID",
+        "aliases": [
+            "emirates id",
+            "emirates_id",
+            "uae id",
+            "emirates identity card",
+        ],
+    },
+    {
+        "key": "kyc_questionnaire",
+        "label": "KYC Questionnaire",
+        "aliases": [
+            "kyc questionnaire",
+            "kyc_questionnaire",
+            "kyc",
+            "know your customer questionnaire",
+            "kyc form",
+            "kyc submission",
         ],
     },
 ]
+
+
+def applicable_compliance_documents(
+    company: Company,
+) -> list[dict[str, Any]]:
+    return [
+        requirement
+        for requirement in REQUIRED_COMPLIANCE_DOCUMENTS
+        if (
+            requirement["key"] != "emirates_id"
+            or getattr(
+                company,
+                "is_uae_resident",
+                None,
+            ) is not False
+        )
+    ]
 
 
 def get_db():
@@ -348,7 +405,7 @@ def list_company_compliance_requests(
     db: Session = Depends(get_db),
 ):
     user_id = token.get("sub")
-    verify_company_access(
+    company = verify_company_access(
         company_id,
         user_id,
         db,
@@ -375,7 +432,7 @@ def list_company_compliance_requests(
 
     results = []
 
-    for requirement in REQUIRED_COMPLIANCE_DOCUMENTS:
+    for requirement in applicable_compliance_documents(company):
         matching_documents = [
             document
             for document in documents

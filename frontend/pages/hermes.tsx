@@ -1,13 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/router";
 import FirmicSidebar from "../components/FirmicSidebar";
-import { getHermes } from "../services/hermesApi";
+import { chatHermes, getHermes } from "../services/hermesApi";
 import { getCompanyDocuments } from "../services/documentApi";
 import { getCompanyTasks, createTask } from "../services/taskApi";
 import { getProgress } from "../services/sonnyApi";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { getActiveWorkspace } from "../src/utils/workspaceContext";
+import {
+  speakHermesBriefing,
+  speakHermesResponse,
+} from "../src/utils/firmicVoice";
+
+type HermesConversationMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
 
 export default function HermesCompliance() {
+  const router = useRouter();
+  const didAutoSpeakRef = useRef(false);
+
   const [hermes, setHermes] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
@@ -21,6 +34,12 @@ export default function HermesCompliance() {
   const [actionLoading, setActionLoading] = useState("");
   const [notice, setNotice] = useState("");
   const [warning, setWarning] = useState("");
+  const [speaking, setSpeaking] = useState(false);
+
+  const [agentMessage, setAgentMessage] = useState("");
+  const [agentWorking, setAgentWorking] = useState(false);
+  const [conversation, setConversation] =
+    useState<HermesConversationMessage[]>([]);
 
   useEffect(() => {
     loadHermes();
@@ -183,16 +202,59 @@ export default function HermesCompliance() {
     );
   });
 
-  const hasKYB = documents.some((document) => {
+  const kycDocuments = documents.filter((document) => {
     const searchableText = `${document.name || ""} ${
       document.type || ""
     }`.toLowerCase();
 
     return (
+      searchableText.includes("kyc") ||
       searchableText.includes("kyb") ||
+      searchableText.includes("kyc_questionnaire") ||
+      searchableText.includes("know your customer") ||
       searchableText.includes("know your business")
     );
   });
+
+  const kycStatuses = kycDocuments.map((document) =>
+    String(document.status || "")
+      .trim()
+      .toLowerCase(),
+  );
+
+  const hasKYB = kycDocuments.length > 0;
+
+  const kycApproved = kycStatuses.some((status) =>
+    ["approved", "verified"].includes(status),
+  );
+
+  const kycRejected = kycStatuses.some((status) =>
+    ["rejected", "declined", "action_required"].includes(
+      status,
+    ),
+  );
+
+  const kycAwaitingVerification =
+    hasKYB &&
+    !kycApproved &&
+    !kycRejected &&
+    kycStatuses.some((status) =>
+      [
+        "uploaded",
+        "under_review",
+        "pending",
+        "awaiting_review",
+        "submitted",
+      ].includes(status),
+    );
+
+  const kycRequirementStatus = kycApproved
+    ? "Complete"
+    : kycRejected
+      ? "Action Required"
+      : kycAwaitingVerification
+        ? "Awaiting Verification"
+        : "Missing";
 
   const hasOwnerDeclaration = documents.some((document) => {
     const searchableText = `${document.name || ""} ${
@@ -263,10 +325,13 @@ export default function HermesCompliance() {
     },
     {
       name: "KYC / KYB Documents",
-      status: hasKYB ? "Complete" : "Pending",
+      status: kycRequirementStatus,
       owner: "Hermes",
       icon: "🛡️",
-      action: "Upload KYB Documents",
+      action:
+        kycRequirementStatus === "Action Required"
+          ? "Replace KYC / KYB Documents"
+          : "Upload KYC / KYB Documents",
     },
   ];
 
@@ -313,8 +378,10 @@ export default function HermesCompliance() {
       ? "Trade license document is missing."
       : "",
     !hasKYB
-      ? "KYB document package is missing."
-      : "",
+      ? "KYC / KYB document package is missing."
+      : kycRejected
+        ? "KYC / KYB submission requires replacement or correction."
+        : "",
     !hasOwnerDeclaration
       ? "Beneficial owner declaration requires review."
       : "",
@@ -330,6 +397,157 @@ export default function HermesCompliance() {
   ].filter(Boolean);
 
   const openAlerts = dynamicAlerts.length;
+
+  function speakLiveBriefing() {
+    void speakHermesBriefing(
+      {
+        companyName,
+        score,
+        risk,
+        documentCount: documents.length,
+        pendingTasks,
+        openAlerts,
+        status: String(status || ""),
+      },
+      {
+        onStart: () => {
+          setSpeaking(true);
+          setNotice("Hermes is speaking.");
+        },
+        onEnd: () => {
+          setSpeaking(false);
+        },
+        onError: () => {
+          setSpeaking(false);
+          setWarning(
+            "Hermes voice could not start. Use Replay Hermes to try again.",
+          );
+        },
+      },
+    );
+  }
+
+  /*
+   * The Awaiting Compliance page routes here with ?speak=1.
+   * Wait until live company data has loaded, then speak once
+   * for that navigation. Refreshing Hermes data does not replay.
+   */
+  useEffect(() => {
+    if (
+      !router.isReady ||
+      router.query.speak !== "1" ||
+      loading ||
+      didAutoSpeakRef.current
+    ) {
+      return;
+    }
+
+    didAutoSpeakRef.current = true;
+
+    const timer = window.setTimeout(() => {
+      speakLiveBriefing();
+    }, 450);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    router.isReady,
+    router.query.speak,
+    loading,
+    companyName,
+    score,
+    risk,
+    documents.length,
+    pendingTasks,
+    openAlerts,
+    status,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis?.cancel?.();
+    };
+  }, []);
+
+  async function askHermes(
+    explicitMessage?: string,
+  ) {
+    const message = (
+      explicitMessage || agentMessage
+    ).trim();
+
+    if (!message || agentWorking) {
+      return;
+    }
+
+    const workspace = getActiveWorkspace();
+    const companyId =
+      workspace?.id ||
+      localStorage.getItem("company_id");
+
+    if (!companyId) {
+      setWarning("Select or create a company first.");
+      return;
+    }
+
+    const userMessage: HermesConversationMessage = {
+      role: "user",
+      content: message,
+    };
+
+    setConversation((current) => [
+      ...current,
+      userMessage,
+    ]);
+    setAgentMessage("");
+    setAgentWorking(true);
+    setWarning("");
+
+    try {
+      const result = await chatHermes(
+        String(companyId),
+        message,
+      );
+
+      const reply =
+        String(result?.reply || "").trim() ||
+        "I could not produce a compliance response.";
+
+      setConversation((current) => [
+        ...current,
+        {
+          role: "assistant",
+          content: reply,
+        },
+      ]);
+
+      if (result?.mode === "fallback") {
+        setWarning(
+          result?.warning ||
+            "Hermes AI generation is unavailable, so a deterministic compliance response was used.",
+        );
+      }
+
+      const speech =
+        String(result?.speech || reply).trim();
+
+      void speakHermesResponse(speech, {
+        onStart: () => setSpeaking(true),
+        onEnd: () => setSpeaking(false),
+        onError: () => setSpeaking(false),
+      });
+
+      await loadHermes();
+    } catch (error: any) {
+      setWarning(
+        error?.message ||
+          "Hermes could not process the compliance request.",
+      );
+    } finally {
+      setAgentWorking(false);
+    }
+  }
 
   async function createComplianceTask(
     title: string,
@@ -374,7 +592,11 @@ export default function HermesCompliance() {
   }
 
   function handleAction(action: string) {
-    if (action === "Upload KYB Documents") {
+    if (
+      action === "Upload KYB Documents" ||
+      action === "Upload KYC / KYB Documents" ||
+      action === "Replace KYC / KYB Documents"
+    ) {
       window.location.href = "/documents";
       return;
     }
@@ -438,14 +660,27 @@ export default function HermesCompliance() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={loadHermes}
-              disabled={loading}
-              className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-violet-700 transition disabled:bg-slate-300"
-            >
-              {loading ? "Refreshing..." : "Refresh Hermes"}
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={speakLiveBriefing}
+                disabled={loading || speaking}
+                className="border border-violet-200 bg-white text-violet-700 px-6 py-3 rounded-xl font-bold hover:bg-violet-50 transition disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                {speaking
+                  ? "Hermes Speaking..."
+                  : "🔊 Replay Hermes"}
+              </button>
+
+              <button
+                type="button"
+                onClick={loadHermes}
+                disabled={loading}
+                className="bg-violet-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-violet-700 transition disabled:bg-slate-300"
+              >
+                {loading ? "Refreshing..." : "Refresh Hermes"}
+              </button>
+            </div>
           </header>
 
           {notice && (
@@ -522,6 +757,113 @@ export default function HermesCompliance() {
               value={String(openAlerts)}
               icon="🔔"
             />
+          </section>
+
+          <section className="mt-8 overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-sm">
+            <div className="border-b border-violet-100 bg-gradient-to-r from-violet-50 to-indigo-50 p-6">
+              <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+                <div>
+                  <p className="text-sm font-bold text-violet-700">
+                    Hermes Agent Core
+                  </p>
+                  <h2 className="mt-1 text-2xl font-bold text-slate-950">
+                    Ask Hermes about this company&apos;s compliance.
+                  </h2>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                    Hermes reasons from the live company record, submitted documents,
+                    document states, compliance tasks, jurisdiction and recent Hermes memory.
+                    Uploaded documents are treated as submitted for verification — never as missing.
+                  </p>
+                </div>
+
+                <span className="w-fit rounded-full bg-violet-600 px-4 py-2 text-xs font-bold text-white">
+                  Live company context
+                </span>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {[
+                  "What is holding up approval?",
+                  "Do I need to upload anything else?",
+                  "What is the status of my KYC?",
+                  "What should I do next?",
+                ].map((question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    onClick={() => void askHermes(question)}
+                    disabled={agentWorking}
+                    className="rounded-full border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 disabled:opacity-50"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-6">
+              {conversation.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                  Hermes is ready. Ask a compliance question and she will answer from the current Firmic company state rather than reading a fixed script.
+                </div>
+              ) : (
+                <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
+                  {conversation.map((item, index) => (
+                    <div
+                      key={`${item.role}-${index}`}
+                      className={
+                        item.role === "assistant"
+                          ? "mr-8 rounded-2xl border border-violet-100 bg-violet-50 p-4"
+                          : "ml-8 rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                      }
+                    >
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
+                        {item.role === "assistant"
+                          ? "Hermes"
+                          : "You"}
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                        {item.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <input
+                  value={agentMessage}
+                  onChange={(event) =>
+                    setAgentMessage(event.target.value)
+                  }
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !event.shiftKey
+                    ) {
+                      event.preventDefault();
+                      void askHermes();
+                    }
+                  }}
+                  placeholder="Ask Hermes about documents, KYC, approval, risk, or next steps..."
+                  className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-5 py-4 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => void askHermes()}
+                  disabled={
+                    agentWorking ||
+                    !agentMessage.trim()
+                  }
+                  className="rounded-2xl bg-violet-600 px-6 py-4 font-bold text-white transition hover:bg-violet-700 disabled:bg-slate-300"
+                >
+                  {agentWorking
+                    ? "Hermes is reasoning..."
+                    : "Ask Hermes"}
+                </button>
+              </div>
+            </div>
           </section>
 
           <section className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 mt-8">
@@ -603,7 +945,12 @@ export default function HermesCompliance() {
                         <Badge status={item.status} />
                       </div>
 
-                      {item.status !== "Complete" && (
+                      {[
+                        "Missing",
+                        "Pending",
+                        "Review",
+                        "Action Required",
+                      ].includes(item.status) && (
                         <button
                           type="button"
                           onClick={() =>
@@ -663,8 +1010,16 @@ export default function HermesCompliance() {
 
                 <div className="grid grid-cols-2 gap-3 mt-5">
                   <Mini
-                    title="KYB"
-                    value={hasKYB ? "Ready" : "Missing"}
+                    title="KYC / KYB"
+                    value={
+                      kycApproved
+                        ? "Approved"
+                        : kycRejected
+                          ? "Action Required"
+                          : kycAwaitingVerification
+                            ? "Awaiting Review"
+                            : "Missing"
+                    }
                   />
 
                   <Mini
@@ -688,7 +1043,17 @@ export default function HermesCompliance() {
 
                 <div className="mt-5 space-y-3">
                   {!hasKYB && (
-                    <Risk text="Missing KYB documents may delay onboarding." />
+                    <Risk text="Missing KYC / KYB documents may delay onboarding." />
+                  )}
+
+                  {kycAwaitingVerification && (
+                    <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">
+                      KYC / KYB documents are submitted and awaiting Hermes / Firmic Admin verification. No replacement is required unless review requests one.
+                    </div>
+                  )}
+
+                  {kycRejected && (
+                    <Risk text="KYC / KYB review requires a corrected or replacement submission." />
                   )}
 
                   {!hasTradeLicense && (
@@ -723,15 +1088,40 @@ export default function HermesCompliance() {
                 </h2>
 
                 <div className="mt-5 space-y-3">
-                  <Action
-                    text="Upload KYB Documents"
-                    loading={
-                      actionLoading === "Upload KYB Documents"
-                    }
-                    onClick={() =>
-                      handleAction("Upload KYB Documents")
-                    }
-                  />
+                  {!kycApproved &&
+                    !kycAwaitingVerification && (
+                      <Action
+                        text={
+                          kycRejected
+                            ? "Replace KYC / KYB Documents"
+                            : "Upload KYC / KYB Documents"
+                        }
+                        loading={
+                          actionLoading ===
+                          (kycRejected
+                            ? "Replace KYC / KYB Documents"
+                            : "Upload KYC / KYB Documents")
+                        }
+                        onClick={() =>
+                          handleAction(
+                            kycRejected
+                              ? "Replace KYC / KYB Documents"
+                              : "Upload KYC / KYB Documents",
+                          )
+                        }
+                      />
+                    )}
+
+                  {kycAwaitingVerification && (
+                    <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                      <p className="font-bold text-blue-900">
+                        KYC / KYB verification is already in progress.
+                      </p>
+                      <p className="mt-1 text-sm text-blue-700">
+                        Hermes will surface an action only if Firmic Compliance requests a correction.
+                      </p>
+                    </div>
+                  )}
 
                   <Action
                     text="Review Beneficial Owner Declaration"
@@ -847,9 +1237,11 @@ function Badge({ status }: { status: string }) {
   const styles =
     status === "Complete"
       ? "bg-green-100 text-green-700"
-      : status === "Review"
-      ? "bg-yellow-100 text-yellow-700"
-      : "bg-red-100 text-red-700";
+      : status === "Awaiting Verification"
+        ? "bg-blue-100 text-blue-700"
+        : status === "Review"
+          ? "bg-yellow-100 text-yellow-700"
+          : "bg-red-100 text-red-700";
 
   return (
     <span

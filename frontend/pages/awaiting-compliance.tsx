@@ -183,7 +183,7 @@ export default function AwaitingCompliance() {
                 </Link>
 
                 <Link
-                  href="/hermes"
+                  href="/hermes?speak=1"
                   className="rounded-2xl border border-[#0f8f91]/20 bg-[#eefafa] px-6 py-4 font-black text-[#0f7779]"
                 >
                   Speak with Hermes

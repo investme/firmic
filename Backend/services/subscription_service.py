@@ -9,6 +9,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
 from models.company import Company
+from models.usage_ledger import UsageLedger
+from services.ledger_service import (
+    current_invoice_month,
+    record_usage,
+)
 from models.subscription import (
     CompanySubscription,
     ItemStatus,
@@ -595,6 +600,105 @@ def create_company_subscription(
     return subscription
 
 
+def ensure_subscription_ledger_entry(
+    db: Session,
+    *,
+    subscription: CompanySubscription,
+) -> UsageLedger:
+    """
+    Ensure the active Firmic base plan appears exactly once
+    in the current month's usage ledger.
+
+    Included subscription services remain $0 items and must
+    not be duplicated as separate charges here.
+    """
+
+    plan = subscription.plan
+
+    if not plan:
+        raise RuntimeError(
+            "Subscription plan relationship is unavailable."
+        )
+
+    invoice_month = current_invoice_month()
+
+    existing = (
+        db.query(UsageLedger)
+        .filter(
+            UsageLedger.company_id
+            == subscription.company_id,
+            UsageLedger.service
+            == "firmic_subscription",
+            UsageLedger.action
+            == "monthly_plan",
+            UsageLedger.source_type
+            == "company_subscription",
+            UsageLedger.source_id
+            == subscription.id,
+            UsageLedger.invoice_month
+            == invoice_month,
+            UsageLedger.status
+            != "void",
+        )
+        .first()
+    )
+
+    plan_price = round(
+        float(plan.monthly_price or 0),
+        2,
+    )
+
+    if existing:
+        # Keep an existing unbilled row synchronized if
+        # the plan price/catalog changed before invoicing.
+        if existing.status == "unbilled":
+            existing.resource = plan.name
+            existing.unit_price = plan_price
+            existing.quantity = 1
+            existing.amount = plan_price
+            existing.tax_rate = DEFAULT_TAX_RATE
+            existing.tax_amount = round(
+                plan_price * DEFAULT_TAX_RATE,
+                2,
+            )
+            existing.total_amount = round(
+                plan_price + existing.tax_amount,
+                2,
+            )
+            existing.entry_metadata = {
+                **(existing.entry_metadata or {}),
+                "plan_code": plan.code,
+                "plan_name": plan.name,
+                "billing_cycle": subscription.billing_cycle,
+                "subscription_id": subscription.id,
+            }
+
+        return existing
+
+    return record_usage(
+        db,
+        company_id=subscription.company_id,
+        service="firmic_subscription",
+        category="subscription",
+        resource=plan.name,
+        action="monthly_plan",
+        quantity=1,
+        unit="company_month",
+        unit_price=plan_price,
+        currency=subscription.currency or "USD",
+        tax_rate=DEFAULT_TAX_RATE,
+        source_type="company_subscription",
+        source_id=subscription.id,
+        metadata={
+            "plan_code": plan.code,
+            "plan_name": plan.name,
+            "billing_cycle": subscription.billing_cycle,
+            "subscription_id": subscription.id,
+        },
+        commit=False,
+    )
+
+
 def activate_subscription(
     db: Session,
     *,
@@ -618,6 +722,13 @@ def activate_subscription(
             item.updated_at = utcnow()
 
     calculate_subscription_totals(subscription)
+
+    # Billing source of truth:
+    # active base plan -> current-month ledger row.
+    ensure_subscription_ledger_entry(
+        db,
+        subscription=subscription,
+    )
 
     create_subscription_event(
         db,

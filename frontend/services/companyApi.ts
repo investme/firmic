@@ -6,6 +6,7 @@ export type CreateCompanyPayload = {
     | "PLAN_STARTER"
     | "PLAN_BUSINESS"
     | "PLAN_ENTERPRISE";
+  is_uae_resident: boolean;
 };
 
 export function isAuthenticated(): boolean {

@@ -1758,7 +1758,46 @@ REQUIRED_COMPLIANCE_DOCUMENTS = [
             "ownership declaration",
         ],
     },
+    {
+        "key": "emirates_id",
+        "label": "Emirates ID",
+        "aliases": [
+            "emirates id",
+            "emirates_id",
+            "uae id",
+            "emirates identity card",
+        ],
+    },
+    {
+        "key": "kyc_questionnaire",
+        "label": "KYC Questionnaire",
+        "aliases": [
+            "kyc questionnaire",
+            "kyc_questionnaire",
+            "kyc",
+            "know your customer questionnaire",
+            "kyc form",
+            "kyc submission",
+        ],
+    },
 ]
+
+
+def _requirement_applies_to_company(
+    company: Company,
+    requirement: dict[str, Any],
+) -> bool:
+    if requirement.get("key") != "emirates_id":
+        return True
+
+    # Emirates ID is required unless residency has explicitly
+    # been declared non-UAE. This is fail-closed for legacy/null
+    # records and prevents accidental compliance bypass.
+    return getattr(
+        company,
+        "is_uae_resident",
+        None,
+    ) is not False
 
 
 def _norm(value: Any) -> str:
@@ -1944,9 +1983,18 @@ def _build_compliance_item(
         documents,
     )
 
+    applicable_requirements = [
+        requirement
+        for requirement in REQUIRED_COMPLIANCE_DOCUMENTS
+        if _requirement_applies_to_company(
+            company,
+            requirement,
+        )
+    ]
+
     required: list[dict[str, Any]] = []
 
-    for requirement in REQUIRED_COMPLIANCE_DOCUMENTS:
+    for requirement in applicable_requirements:
         matches = [
             document
             for document in documents
@@ -2040,7 +2088,7 @@ def _build_compliance_item(
     )
     all_verified = (
         verified_count
-        == len(REQUIRED_COMPLIANCE_DOCUMENTS)
+        == len(applicable_requirements)
     )
 
     if launch.status == "active":
@@ -2112,7 +2160,7 @@ def _build_compliance_item(
         "documents": required,
         "document_count": len(documents),
         "required_document_count": len(
-            REQUIRED_COMPLIANCE_DOCUMENTS
+            applicable_requirements
         ),
         "uploaded_required_count": uploaded_count,
         "verified_required_count": verified_count,

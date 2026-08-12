@@ -103,6 +103,7 @@ def serialize_company(company: Company):
         "name": company.name,
         "user_id": company.user_id,
         "status": company.status,
+        "is_uae_resident": company.is_uae_resident,
         "headquarters": headquarters,
     }
 
@@ -144,6 +145,7 @@ def create_company(
         user_id=str(user_id),
         name=company_name,
         status="launching",
+        is_uae_resident=payload.is_uae_resident,
         headquarters_office_code=None,
         headquarters_location=None,
         headquarters_phone=None,

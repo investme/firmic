@@ -227,3 +227,72 @@ export async function speakHermesReview(
     callbacks,
   );
 }
+
+export type HermesLiveBriefing = {
+  companyName: string;
+  score: number;
+  risk: string;
+  documentCount: number;
+  pendingTasks: number;
+  openAlerts: number;
+  status?: string;
+};
+
+export async function speakHermesBriefing(
+  briefing: HermesLiveBriefing,
+  callbacks: VoiceCallbacks = {},
+) {
+  const {
+    companyName,
+    score,
+    risk,
+    documentCount,
+    pendingTasks,
+    openAlerts,
+    status,
+  } = briefing;
+
+  const taskLine =
+    pendingTasks === 0
+      ? "There are no pending compliance tasks at the moment."
+      : pendingTasks === 1
+        ? "There is one pending compliance task."
+        : `There are ${pendingTasks} pending compliance tasks.`;
+
+  const alertLine =
+    openAlerts === 0
+      ? "I do not see any open compliance alerts requiring immediate attention."
+      : openAlerts === 1
+        ? "I am currently monitoring one open compliance alert."
+        : `I am currently monitoring ${openAlerts} open compliance alerts.`;
+
+  const statusLine = status
+    ? `Your current compliance status is ${status}.`
+    : "";
+
+  const text =
+    `Hello. I'm Hermes, your Firmic Compliance AI. ` +
+    `Here is the current compliance briefing for ${companyName}. ` +
+    `Your compliance score is ${Math.round(score)} percent, with a ${risk.toLowerCase()} risk level. ` +
+    `${statusLine} ` +
+    `I am monitoring ${documentCount} compliance documents. ` +
+    `${taskLine} ` +
+    `${alertLine} ` +
+    `I will continue monitoring your company and will notify you if a document, ownership record, licensing item, or regulatory requirement needs attention.`;
+
+  return speakHermesText(
+    text.replace(/\s+/g, " ").trim(),
+    callbacks,
+  );
+}
+
+export async function speakHermesResponse(
+  text: string,
+  callbacks: VoiceCallbacks = {},
+) {
+  return speakHermesText(
+    text,
+    callbacks,
+  );
+}
+

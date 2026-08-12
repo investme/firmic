@@ -12,6 +12,10 @@ from services.ledger_service import (
     current_invoice_month,
     record_usage,
 )
+from services.subscription_service import (
+    get_company_subscription,
+    service_is_included,
+)
 
 
 router = APIRouter(
@@ -152,9 +156,41 @@ def rent_office(
         company.headquarters_office_code = office.office_code
         company.headquarters_location = office.location
         company.headquarters_phone = "+971 2 XXX 047"
-        company.headquarters_monthly_price_usd = (
-            office.monthly_price_usd or 99.0
+        subscription = get_company_subscription(
+            db,
+            company.id,
         )
+
+        headquarters_included = False
+
+        if subscription and subscription.plan:
+            headquarters_service = next(
+                (
+                    item.service
+                    for item in subscription.items
+                    if (
+                        item.service
+                        and item.service.code
+                        == "SERVICE_VIRTUAL_HEADQUARTERS"
+                    )
+                ),
+                None,
+            )
+
+            if headquarters_service:
+                headquarters_included = service_is_included(
+                    headquarters_service,
+                    subscription.plan.code,
+                )
+
+        company.headquarters_monthly_price_usd = (
+            0.0
+            if headquarters_included
+            else float(
+                office.monthly_price_usd or 99.0
+            )
+        )
+
         company.status = "active"
 
         db.flush()
@@ -172,7 +208,13 @@ def rent_office(
             .first()
         )
 
-        if not existing_charge:
+        if headquarters_included:
+            # This office is already paid for inside the
+            # Firmic plan. Never charge it separately.
+            if existing_charge:
+                existing_charge.status = "void"
+
+        elif not existing_charge:
             record_usage(
                 db,
                 company_id=company.id,
@@ -189,6 +231,7 @@ def rent_office(
                 metadata={
                     "location": office.location,
                     "office_code": office.office_code,
+                    "included_by_plan": False,
                 },
                 commit=False,
             )

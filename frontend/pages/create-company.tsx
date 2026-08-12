@@ -109,6 +109,10 @@ export default function CreateCompany() {
     useState<CompanyStage>("identity");
   const [selectedPlan, setSelectedPlan] =
     useState<PlanCode | null>(null);
+
+  const [isUaeResident, setIsUaeResident] =
+    useState<boolean | null>(null);
+
   const [companyLoading, setCompanyLoading] = useState(false);
   const [companyError, setCompanyError] = useState("");
 
@@ -368,6 +372,13 @@ export default function CreateCompany() {
       return;
     }
 
+    if (isUaeResident === null) {
+      setCompanyError(
+        "Confirm whether the founder or authorized representative is a UAE resident.",
+      );
+      return;
+    }
+
     saveDraft();
 
     try {
@@ -388,6 +399,7 @@ export default function CreateCompany() {
       const response = await createCompany({
         name: companyName,
         plan_code: selectedPlan,
+        is_uae_resident: isUaeResident,
       });
 
       const companyId = response?.company?.id || response?.id;
@@ -533,19 +545,69 @@ export default function CreateCompany() {
               onUseDifferentAccount={useDifferentAccount}
             />
           ) : (
-            <PlanSelection
-              draft={draft}
-              accountUser={accountUser}
-              selectedPlan={selectedPlan}
-              loading={companyLoading}
-              error={companyError}
-              onSelect={setSelectedPlan}
-              onBack={() => {
-                setCompanyError("");
-                setCompanyStage("identity");
-              }}
-              onCreate={handleCreateCompany}
-            />
+            <div className="space-y-6">
+              <section className="mx-auto max-w-4xl rounded-[2rem] border border-[#09233d]/10 bg-white p-7 shadow-[0_24px_70px_rgba(9,35,61,0.08)]">
+                <p className="text-xs font-black uppercase tracking-[0.17em] text-[#0f8f91]">
+                  Compliance residency
+                </p>
+
+                <h2 className="mt-3 text-2xl font-black">
+                  Is the founder or authorized representative a UAE resident?
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-[#60798b]">
+                  Emirates ID is mandatory only for UAE residents.
+                  Non-UAE residents must still complete all other
+                  Firmic compliance requirements.
+                </p>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUaeResident(true);
+                      setCompanyError("");
+                    }}
+                    className={`rounded-2xl border px-5 py-4 text-left font-black transition ${
+                      isUaeResident === true
+                        ? "border-[#0f8f91] bg-[#eefafa] text-[#09233d]"
+                        : "border-[#09233d]/10 bg-white text-[#587286]"
+                    }`}
+                  >
+                    Yes — UAE resident
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUaeResident(false);
+                      setCompanyError("");
+                    }}
+                    className={`rounded-2xl border px-5 py-4 text-left font-black transition ${
+                      isUaeResident === false
+                        ? "border-[#0f8f91] bg-[#eefafa] text-[#09233d]"
+                        : "border-[#09233d]/10 bg-white text-[#587286]"
+                    }`}
+                  >
+                    No — non-UAE resident
+                  </button>
+                </div>
+              </section>
+
+              <PlanSelection
+                draft={draft}
+                accountUser={accountUser}
+                selectedPlan={selectedPlan}
+                loading={companyLoading}
+                error={companyError}
+                onSelect={setSelectedPlan}
+                onBack={() => {
+                  setCompanyError("");
+                  setCompanyStage("identity");
+                }}
+                onCreate={handleCreateCompany}
+              />
+            </div>
           )}
         </main>
       </div>

@@ -15,6 +15,7 @@ from routes import sonny_brain
 from routes import workflow
 from routes import progress
 from routes import hermes
+from routes import hermes_agent
 from routes import support
 from routes import executive_intelligence
 from routes import intelligence
@@ -224,6 +225,11 @@ app.include_router(
 app.include_router(
     hermes.router,
     prefix="/api/hermes",
+)
+app.include_router(
+    hermes_agent.router,
+    prefix="/api/hermes-agent",
+    tags=["Hermes Agent"],
 )
 
 app.include_router(

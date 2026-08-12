@@ -178,6 +178,45 @@ class CompanyLaunch(Base):
         default=False,
     )
 
+    # Required only when the company founder is a UAE resident.
+    emirates_id_required = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    emirates_id_uploaded = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    emirates_id_approved = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    kyc_questionnaire_required = Column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
+
+    kyc_questionnaire_uploaded = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    kyc_questionnaire_approved = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    # Administrative review
+
     # Administrative review
     compliance_submitted = Column(
         Boolean,

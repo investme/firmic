@@ -51,6 +51,9 @@ export default function OnboardingLayout() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<FirmicPlanCode | null>(null);
 
+  const [isUaeResident, setIsUaeResident] =
+    useState<boolean | null>(null);
+
   const [company, setCompany] = useState<CompanyInformationData>({
     name: "",
     industry: "Technology",
@@ -140,6 +143,13 @@ export default function OnboardingLayout() {
       return;
     }
 
+    if (isUaeResident === null) {
+      setError(
+        "Confirm whether the founder or authorized representative is a UAE resident.",
+      );
+      return;
+    }
+
     try {
       setLoadingPreview(true);
       setError("");
@@ -174,6 +184,7 @@ export default function OnboardingLayout() {
       const response = await createCompany({
         name: company.name.trim(),
         plan_code: selectedPlan,
+        is_uae_resident: isUaeResident as boolean,
       });
 
       const returnedCompany = response?.company || response || null;
@@ -381,6 +392,55 @@ export default function OnboardingLayout() {
                   setError("");
                 }}
               />
+
+              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+                <p className="text-sm font-bold text-violet-700">
+                  Compliance residency
+                </p>
+
+                <h3 className="mt-2 text-xl font-bold text-slate-950">
+                  Is the founder or authorized representative a UAE resident?
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  UAE residents must provide an Emirates ID.
+                  Non-UAE residents do not.
+                </p>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUaeResident(true);
+                      setPreview(null);
+                      setError("");
+                    }}
+                    className={`rounded-xl border px-5 py-4 font-bold transition ${
+                      isUaeResident === true
+                        ? "border-violet-600 bg-violet-50 text-violet-800"
+                        : "border-slate-200 bg-white text-slate-700"
+                    }`}
+                  >
+                    Yes — UAE resident
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUaeResident(false);
+                      setPreview(null);
+                      setError("");
+                    }}
+                    className={`rounded-xl border px-5 py-4 font-bold transition ${
+                      isUaeResident === false
+                        ? "border-violet-600 bg-violet-50 text-violet-800"
+                        : "border-slate-200 bg-white text-slate-700"
+                    }`}
+                  >
+                    No — non-UAE resident
+                  </button>
+                </div>
+              </section>
             </div>
           )}
 

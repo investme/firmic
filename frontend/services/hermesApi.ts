@@ -1,24 +1,79 @@
 import { API_URL } from "./config";
 
 function getHeaders() {
-  const token = localStorage.getItem("firmic_token");
+  const token =
+    typeof window !== "undefined"
+      ? localStorage.getItem("firmic_token")
+      : null;
 
   return {
-    Authorization: `Bearer ${token}`,
+    ...(token
+      ? {
+          Authorization: `Bearer ${token}`,
+        }
+      : {}),
   };
 }
 
-export async function getHermes(companyId: string) {
-  const res = await fetch(
+async function parseResponse(
+  response: Response,
+) {
+  const text = await response.text();
+
+  let payload: any = null;
+
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = {
+        detail: text,
+      };
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.detail ||
+        payload?.message ||
+        `Hermes request failed (${response.status}).`,
+    );
+  }
+
+  return payload;
+}
+
+export async function getHermes(
+  companyId: string,
+) {
+  const response = await fetch(
     `${API_URL}/api/hermes/company/${companyId}`,
     {
       headers: getHeaders(),
-    }
+    },
   );
 
-  if (!res.ok) {
-    throw new Error("Failed to load Hermes");
-  }
+  return parseResponse(response);
+}
 
-  return res.json();
+export async function chatHermes(
+  companyId: string,
+  message: string,
+) {
+  const response = await fetch(
+    `${API_URL}/api/hermes-agent/chat`,
+    {
+      method: "POST",
+      headers: {
+        ...getHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        company_id: companyId,
+        message,
+      }),
+    },
+  );
+
+  return parseResponse(response);
 }

@@ -54,6 +54,17 @@ REQUIREMENT_DEFINITIONS: tuple[RequirementDefinition, ...] = (
         action_label="Complete Company Profile",
         action_href="/company",
     ),
+        RequirementDefinition(
+        key="kyc_questionnaire",
+        label="KYC Questionnaire",
+        category="kyc",
+        required_field="kyc_questionnaire_required",
+        uploaded_field="kyc_questionnaire_uploaded",
+        approved_field="kyc_questionnaire_approved",
+        blocking=True,
+        action_label="Upload KYC Questionnaire",
+        action_href="/documents?request=kyc_questionnaire",
+    ),
     RequirementDefinition(
         key="subscription",
         label="Subscription",
@@ -136,6 +147,17 @@ REQUIREMENT_DEFINITIONS: tuple[RequirementDefinition, ...] = (
         action_href="/documents?request=proof_of_address",
     ),
     RequirementDefinition(
+        key="emirates_id",
+        label="Emirates ID",
+        category="kyc",
+        required_field="emirates_id_required",
+        uploaded_field="emirates_id_uploaded",
+        approved_field="emirates_id_approved",
+        blocking=True,
+        action_label="Upload Emirates ID",
+        action_href="/documents?request=emirates_id",
+    ),
+    RequirementDefinition(
         key="admin_review",
         label="Firmic Compliance Approval",
         category="review",
@@ -215,6 +237,13 @@ def ensure_company_launch(
     )
 
     if launch:
+        # Emirates ID is mandatory unless the company has
+        # explicitly declared that its founder/representative
+        # is not a UAE resident.
+        launch.emirates_id_required = (
+            getattr(company, "is_uae_resident", None) is not False
+        )
+
         synchronize_launch_state(launch)
 
         if commit:
@@ -253,6 +282,15 @@ def ensure_company_launch(
                 "headquarters_office_code",
                 None,
             )
+        ),
+
+        # Fail closed:
+        # True  -> Emirates ID required.
+        # False -> Emirates ID not applicable.
+        # None  -> unanswered; keep it required so compliance
+        #          cannot accidentally bypass the document.
+        emirates_id_required=(
+            getattr(company, "is_uae_resident", None) is not False
         ),
     )
 
@@ -459,6 +497,8 @@ def calculate_launch_progress(
         "beneficial_owner_declaration",
         "passport",
         "proof_of_address",
+        "emirates_id",
+        "kyc_questionnaire",
     }
 
     compliance_requirements = [

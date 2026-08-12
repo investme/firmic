@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Float
+from sqlalchemy import Column, String, DateTime, ForeignKey, Float, Boolean
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
@@ -11,6 +11,16 @@ class Company(Base):
     user_id = Column(String, index=True)
     name = Column(String, index=True)
     status = Column(String, default="initiated")
+
+    # Compliance residency classification.
+    # None = tenant has not answered yet.
+    # True = UAE resident; Emirates ID becomes mandatory.
+    # False = non-UAE resident; Emirates ID is not applicable.
+    is_uae_resident = Column(
+        Boolean,
+        nullable=True,
+        default=None,
+    )
 
     headquarters_office_code = Column(String, nullable=True, index=True)
     headquarters_location = Column(String, nullable=True)
