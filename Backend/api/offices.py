@@ -191,7 +191,11 @@ def rent_office(
             )
         )
 
-        company.status = "active"
+        # Renting/reserving headquarters must never activate the
+        # company. Final activation belongs exclusively to the
+        # compliance + Launch Engine approval pipeline.
+        if company.status == "draft":
+            company.status = "initiated"
 
         db.flush()
 

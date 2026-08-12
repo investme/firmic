@@ -170,7 +170,12 @@ def rent_office(
         company.headquarters_monthly_price_usd = (
             office.monthly_price_usd or 99.0
         )
-        company.status = "active"
+
+        # Renting/reserving headquarters must never activate the
+        # company. Company activation is owned exclusively by the
+        # compliance + Launch Engine approval pipeline.
+        if company.status == "draft":
+            company.status = "initiated"
 
         db.commit()
         db.refresh(office)
