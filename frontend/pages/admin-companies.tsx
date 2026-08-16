@@ -124,7 +124,18 @@ export default function AdminCompanies() {
 
   const filtered = useMemo(() => {
     return companies.filter((company) => {
-      const text = `${company.name} ${company.id} ${company.user_id} ${company.status} ${company.headquarters?.office_code || ""}`.toLowerCase();
+      const text = [
+        company.name,
+        company.id,
+        company.user_id,
+        company.status,
+        company.owner?.full_name || "",
+        company.owner?.email || "",
+        company.owner?.role || "",
+        company.headquarters?.office_code || "",
+      ]
+        .join(" ")
+        .toLowerCase();
 
       return (
         text.includes(
@@ -260,6 +271,16 @@ export default function AdminCompanies() {
                         <p className="text-xs text-slate-500 break-all mt-1">
                           Tenant user: {company.user_id}
                         </p>
+
+                        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                          <p className="text-xs font-bold text-slate-700">
+                            Owner: {company.owner?.full_name || "Not resolved"}
+                          </p>
+
+                          <p className="text-xs text-slate-500 break-all mt-1">
+                            {company.owner?.email || "No owner email"}
+                          </p>
+                        </div>
                       </div>
 
                       <Info

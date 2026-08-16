@@ -15,6 +15,13 @@ type CompanyRecord = {
   status?: string;
   user_id?: string | number;
 
+  owner?: {
+    id?: string | number;
+    full_name?: string | null;
+    email?: string | null;
+    role?: string | null;
+  } | null;
+
   jurisdiction?: string;
   plan?: string;
 
@@ -222,6 +229,28 @@ export default function AdminCompanyPage() {
                       Tenant user:{" "}
                       {company.user_id ?? "Unknown"}
                     </p>
+
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                          Account Owner
+                        </p>
+
+                        <p className="font-bold text-slate-900 mt-1">
+                          {company.owner?.full_name || "Not resolved"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                          Owner Email
+                        </p>
+
+                        <p className="font-bold text-slate-900 mt-1 break-all">
+                          {company.owner?.email || "Not available"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="bg-violet-50 border border-violet-100 rounded-2xl px-5 py-4 min-w-[220px]">

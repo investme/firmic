@@ -22,6 +22,9 @@ from models.support_ticket import SupportMessage, SupportTicket
 from models.launch import CompanyLaunch
 from models.subscription import CompanySubscription
 from services.ledger_service import record_usage
+from services.email_service import (
+    send_company_activation_email,
+)
 from services.launch_service import (
     ensure_company_launch,
     get_launch_summary,
@@ -203,8 +206,34 @@ def require_admin(
     return token
 
 
-def serialize_company(company: Company) -> dict[str, Any]:
+def serialize_company(
+    company: Company,
+    db: Session | None = None,
+) -> dict[str, Any]:
     headquarters = None
+
+    owner = None
+
+    if db is not None and company.user_id is not None:
+        try:
+            owner_id = int(company.user_id)
+        except (TypeError, ValueError):
+            owner_id = None
+
+        if owner_id is not None:
+            user = (
+                db.query(User)
+                .filter(User.id == owner_id)
+                .first()
+            )
+
+            if user:
+                owner = {
+                    "id": user.id,
+                    "full_name": user.full_name,
+                    "email": user.email,
+                    "role": user.role,
+                }
 
     if company.headquarters_office_code:
         headquarters = {
@@ -221,6 +250,7 @@ def serialize_company(company: Company) -> dict[str, Any]:
         "id": company.id,
         "name": company.name,
         "user_id": company.user_id,
+        "owner": owner,
         "status": company.status,
         "headquarters": headquarters,
     }
@@ -363,7 +393,7 @@ def get_admin_dashboard(
     return {
         "metrics": build_metrics(companies, offices),
         "recent_companies": [
-            serialize_company(company)
+            serialize_company(company, db)
             for company in companies[:20]
         ],
         "office_snapshot": [
@@ -389,7 +419,7 @@ def list_admin_companies(
     )
 
     return [
-        serialize_company(company)
+        serialize_company(company, db)
         for company in companies
     ]
 
@@ -412,7 +442,7 @@ def get_admin_company(
             detail="Company not found",
         )
 
-    return serialize_company(company)
+    return serialize_company(company, db)
 
 
 @router.post("/companies/{company_id}/terminate")
@@ -436,7 +466,7 @@ def terminate_company(
     if company.status == "terminated":
         return {
             "message": "Company already terminated",
-            "company": serialize_company(company),
+            "company": serialize_company(company, db),
         }
 
     try:
@@ -453,7 +483,7 @@ def terminate_company(
         return {
             "message": "Company terminated successfully",
             "released_office_code": released_office,
-            "company": serialize_company(company),
+            "company": serialize_company(company, db),
         }
 
     except Exception:
@@ -493,7 +523,7 @@ def restore_company(
 
         return {
             "message": "Company restored successfully",
-            "company": serialize_company(company),
+            "company": serialize_company(company, db),
         }
 
     except Exception:
@@ -1977,6 +2007,7 @@ def _build_compliance_item(
     documents: list[Document],
     tasks: list[Task],
     workflows: list[Workflow],
+    db: Session,
 ) -> dict[str, Any]:
     _synchronize_document_requirements(
         launch,
@@ -2152,7 +2183,7 @@ def _build_compliance_item(
     )
 
     return {
-        "company": serialize_company(company),
+        "company": serialize_company(company, db),
         "launch": launch_summary,
         "readiness_score": readiness,
         "queue_status": queue_status,
@@ -2278,6 +2309,7 @@ def get_admin_compliance_queue(
                         company.id,
                         [],
                     ),
+                    db,
                 )
             )
 
@@ -2391,6 +2423,7 @@ def get_admin_company_compliance(
             documents,
             tasks,
             workflows,
+            db,
         )
         db.commit()
     except Exception:
@@ -2466,6 +2499,7 @@ def request_admin_compliance_documents(
         documents,
         tasks,
         workflows,
+        db,
     )["missing_documents"]
 
     if not missing:
@@ -2903,6 +2937,47 @@ def approve_admin_compliance_and_unlock(
         db.add(event)
         db.commit()
         db.refresh(company)
+
+        # Company activation is now authoritative and committed.
+        # Email is intentionally best-effort and must never
+        # roll back or block a successful company activation.
+        activation_email = {
+            "sent": False,
+            "reason": "Company owner email unavailable",
+        }
+
+        try:
+            owner = None
+
+            try:
+                owner_id = int(company.user_id)
+            except (TypeError, ValueError):
+                owner_id = None
+
+            if owner_id is not None:
+                owner = (
+                    db.query(User)
+                    .filter(User.id == owner_id)
+                    .first()
+                )
+
+            if owner and owner.email:
+                activation_email = (
+                    send_company_activation_email(
+                        recipient_email=owner.email,
+                        recipient_name=owner.full_name,
+                        company_name=company.name,
+                        company_id=company.id,
+                    )
+                )
+
+        except Exception as exc:
+            # Never fail an already-committed activation
+            # because the external email provider is down.
+            activation_email = {
+                "sent": False,
+                "reason": str(exc),
+            }
         db.refresh(launch)
 
         return {
@@ -2911,13 +2986,15 @@ def approve_admin_compliance_and_unlock(
                 "platform is now unlocked."
             ),
             "company": serialize_company(
-                company
+                company,
+                db,
             ),
             "launch": get_launch_summary(
                 launch
             ),
             "platform_unlocked": True,
             "activity_id": event.id,
+            "activation_email": activation_email,
         }
 
     except HTTPException:
@@ -2958,7 +3035,7 @@ def admin_module_summary(
         "module": module_name,
         "metrics": build_metrics(companies, offices),
         "companies": [
-            serialize_company(company)
+            serialize_company(company, db)
             for company in companies
         ],
         "message": (
@@ -3102,7 +3179,7 @@ def build_admin_company_billing(db: Session) -> list[dict[str, Any]]:
             else "no_charges"
         )
         result.append({
-            "company": serialize_company(company),
+            "company": serialize_company(company, db),
             "entry_count": totals["entries"],
             "subtotal": round(totals["subtotal"], 2),
             "tax": round(totals["tax"], 2),
@@ -3161,7 +3238,7 @@ def get_live_admin_company_billing(
     )
 
     return {
-        "company": serialize_company(company),
+        "company": serialize_company(company, db),
         "summary": {
             "entry_count": len(entries),
             "subtotal": round(sum(float(e.amount or 0) for e in entries), 2),

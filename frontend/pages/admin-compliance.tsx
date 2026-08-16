@@ -165,9 +165,32 @@ export default function AdminCompliance() {
           result?.launch?.status === "active",
       }));
 
+      const activationEmail = result?.activation_email;
+
+      let emailNotice = "";
+
+      if (activationEmail?.sent === true) {
+        const recipient =
+          result?.company?.owner?.email ||
+          selected?.company?.owner?.email ||
+          "the company owner";
+
+        emailNotice =
+          ` Activation email sent to ${recipient}.`;
+      } else if (activationEmail) {
+        emailNotice =
+          " Company activated, but the activation email was not sent.";
+
+        if (activationEmail?.reason) {
+          emailNotice += ` Reason: ${activationEmail.reason}`;
+        }
+      }
+
       setNotice(
-        result?.message ||
+        `${
+          result?.message ||
           "Compliance approved. Company platform activated."
+        }${emailNotice}`
       );
 
       await loadQueue(companyId);
@@ -202,6 +225,8 @@ export default function AdminCompliance() {
         item.company.name,
         item.company.id,
         item.company.status,
+        item.company.owner?.full_name || "",
+        item.company.owner?.email || "",
         item.company.headquarters?.office_code || "",
         item.queue_status,
         item.priority,
@@ -367,7 +392,29 @@ export default function AdminCompliance() {
                       <p className="text-2xl font-bold mt-1">
                         {selected.company?.name}
                       </p>
-                      <p className="text-sm text-violet-700 mt-2">
+                      <div className="mt-4 rounded-xl border border-violet-200 bg-white px-4 py-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-violet-600">
+                          Activation Recipient
+                        </p>
+
+                        <p className="font-bold text-slate-900 mt-2">
+                          {selected.company?.owner?.full_name ||
+                            "Owner not resolved"}
+                        </p>
+
+                        <p className="text-sm text-slate-600 mt-1 break-all">
+                          {selected.company?.owner?.email ||
+                            "No owner email available"}
+                        </p>
+
+                        {selected.company?.owner?.email && (
+                          <p className="text-xs text-green-700 font-semibold mt-2">
+                            Activation email will be sent to this address.
+                          </p>
+                        )}
+                      </div>
+
+                      <p className="text-sm text-violet-700 mt-4">
                         Launch status:{" "}
                         <strong>
                           {String(

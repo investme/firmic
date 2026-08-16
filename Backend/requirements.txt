@@ -11,3 +11,4 @@ pydantic==2.12.5
 openai==2.41.0
 redis==8.0.0
 alembic==1.18.4
+resend==2.19.0

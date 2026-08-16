@@ -1,9 +1,41 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import ProtectedRoute from "../components/ProtectedRoute";
+import { getMe, type AuthUser } from "../services/authApi";
 
 export default function Settings() {
   const [notice, setNotice] = useState("");
+  const [accountUser, setAccountUser] = useState<AuthUser | null>(null);
+  const [accountError, setAccountError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadAccount() {
+      try {
+        const user = (await getMe()) as AuthUser;
+
+        if (active) {
+          setAccountUser(user);
+          setAccountError("");
+        }
+      } catch (error) {
+        if (active) {
+          setAccountError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load account profile."
+          );
+        }
+      }
+    }
+
+    loadAccount();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const companyName =
     typeof window !== "undefined"
@@ -74,6 +106,36 @@ export default function Settings() {
                 <Field label="Company ID" value={companyId} disabled />
                 <Field label="Jurisdiction" value="Abu Dhabi" />
                 <Field label="Plan" value={plan} />
+              </Panel>
+
+              <Panel title="Account Owner">
+                {accountError ? (
+                  <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4">
+                    {accountError}
+                  </div>
+                ) : !accountUser ? (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-slate-500">
+                    Loading authenticated account...
+                  </div>
+                ) : (
+                  <>
+                    <Field
+                      label="Owner Name"
+                      value={accountUser.full_name || "Not provided"}
+                      disabled
+                    />
+                    <Field
+                      label="Email Address"
+                      value={accountUser.email}
+                      disabled
+                    />
+                    <Field
+                      label="Account Role"
+                      value={accountUser.role || "owner"}
+                      disabled
+                    />
+                  </>
+                )}
               </Panel>
 
               <Panel title="Security & Access">
