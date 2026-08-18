@@ -7,6 +7,7 @@ from auth import get_token_payload
 from database import get_db
 from models.company import Company
 from models.company_ai_agent import CompanyAIAgent
+from models.sonny_orchestration import SonnyAgentRegistry
 from models.usage_ledger import UsageLedger
 from schemas.company_ai_agent import (
     DeactivateAIAgentRequest,
@@ -58,6 +59,7 @@ def serialize_agent(agent: CompanyAIAgent) -> dict:
     return {
         "id": agent.id,
         "company_id": agent.company_id,
+        "registry_agent_id": agent.registry_agent_id,
         "agent_name": agent.agent_name,
         "monthly_price_usd": agent.monthly_price_usd,
         "status": agent.status,
@@ -72,6 +74,34 @@ def serialize_agent(agent: CompanyAIAgent) -> dict:
             else None
         ),
     }
+
+
+def resolve_registry_agent(
+    db: Session,
+    *,
+    agent_code: str | None,
+) -> SonnyAgentRegistry | None:
+    normalized_code = str(agent_code or "").strip().lower()
+
+    if not normalized_code:
+        return None
+
+    registry_agent = (
+        db.query(SonnyAgentRegistry)
+        .filter(
+            SonnyAgentRegistry.agent_code == normalized_code,
+            SonnyAgentRegistry.status == "active",
+        )
+        .first()
+    )
+
+    if not registry_agent:
+        raise HTTPException(
+            status_code=404,
+            detail="Active AI agent not found in Sonny registry",
+        )
+
+    return registry_agent
 
 
 @router.get("/company/{company_id}")
@@ -113,11 +143,28 @@ def hire_agent(
             detail="Cannot hire an agent for a terminated company",
         )
 
+    registry_agent = resolve_registry_agent(
+        db,
+        agent_code=payload.agent_code,
+    )
+
+    agent_name = (
+        registry_agent.name
+        if registry_agent
+        else str(payload.agent_name or "").strip()
+    )
+
+    if not agent_name:
+        raise HTTPException(
+            status_code=422,
+            detail="agent_code or agent_name is required",
+        )
+
     agent = (
         db.query(CompanyAIAgent)
         .filter(
             CompanyAIAgent.company_id == company.id,
-            CompanyAIAgent.agent_name == payload.agent_name,
+            CompanyAIAgent.agent_name == agent_name,
         )
         .first()
     )
@@ -128,10 +175,19 @@ def hire_agent(
             agent.monthly_price_usd = payload.monthly_price_usd
             agent.activated_at = datetime.datetime.utcnow()
             agent.deactivated_at = None
+
+            if registry_agent:
+                agent.registry_agent_id = registry_agent.id
+                agent.agent_name = registry_agent.name
         else:
             agent = CompanyAIAgent(
                 company_id=company.id,
-                agent_name=payload.agent_name,
+                registry_agent_id=(
+                    registry_agent.id
+                    if registry_agent
+                    else None
+                ),
+                agent_name=agent_name,
                 monthly_price_usd=payload.monthly_price_usd,
                 status="active",
             )
@@ -144,7 +200,7 @@ def hire_agent(
             .filter(
                 UsageLedger.company_id == company.id,
                 UsageLedger.service == "ai_workforce",
-                UsageLedger.resource == payload.agent_name,
+                UsageLedger.resource == agent_name,
                 UsageLedger.action == "monthly_agent_subscription",
                 UsageLedger.invoice_month == current_invoice_month(),
                 UsageLedger.status == "unbilled",
@@ -158,7 +214,7 @@ def hire_agent(
                 company_id=company.id,
                 service="ai_workforce",
                 category="subscription",
-                resource=payload.agent_name,
+                resource=agent_name,
                 action="monthly_agent_subscription",
                 quantity=1,
                 unit="agent_month",
@@ -167,7 +223,17 @@ def hire_agent(
                 source_type="company_ai_agent",
                 source_id=agent.id,
                 metadata={
-                    "agent_name": payload.agent_name,
+                    "agent_name": agent_name,
+                    "agent_code": (
+                        registry_agent.agent_code
+                        if registry_agent
+                        else None
+                    ),
+                    "registry_agent_id": (
+                        registry_agent.id
+                        if registry_agent
+                        else None
+                    ),
                 },
                 commit=False,
             )
@@ -176,9 +242,9 @@ def hire_agent(
             db,
             company_id=company.id,
             event_type="ai_agent_hired",
-            title=f"{payload.agent_name} hired",
+            title=f"{agent_name} hired",
             description=(
-                f"{payload.agent_name} was activated for "
+                f"{agent_name} was activated for "
                 f"{company.name}."
             ),
             actor_type="tenant",
@@ -206,17 +272,38 @@ def deactivate_agent(
 ):
     company = authorize_company(payload.company_id, token, db)
 
-    agent = (
-        db.query(CompanyAIAgent)
-        .filter(
-            CompanyAIAgent.company_id == company.id,
-            CompanyAIAgent.agent_name == payload.agent_name,
-        )
-        .first()
+    registry_agent = resolve_registry_agent(
+        db,
+        agent_code=payload.agent_code,
     )
+
+    query = db.query(CompanyAIAgent).filter(
+        CompanyAIAgent.company_id == company.id
+    )
+
+    if registry_agent:
+        query = query.filter(
+            CompanyAIAgent.registry_agent_id == registry_agent.id
+        )
+    else:
+        agent_name = str(payload.agent_name or "").strip()
+
+        if not agent_name:
+            raise HTTPException(
+                status_code=422,
+                detail="agent_code or agent_name is required",
+            )
+
+        query = query.filter(
+            CompanyAIAgent.agent_name == agent_name
+        )
+
+    agent = query.first()
 
     if not agent:
         raise HTTPException(status_code=404, detail="AI agent not found")
+
+    agent_name = agent.agent_name
 
     try:
         agent.status = "inactive"
@@ -227,7 +314,7 @@ def deactivate_agent(
             .filter(
                 UsageLedger.company_id == company.id,
                 UsageLedger.service == "ai_workforce",
-                UsageLedger.resource == payload.agent_name,
+                UsageLedger.resource == agent_name,
                 UsageLedger.invoice_month == current_invoice_month(),
                 UsageLedger.status == "unbilled",
             )
@@ -241,9 +328,9 @@ def deactivate_agent(
             db,
             company_id=company.id,
             event_type="ai_agent_deactivated",
-            title=f"{payload.agent_name} deactivated",
+            title=f"{agent_name} deactivated",
             description=(
-                f"{payload.agent_name} was deactivated for "
+                f"{agent_name} was deactivated for "
                 f"{company.name}."
             ),
             actor_type="tenant",

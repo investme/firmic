@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Float, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, Float, ForeignKey, String, UniqueConstraint
 from database import Base
 import datetime
 import uuid
@@ -20,7 +20,18 @@ class CompanyAIAgent(Base):
         default=lambda: str(uuid.uuid4()),
         index=True,
     )
-    company_id = Column(String, nullable=False, index=True)
+    company_id = Column(
+        String,
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    registry_agent_id = Column(
+        String,
+        ForeignKey("sonny_agent_registry.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     agent_name = Column(String, nullable=False, index=True)
     monthly_price_usd = Column(Float, nullable=False, default=0.0)
     status = Column(String, nullable=False, default="active", index=True)

@@ -12,6 +12,7 @@ from models.sonny_automation import (
     SonnyAutomationRun,
 )
 from models.sonny_decision import SonnyDecision
+from models.company_ai_agent import CompanyAIAgent
 from models.sonny_orchestration import (
     SonnyAgentAssignment,
     SonnyAgentMessage,
@@ -462,6 +463,7 @@ def create_orchestration_run(
     approval_required: bool = True,
     input_payload: dict[str, Any] | None = None,
     orchestration_metadata: dict[str, Any] | None = None,
+    commit: bool = True
 ) -> SonnyOrchestrationRun:
     validate_linked_records(
         db,
@@ -544,10 +546,49 @@ def create_orchestration_run(
         },
     )
 
-    db.commit()
-    db.refresh(run)
+    if commit:
+        db.commit()
+        db.refresh(run)
+    else:
+        db.flush()
 
     return run
+
+
+def require_company_agent_activation(
+    db: Session,
+    *,
+    company_id: str,
+    agent,
+) -> CompanyAIAgent | None:
+    """
+    Enforce tenant workforce membership for specialist execution.
+
+    Sonny is the Firmic system coordinator and does not require a normal
+    CompanyAIAgent employment row. All other registry-backed workers must be
+    actively provisioned for the tenant before Sonny may delegate work to them.
+    """
+
+    if str(agent.agent_code or "").strip().lower() == "sonny":
+        return None
+
+    company_agent = (
+        db.query(CompanyAIAgent)
+        .filter(
+            CompanyAIAgent.company_id == company_id,
+            CompanyAIAgent.registry_agent_id == agent.id,
+            CompanyAIAgent.status == "active",
+        )
+        .first()
+    )
+
+    if not company_agent:
+        raise ValueError(
+            f"{agent.name} is qualified for this work but is not active "
+            "in this company's AI workforce."
+        )
+
+    return company_agent
 
 
 def create_assignment(
@@ -572,6 +613,7 @@ def create_assignment(
     workflow_id: str | None = None,
     workflow_step_id: str | None = None,
     assignment_metadata: dict[str, Any] | None = None,
+    commit: bool = True
 ) -> SonnyAgentAssignment:
     if run.status in RUN_FINAL_STATUSES:
         raise ValueError(
@@ -596,6 +638,12 @@ def create_assignment(
             action_code=action_code,
             preferred_agent_code=preferred_agent_code,
         )
+
+    company_agent = require_company_agent_activation(
+        db,
+        company_id=run.company_id,
+        agent=agent,
+    )
 
     if automation_run_id:
         automation_run = (
@@ -721,6 +769,13 @@ def create_assignment(
         assignment_metadata={
             "action_code": action_code,
             "preferred_agent_code": preferred_agent_code,
+            "company_ai_agent_id": (
+                company_agent.id
+                if company_agent
+                else None
+            ),
+            "registry_agent_id": agent.id,
+            "agent_code": agent.agent_code,
             **(assignment_metadata or {}),
         },
     )
@@ -765,8 +820,11 @@ def create_assignment(
         },
     )
 
-    db.commit()
-    db.refresh(assignment)
+    if commit:
+        db.commit()
+        db.refresh(assignment)
+    else:
+        db.flush()
 
     return assignment
 
@@ -919,7 +977,7 @@ def start_orchestration_run(
     *,
     run: SonnyOrchestrationRun,
     actor_id: str,
-) -> SonnyOrchestrationRun:
+    commit: bool = True) -> SonnyOrchestrationRun:
     if run.status != "approved":
         raise ValueError(
             "Only approved orchestration runs can start."
@@ -955,8 +1013,11 @@ def start_orchestration_run(
         actor_id=actor_id,
     )
 
-    db.commit()
-    db.refresh(run)
+    if commit:
+        db.commit()
+        db.refresh(run)
+    else:
+        db.flush()
 
     return run
 
@@ -966,7 +1027,7 @@ def accept_assignment(
     *,
     run: SonnyOrchestrationRun,
     assignment: SonnyAgentAssignment,
-) -> SonnyAgentAssignment:
+    commit: bool = True) -> SonnyAgentAssignment:
     if run.status != "running":
         raise ValueError(
             "Orchestration run must be running."
@@ -1006,8 +1067,11 @@ def accept_assignment(
         },
     )
 
-    db.commit()
-    db.refresh(assignment)
+    if commit:
+        db.commit()
+        db.refresh(assignment)
+    else:
+        db.flush()
 
     return assignment
 
@@ -1017,7 +1081,7 @@ def start_assignment(
     *,
     run: SonnyOrchestrationRun,
     assignment: SonnyAgentAssignment,
-) -> SonnyAgentAssignment:
+    commit: bool = True) -> SonnyAgentAssignment:
     if run.status != "running":
         raise ValueError(
             "Orchestration run must be running."
@@ -1063,8 +1127,11 @@ def start_assignment(
         },
     )
 
-    db.commit()
-    db.refresh(assignment)
+    if commit:
+        db.commit()
+        db.refresh(assignment)
+    else:
+        db.flush()
 
     return assignment
 
@@ -1075,7 +1142,7 @@ def complete_assignment(
     run: SonnyOrchestrationRun,
     assignment: SonnyAgentAssignment,
     result_payload: dict[str, Any] | None = None,
-) -> SonnyAgentAssignment:
+    commit: bool = True) -> SonnyAgentAssignment:
     if assignment.status != "running":
         raise ValueError(
             "Only running assignments can be completed."
@@ -1115,8 +1182,11 @@ def complete_assignment(
         },
     )
 
-    db.commit()
-    db.refresh(assignment)
+    if commit:
+        db.commit()
+        db.refresh(assignment)
+    else:
+        db.flush()
 
     return assignment
 
@@ -1127,7 +1197,7 @@ def fail_assignment(
     run: SonnyOrchestrationRun,
     assignment: SonnyAgentAssignment,
     error_message: str,
-) -> SonnyAgentAssignment:
+    commit: bool = True) -> SonnyAgentAssignment:
     if assignment.status != "running":
         raise ValueError(
             "Only running assignments can fail."
@@ -1166,8 +1236,11 @@ def fail_assignment(
         },
     )
 
-    db.commit()
-    db.refresh(assignment)
+    if commit:
+        db.commit()
+        db.refresh(assignment)
+    else:
+        db.flush()
 
     return assignment
 
@@ -1178,7 +1251,7 @@ def complete_orchestration_run(
     run: SonnyOrchestrationRun,
     actor_id: str,
     output_payload: dict[str, Any] | None = None,
-) -> SonnyOrchestrationRun:
+    commit: bool = True) -> SonnyOrchestrationRun:
     if run.status != "running":
         raise ValueError(
             "Only running orchestration runs can complete."
@@ -1214,8 +1287,11 @@ def complete_orchestration_run(
         },
     )
 
-    db.commit()
-    db.refresh(run)
+    if commit:
+        db.commit()
+        db.refresh(run)
+    else:
+        db.flush()
 
     return run
 
@@ -1226,7 +1302,7 @@ def fail_orchestration_run(
     run: SonnyOrchestrationRun,
     actor_id: str,
     error_message: str,
-) -> SonnyOrchestrationRun:
+    commit: bool = True) -> SonnyOrchestrationRun:
     if run.status != "running":
         raise ValueError(
             "Only running orchestration runs can fail."
@@ -1254,8 +1330,11 @@ def fail_orchestration_run(
         },
     )
 
-    db.commit()
-    db.refresh(run)
+    if commit:
+        db.commit()
+        db.refresh(run)
+    else:
+        db.flush()
 
     return run
 

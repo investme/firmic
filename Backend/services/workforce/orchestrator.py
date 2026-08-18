@@ -11,6 +11,10 @@ from models.workforce_job import (
 )
 from services.activity_service import record_activity
 from services.workforce.dispatcher import dispatch_work
+from services.sonny.orchestration import (
+    create_assignment,
+    create_orchestration_run,
+)
 
 
 VALID_STATUSES = {
@@ -63,6 +67,91 @@ def add_timeline_event(
     return event
 
 
+def create_sonny_workforce_orchestration(
+    db: Session,
+    *,
+    company: Any,
+    request_text: str,
+    dispatch: dict[str, Any],
+    actor_id: str | None = None,
+    source_type: str = "manual",
+    source_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+):
+    """
+    Create the canonical Sonny orchestration + assignment for a workforce request.
+
+    Sonny remains the coordinator. Specialist execution is delegated through
+    services.sonny.orchestration.create_assignment(), which enforces the
+    tenant's active CompanyAIAgent workforce membership.
+    """
+
+    company_id = str(company.id)
+    actor = clean(actor_id) or "sonny"
+
+    agent_key = clean(dispatch.get("agent_key")).lower()
+    capabilities = dispatch.get("capabilities") or []
+
+    if not agent_key:
+        raise ValueError("Workforce dispatch did not provide an agent key.")
+
+    if not capabilities:
+        raise ValueError(
+            f"{dispatch.get('agent_name') or agent_key} has no dispatch capability."
+        )
+
+    required_capability = clean(capabilities[0])
+
+    orchestration = create_orchestration_run(
+        db,
+        company_id=company_id,
+        orchestration_type="workforce_request",
+        created_by=actor,
+        trigger_type=clean(source_type) or "manual",
+        approval_required=False,
+        input_payload={
+            "request_text": request_text,
+            "source_type": clean(source_type) or "manual",
+            "source_id": clean(source_id) or None,
+            "dispatch": dispatch,
+            "metadata": metadata or {},
+        },
+        orchestration_metadata={
+            "source": "workforce_orchestrator",
+            "dispatch_agent": dispatch.get("agent_name"),
+            "dispatch_agent_key": agent_key,
+        },
+        commit=False
+    )
+
+    assignment = create_assignment(
+        db,
+        run=orchestration,
+        assignment_code=f"workforce:{agent_key}",
+        title=request_text[:255],
+        instructions=request_text,
+        required_capability=required_capability,
+        assigned_by="sonny",
+        preferred_agent_code=agent_key,
+        agent_code=agent_key,
+        approval_required=False,
+        confidence=float(dispatch.get("confidence") or 1.0),
+        input_payload={
+            "request_text": request_text,
+            "source_type": clean(source_type) or "manual",
+            "source_id": clean(source_id) or None,
+            "metadata": metadata or {},
+        },
+        assignment_metadata={
+            "source": "workforce_orchestrator",
+            "requested_by": actor,
+        },
+        commit=False,
+    )
+
+    return orchestration, assignment
+
+
 def create_workforce_job(
     db: Session,
     *,
@@ -85,6 +174,17 @@ def create_workforce_job(
         preferred_agent=preferred_agent,
     )
 
+    orchestration, assignment = create_sonny_workforce_orchestration(
+        db,
+        company=company,
+        request_text=request_text,
+        dispatch=dispatch,
+        actor_id=actor_id,
+        source_type=source_type,
+        source_id=source_id,
+        metadata=metadata,
+    )
+
     job = WorkforceJob(
         company_id=str(company.id),
         title=clean(title) or request_text[:120],
@@ -98,6 +198,9 @@ def create_workforce_job(
         metadata_json={
             **(metadata or {}),
             "dispatch": dispatch,
+            "orchestration_run_id": orchestration.id,
+            "assignment_id": assignment.id,
+            "delegation_status": assignment.status,
         },
     )
     db.add(job)
@@ -163,7 +266,7 @@ def update_workforce_job(
     result_summary: str | None = None,
     failure_reason: str | None = None,
     actor: str | None = None,
-) -> WorkforceJob:
+    commit: bool = True) -> WorkforceJob:
     normalized_status = clean(status).lower()
 
     if normalized_status not in VALID_STATUSES:
@@ -234,8 +337,11 @@ def update_workforce_job(
         commit=False,
     )
 
-    db.commit()
-    db.refresh(job)
+    if commit:
+        db.commit()
+        db.refresh(job)
+    else:
+        db.flush()
     return job
 
 

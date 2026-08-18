@@ -480,10 +480,215 @@ def assign_task_action(
     }
 
 
+
+
+def inspect_usage_ledger_action(
+    context: dict[str, Any],
+    parameters: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Read-only Finance AI inspection of the verified tenant's usage ledger.
+    """
+    db = get_db(context)
+    company = get_company(context)
+
+    company_id = str(company.id)
+
+    requested_company_id = clean_text(
+        parameters.get("company_id")
+    )
+
+    if requested_company_id and requested_company_id != company_id:
+        raise ValueError(
+            "The requested ledger company does not match "
+            "the verified company."
+        )
+
+    limit = int(parameters.get("limit") or 100)
+    limit = max(1, min(limit, 500))
+
+    query = (
+        db.query(UsageLedger)
+        .filter(
+            UsageLedger.company_id == company_id
+        )
+        .order_by(
+            UsageLedger.created_at.desc()
+        )
+        .limit(limit)
+    )
+
+    entries = query.all()
+
+    total_amount = 0.0
+    unbilled_amount = 0.0
+    billed_amount = 0.0
+
+    serialized_entries = []
+
+    for entry in entries:
+        quantity = float(
+            getattr(entry, "quantity", 0) or 0
+        )
+        unit_price = float(
+            getattr(entry, "unit_price", 0) or 0
+        )
+        tax_rate = float(
+            getattr(entry, "tax_rate", 0) or 0
+        )
+
+        subtotal = quantity * unit_price
+        total = subtotal * (1 + tax_rate)
+
+        status = clean_text(
+            getattr(entry, "status", "")
+        ).lower()
+
+        total_amount += total
+
+        if status == "unbilled":
+            unbilled_amount += total
+
+        if status == "billed":
+            billed_amount += total
+
+        serialized_entries.append(
+            {
+                "id": str(entry.id),
+                "service": getattr(entry, "service", None),
+                "category": getattr(entry, "category", None),
+                "resource": getattr(entry, "resource", None),
+                "action": getattr(entry, "action", None),
+                "quantity": quantity,
+                "unit": getattr(entry, "unit", None),
+                "unit_price": unit_price,
+                "tax_rate": tax_rate,
+                "estimated_total": round(total, 2),
+                "status": status,
+                "source_type": getattr(entry, "source_type", None),
+                "source_id": getattr(entry, "source_id", None),
+                "created_at": (
+                    entry.created_at.isoformat()
+                    if getattr(entry, "created_at", None)
+                    else None
+                ),
+            }
+        )
+
+    return {
+        "status": "completed",
+        "message": (
+            f"Reviewed {len(entries)} usage ledger entries "
+            "for the verified company."
+        ),
+        "data": {
+            "company_id": company_id,
+            "entry_count": len(entries),
+            "total_estimated_usd": round(total_amount, 2),
+            "unbilled_estimated_usd": round(unbilled_amount, 2),
+            "billed_estimated_usd": round(billed_amount, 2),
+            "entries": serialized_entries,
+        },
+    }
+
+
+def prepare_billing_action(
+    context: dict[str, Any],
+    parameters: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Finance AI preparation step.
+
+    This action does NOT mutate billing records. It prepares a bounded
+    recommendation that can later be reviewed/approved before any
+    billing mutation occurs.
+    """
+    db = get_db(context)
+    company = get_company(context)
+
+    company_id = str(company.id)
+
+    entries = (
+        db.query(UsageLedger)
+        .filter(
+            UsageLedger.company_id == company_id,
+            UsageLedger.status == "unbilled",
+        )
+        .order_by(
+            UsageLedger.created_at.asc()
+        )
+        .all()
+    )
+
+    subtotal = 0.0
+    tax_total = 0.0
+
+    services: dict[str, float] = {}
+
+    for entry in entries:
+        quantity = float(
+            getattr(entry, "quantity", 0) or 0
+        )
+        unit_price = float(
+            getattr(entry, "unit_price", 0) or 0
+        )
+        tax_rate = float(
+            getattr(entry, "tax_rate", 0) or 0
+        )
+
+        line_subtotal = quantity * unit_price
+        line_tax = line_subtotal * tax_rate
+
+        subtotal += line_subtotal
+        tax_total += line_tax
+
+        service = clean_text(
+            getattr(entry, "service", None)
+        ) or "other"
+
+        services[service] = (
+            services.get(service, 0.0)
+            + line_subtotal
+            + line_tax
+        )
+
+    total = subtotal + tax_total
+
+    recommendation = {
+        "company_id": company_id,
+        "unbilled_entry_count": len(entries),
+        "subtotal_usd": round(subtotal, 2),
+        "tax_usd": round(tax_total, 2),
+        "estimated_total_usd": round(total, 2),
+        "service_totals_usd": {
+            key: round(value, 2)
+            for key, value in sorted(services.items())
+        },
+        "recommended_next_action": (
+            "review_and_approve_billing"
+            if entries
+            else "no_billing_action_required"
+        ),
+        "mutation_performed": False,
+    }
+
+    return {
+        "status": "completed",
+        "message": (
+            "Finance AI prepared a billing recommendation. "
+            "No billing records were changed."
+        ),
+        "data": recommendation,
+    }
+
+
+
 register_action("schedule_meeting", schedule_meeting_action)
 register_action("cancel_meeting", cancel_meeting_action)
 register_action("create_task", create_task_action)
 register_action("assign_task", assign_task_action)
+register_action("inspect_usage_ledger", inspect_usage_ledger_action)
+register_action("prepare_billing_action", prepare_billing_action)
 
 
 def list_registered_actions() -> list[str]:

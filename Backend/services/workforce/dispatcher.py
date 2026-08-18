@@ -38,11 +38,25 @@ def dispatch_work(
         )
         scores[key] = score
 
-    selected_key = max(scores, key=scores.get)
-    selected_score = scores[selected_key]
+    # Specialists take priority when their domain language matches.
+    # Sonny remains the coordinator/fallback and should not steal
+    # specialist work merely because generic words such as "company"
+    # or "plan" also appear in the request.
+    specialist_scores = {
+        key: score
+        for key, score in scores.items()
+        if key != "sonny" and score > 0
+    }
 
-    if selected_score == 0:
+    if specialist_scores:
+        selected_key = max(
+            specialist_scores,
+            key=specialist_scores.get,
+        )
+        selected_score = specialist_scores[selected_key]
+    else:
         selected_key = "sonny"
+        selected_score = scores.get("sonny", 0)
 
     selected = AGENT_REGISTRY[selected_key]
     matched_keywords = [

@@ -28,46 +28,40 @@ AGENT_REGISTRY: dict[str, WorkforceAgentDefinition] = {
         name="Sonny",
         role="AI Chief Operating Officer",
         description=(
-            "Coordinates company operations, meetings, tasks, workflows, "
-            "and executive follow-up."
+            "Coordinates company operations, planning, workflows, "
+            "and cross-agent execution."
         ),
         capabilities=(
-            "operations",
-            "meetings",
-            "tasks",
-            "workflow_coordination",
-            "executive_monitoring",
+            "orchestration",
         ),
         route_keywords=(
             "operation",
-            "meeting",
-            "schedule",
-            "book",
-            "task",
-            "workflow",
             "coordinate",
+            "workflow",
             "company",
             "office",
+            "planning",
+            "plan",
+            "organize",
+            "organise",
         ),
     ),
+
     "hermes": WorkforceAgentDefinition(
         key="hermes",
         name="Hermes",
         role="AI Compliance Officer",
         description=(
-            "Handles compliance reviews, company documents, licensing, "
-            "KYB readiness, and regulatory risk."
+            "Handles compliance review, company documents, "
+            "licensing readiness, and missing-document detection."
         ),
         capabilities=(
-            "compliance",
-            "documents",
-            "licenses",
-            "kyb",
-            "risk",
+            "compliance_review",
         ),
         route_keywords=(
             "compliance",
             "document",
+            "documents",
             "license",
             "licence",
             "kyb",
@@ -78,20 +72,17 @@ AGENT_REGISTRY: dict[str, WorkforceAgentDefinition] = {
             "legal",
         ),
     ),
+
     "julia": WorkforceAgentDefinition(
         key="julia",
         name="Julia",
         role="AI Growth Officer",
         description=(
-            "Handles growth planning, campaigns, landing pages, content, "
-            "lead generation, and market launch work."
+            "Handles growth analysis, CRM analysis, sales support, "
+            "campaign planning, and market launch work."
         ),
         capabilities=(
-            "growth",
-            "marketing",
-            "campaigns",
-            "content",
-            "lead_generation",
+            "growth_analysis",
         ),
         route_keywords=(
             "growth",
@@ -104,6 +95,122 @@ AGENT_REGISTRY: dict[str, WorkforceAgentDefinition] = {
             "lead",
             "launch",
             "sales",
+            "crm",
+        ),
+    ),
+
+    "finance_ai": WorkforceAgentDefinition(
+        key="finance_ai",
+        name="Finance AI",
+        role="AI Finance Analyst",
+        description=(
+            "Reviews billing, usage, ledger activity, revenue, "
+            "expenses, cash flow, and financial performance."
+        ),
+        capabilities=(
+            "billing_analysis",
+        ),
+        route_keywords=(
+            "finance",
+            "financial",
+            "billing",
+            "invoice",
+            "revenue",
+            "expense",
+            "expenses",
+            "cash flow",
+            "cashflow",
+            "budget",
+            "ledger",
+            "profit",
+            "cost",
+            "costs",
+        ),
+    ),
+
+    "support_ai": WorkforceAgentDefinition(
+        key="support_ai",
+        name="Support AI",
+        role="AI Support Specialist",
+        description=(
+            "Reviews support queues, triages tickets, and prepares responses."
+        ),
+        capabilities=(
+            "ticket_triage",
+        ),
+        route_keywords=(
+            "support",
+            "ticket",
+            "tickets",
+            "customer issue",
+            "customer problem",
+            "helpdesk",
+            "response",
+        ),
+    ),
+
+    "mailroom_ai": WorkforceAgentDefinition(
+        key="mailroom_ai",
+        name="Mailroom AI",
+        role="AI Mailroom Specialist",
+        description=(
+            "Reviews, classifies, and routes company mail."
+        ),
+        capabilities=(
+            "mail_routing",
+        ),
+        route_keywords=(
+            "mail",
+            "mailroom",
+            "letter",
+            "letters",
+            "postal",
+            "incoming mail",
+            "forward mail",
+        ),
+    ),
+
+    "meeting_ai": WorkforceAgentDefinition(
+        key="meeting_ai",
+        name="Meeting AI",
+        role="AI Meeting Coordinator",
+        description=(
+            "Prepares meetings, reviews commitments, and coordinates bookings."
+        ),
+        capabilities=(
+            "meeting_preparation",
+        ),
+        route_keywords=(
+            "meeting",
+            "meetings",
+            "schedule",
+            "calendar",
+            "booking",
+            "book",
+            "appointment",
+            "agenda",
+        ),
+    ),
+
+    "receptionist_ai": WorkforceAgentDefinition(
+        key="receptionist_ai",
+        name="Receptionist AI",
+        role="AI Receptionist",
+        description=(
+            "Handles call triage, visitor coordination, and reception support."
+        ),
+        capabilities=(
+            "reception_support",
+        ),
+        route_keywords=(
+            "reception",
+            "receptionist",
+            "call",
+            "calls",
+            "visitor",
+            "visitors",
+            "front desk",
+            "phone",
         ),
     ),
 }
