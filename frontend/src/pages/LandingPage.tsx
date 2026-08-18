@@ -1,391 +1,838 @@
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 const launchHref = "/create-company";
 const loginHref = "/login";
 
-const platformCards = [
+const departments = [
   {
-    number: "01",
-    title: "Abu Dhabi Virtual Headquarters",
-    text: "Establish a professional business presence in Abu Dhabi with a digital mailroom, meeting-room access, communications, and a workspace built for modern operations.",
+    name: "FINANCE",
+    accent: "#34c759",
+    initials: "FA",
+    roles: [
+      "Invoice Processing Agent",
+      "Financial Reporting Agent",
+      "Accounting Agent",
+    ],
   },
   {
-    number: "02",
-    title: "AI Workforce from Day One",
-    text: "Build an AI-augmented operating team before hiring a full traditional back office. Assign specialists across operations, customer workflows, growth, administration, and compliance.",
+    name: "ENGINEERING",
+    accent: "#0071e3",
+    initials: "EN",
+    roles: [
+      "Autonomous Engineer",
+      "QA Engineer",
+      "DevOps Engineer",
+    ],
   },
   {
-    number: "03",
-    title: "One Company Operating System",
-    text: "Run customers, tasks, documents, meetings, billing, reporting, Microsoft 365, and company intelligence from one connected command center.",
+    name: "DATA",
+    accent: "#8e5bd9",
+    initials: "DA",
+    roles: [
+      "Data Analyst",
+      "BI Analyst",
+      "Research Analyst",
+    ],
+  },
+  {
+    name: "OPERATIONS",
+    accent: "#ff9500",
+    initials: "OP",
+    roles: [
+      "Operations Analyst",
+      "Procurement Agent",
+      "Project Coordinator",
+    ],
+  },
+  {
+    name: "GROWTH",
+    accent: "#8e44cc",
+    initials: "JU",
+    roles: [
+      "Julia · Growth Officer",
+      "Sales Agent",
+      "SEO Agent",
+    ],
+  },
+  {
+    name: "COMPLIANCE",
+    accent: "#00a889",
+    initials: "HE",
+    roles: [
+      "Hermes · Compliance Officer",
+      "Risk Assessment Agent",
+      "Policy & Audit Agent",
+    ],
   },
 ];
 
-const modules = [
-  ["Command Center", "Live operational visibility across the company."],
-  ["Head Office", "Your Abu Dhabi headquarters and company services."],
-  ["AI Workforce", "AI specialists configured around business needs."],
-  ["Customer Hub", "Relationships, opportunities, and follow-ups."],
-  ["Digital Mailroom", "Centralized business mail and document handling."],
-  ["Meeting Center", "Rooms, schedules, and connected collaboration."],
-  ["Sonny AI COO", "Executive guidance and coordinated workflows."],
-  ["Hermes Compliance", "Structured compliance activity and oversight."],
+const industries = [
+  ["↗", "Finance & Accounting"],
+  ["</>", "Engineering & Technology"],
+  ["♡", "Healthcare"],
+  ["◉", "Pharmaceuticals"],
+  ["⚖", "Legal"],
+  ["▥", "Real Estate"],
+  ["•••", "And More"],
 ];
 
-const principles = [
+const infrastructure = [
+  ["▣", "Company Formation", "Legal entity & compliance"],
+  ["⌖", "Headquarters", "Virtual office & workspace"],
+  ["◫", "Communications", "Email, phone & meetings"],
+  ["▤", "Documents", "Storage, sharing & collaboration"],
+  ["⬡", "Compliance", "Policies, approvals & audit trails"],
+  ["▦", "Billing", "Invoices, payments & subscriptions"],
+];
+
+const plans = [
   {
-    title: "Launch faster",
-    text: "Replace a fragmented setup process with a guided flow that brings business infrastructure into one place.",
+    name: "Starter",
+    price: "$149",
+    description: "For founders building their first AI-native company.",
   },
   {
-    title: "Operate intelligently",
-    text: "Give founders a clearer view of priorities, customers, documents, workflows, and company performance.",
+    name: "Business",
+    price: "$399",
+    description: "For growing companies that need a broader operating platform, deeper automation and advanced AI capabilities.",
+    featured: true,
   },
   {
-    title: "Scale without fragmentation",
-    text: "Add tools, services, and AI support without building a disconnected collection of providers and dashboards.",
+    name: "Enterprise",
+    price: "$999",
+    description: "For larger agentic organizations and advanced governance.",
   },
 ];
 
-const journey = [
-  ["Choose", "Select your Abu Dhabi headquarters."],
-  ["Configure", "Add infrastructure, software, and AI workforce."],
-  ["Launch", "Activate your company workspace."],
-  ["Operate", "Run the business through Firmic."],
-];
+function Arrow() {
+  return <span aria-hidden="true">→</span>;
+}
 
-function ArrowIcon() {
-  return <span aria-hidden="true">↗</span>;
+function ProfessorPortrait({
+  compact = false,
+}: {
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`relative overflow-hidden border border-black/[0.06] bg-[#f7f7f5] shadow-[0_16px_40px_rgba(0,0,0,.08)] ${
+        compact
+          ? "h-12 w-12 rounded-full"
+          : "h-[420px] w-[360px] rounded-[180px_180px_40px_40px] sm:h-[500px] sm:w-[420px]"
+      }`}
+    >
+      <Image
+        src="/agents/sonny-canonical-v1.png"
+        alt="Sonny, Firmic AI Chief Operating Officer"
+        fill
+        unoptimized
+        priority={!compact}
+        sizes={compact ? "48px" : "(max-width: 640px) 192px, 280px"}
+        className={
+          compact
+            ? "object-cover object-top"
+            : "object-contain object-bottom"
+        }
+      />
+    </div>
+  );
+}
+
+function EmployeePortrait({
+  initials,
+}: {
+  initials: string;
+}) {
+  return (
+    <div className="relative mx-auto h-[145px] w-[120px]">
+      <div className="absolute left-1/2 top-1 h-[70px] w-[70px] -translate-x-1/2 rounded-full bg-[linear-gradient(145deg,#c7a180,#edc5a2)]" />
+      <div className="absolute bottom-0 left-1/2 h-[90px] w-[112px] -translate-x-1/2 rounded-t-[55px] bg-[linear-gradient(160deg,#f4f4f4,#d9dde1)]" />
+      <div className="absolute left-1/2 top-[42px] -translate-x-1/2 text-[10px] font-black text-black/30">
+        {initials}
+      </div>
+    </div>
+  );
 }
 
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activeModule, setActiveModule] = useState(0);
   const [scrolled, setScrolled] = useState(false);
+  const [sonnyOpen, setSonnyOpen] = useState(false);
+  const [visitorQuestion, setVisitorQuestion] = useState("");
+  const [annualBilling, setAnnualBilling] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => setScrolled(window.scrollY > 16);
+
     onScroll();
     window.addEventListener("scroll", onScroll);
+
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const activeModuleContent = useMemo(() => modules[activeModule], [activeModule]);
+  function submitSonny(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const question = String(formData.get("question") || "").trim();
+
+    if (!question) return;
+
+    setVisitorQuestion(question);
+    form.reset();
+  }
+
+  function displayPlanPrice(price: string) {
+    const monthly = Number(price.replace("$", ""));
+
+    if (!annualBilling) {
+      return {
+        price: `$${monthly}`,
+        suffix: "/month",
+        detail: "",
+      };
+    }
+
+    const discountedMonthly = monthly * 0.8;
+    const annualTotal = monthly * 12 * 0.8;
+
+    return {
+      price: `$${discountedMonthly.toFixed(2)}`,
+      suffix: "/month equivalent",
+      detail: `$${annualTotal.toFixed(2)} billed yearly`,
+    };
+  }
+
+  const navigation = [
+    ["Platform", "#platform"],
+    ["Capabilities", "#workforce"],
+    ["Solutions", "#solutions"],
+    ["Pricing", "/pricing"],
+  ];
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#f4f7f8] text-[#09233d] selection:bg-[#76d5d1] selection:text-[#09233d]">
+    <div className="min-h-screen bg-white text-[#16181b] selection:bg-[#48a936] selection:text-white">
       <style jsx global>{`
-        html { scroll-behavior: smooth; }
-        body { background: #f4f7f8; }
-        @keyframes floatSlow { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-12px); } }
-        @keyframes pulseSoft { 0%,100% { opacity: .5; transform: scale(1); } 50% { opacity: .9; transform: scale(1.08); } }
-        @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-        @keyframes revealUp { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: translateY(0); } }
-        .float-slow { animation: floatSlow 6s ease-in-out infinite; }
-        .pulse-soft { animation: pulseSoft 5s ease-in-out infinite; }
-        .marquee-track { animation: marquee 26s linear infinite; }
-        .reveal-up { animation: revealUp .8s ease-out both; }
+        html {
+          scroll-behavior: smooth;
+        }
+
+        body {
+          background: #fff;
+        }
+
+        @keyframes softFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-7px); }
+        }
+
+        .soft-float {
+          animation: softFloat 7s ease-in-out infinite;
+        }
+
         @media (prefers-reduced-motion: reduce) {
-          .float-slow, .pulse-soft, .marquee-track, .reveal-up { animation: none !important; }
-          html { scroll-behavior: auto; }
+          html {
+            scroll-behavior: auto;
+          }
+
+          .soft-float {
+            animation: none !important;
+          }
         }
       `}</style>
 
-      <div className="border-b border-white/10 bg-[#09233d] px-5 py-2.5 text-center text-xs font-semibold tracking-[0.12em] text-white/85">
-        EARLY ACCESS • BUILT IN ABU DHABI • DESIGNED FOR GLOBAL FOUNDERS
-      </div>
-
-      <header className={`sticky top-0 z-50 transition-all duration-300 ${scrolled ? "border-b border-[#09233d]/10 bg-[#f4f7f8]/92 shadow-[0_12px_35px_rgba(9,35,61,0.06)] backdrop-blur-xl" : "bg-transparent"}`}>
-        <div className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-4 lg:px-10">
-          <Link href="/" className="flex items-center gap-3" aria-label="Firmic home">
-            <div className="relative h-16 w-44">
-              <Image
-                src="/firmic-logo.png"
-                alt="Firmic Operating System"
-                fill
-                priority
-                sizes="176px"
-                className="object-contain object-left"
-              />
+      <header
+        className={`fixed inset-x-0 top-0 z-50 transition ${
+          scrolled
+            ? "border-b border-black/[0.07] bg-white/90 backdrop-blur-xl"
+            : "bg-white"
+        }`}
+      >
+        <div className="mx-auto flex h-[72px] max-w-[1420px] items-center justify-between px-5 lg:px-9">
+          <Link href="/" className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border-2 border-[#4ead3b] text-sm font-black text-[#4ead3b]">
+              F
             </div>
+
+            <span className="text-xl font-black tracking-[0.08em]">
+              FIRMIC
+            </span>
           </Link>
 
-          <nav className="hidden items-center gap-8 lg:flex">
-            {["Vision", "Platform", "How it works", "Abu Dhabi"].map((item) => (
-              <a key={item} href={`#${item.toLowerCase().replaceAll(" ", "-")}`} className="text-sm font-semibold text-[#31526c] transition hover:text-[#0f8f91]">
-                {item}
+          <nav className="hidden items-center gap-9 lg:flex">
+            {navigation.map(([title, id]) => (
+              <a
+                key={id}
+                href={id}
+                className="text-[13px] font-medium text-[#36383c] transition hover:text-[#49a838]"
+              >
+                {title}
               </a>
             ))}
+
+            <a
+              href="#platform"
+              className="text-[13px] font-medium text-[#36383c]"
+            >
+              Resources⌄
+            </a>
           </nav>
 
-          <div className="hidden items-center gap-3 lg:flex">
-            <Link href={loginHref} className="rounded-full px-5 py-3 text-sm font-bold text-[#31526c] transition hover:bg-white">
+          <div className="hidden items-center gap-6 lg:flex">
+            <Link href={loginHref} className="text-[13px] font-medium">
               Sign in
             </Link>
-            <Link href={launchHref} className="group rounded-full bg-[#09233d] px-6 py-3.5 text-sm font-bold text-white shadow-[0_12px_30px_rgba(9,35,61,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0f8f91]">
-              Start building your company <span className="ml-1 inline-block transition group-hover:translate-x-0.5"><ArrowIcon /></span>
+
+            <Link
+              href={launchHref}
+              className="rounded-md bg-[#4baa36] px-6 py-3 text-[13px] font-bold text-white shadow-[0_7px_18px_rgba(75,170,54,.22)] transition hover:bg-[#439b30]"
+            >
+              Build Your Company
             </Link>
           </div>
 
-          <button type="button" onClick={() => setMenuOpen((v) => !v)} className="flex h-11 w-11 items-center justify-center rounded-full border border-[#09233d]/15 bg-white text-lg lg:hidden" aria-label="Toggle navigation">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((value) => !value)}
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f5f6f7] lg:hidden"
+          >
             {menuOpen ? "×" : "☰"}
           </button>
         </div>
 
         {menuOpen && (
-          <div className="border-t border-[#09233d]/10 bg-[#f4f7f8] px-5 py-5 lg:hidden">
-            <div className="flex flex-col gap-4">
-              {["Vision", "Platform", "How it works", "Abu Dhabi"].map((item) => (
-                <a key={item} onClick={() => setMenuOpen(false)} href={`#${item.toLowerCase().replaceAll(" ", "-")}`} className="font-bold text-[#31526c]">
-                  {item}
+          <div className="border-t border-black/[0.06] bg-white p-5 lg:hidden">
+            <div className="flex flex-col gap-5">
+              {navigation.map(([title, id]) => (
+                <a
+                  key={id}
+                  href={id}
+                  onClick={() => setMenuOpen(false)}
+                  className="font-semibold"
+                >
+                  {title}
                 </a>
               ))}
-              <Link href={loginHref} className="font-bold text-[#31526c]">Sign in</Link>
-              <Link href={launchHref} className="rounded-full bg-[#09233d] px-5 py-3 text-center font-bold text-white">Start building your company</Link>
+
+              <Link href={loginHref}>Sign in</Link>
+
+              <Link
+                href={launchHref}
+                className="rounded-lg bg-[#4baa36] px-5 py-3 text-center font-semibold text-white"
+              >
+                Build Your Company
+              </Link>
             </div>
           </div>
         )}
       </header>
 
       <main>
-        <section id="vision" className="relative isolate overflow-hidden">
-          <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_15%_20%,rgba(118,213,209,0.28),transparent_28%),radial-gradient(circle_at_82%_18%,rgba(103,177,194,0.22),transparent_27%),linear-gradient(180deg,#f4f7f8_0%,#edf4f5_100%)]" />
-          <div className="absolute -left-28 top-32 -z-10 h-72 w-72 rounded-full border-[52px] border-[#0f8f91]/5 pulse-soft" />
-          <div className="absolute -right-36 top-12 -z-10 h-[430px] w-[430px] rounded-full bg-[#76d5d1]/15 blur-3xl" />
+        {/* HERO */}
+        <section className="border-b border-black/[0.06] px-5 pb-12 pt-36 lg:px-9 lg:pb-14 lg:pt-40">
+          <div className="mx-auto grid max-w-[1420px] items-center gap-10 lg:grid-cols-[.92fr_1.08fr]">
+            <div className="py-8 lg:py-14">
+              <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#48a737]">
+                The Agentic Company OS
+              </p>
 
-          <div className="mx-auto grid min-h-[820px] max-w-[1440px] items-center gap-16 px-5 py-20 lg:grid-cols-[0.92fr_1.08fr] lg:px-10 lg:py-28">
-            <div className="reveal-up">
-              <div className="mb-7 inline-flex items-center gap-3 rounded-full border border-[#0f8f91]/20 bg-white/70 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-[#0f7477] shadow-sm backdrop-blur">
-                <span className="h-2 w-2 rounded-full bg-[#0f8f91]" />
-                A new operating model for business
-              </div>
-
-              <h1 className="max-w-4xl text-[3.5rem] font-black leading-[0.92] tracking-[-0.065em] text-[#09233d] sm:text-[5rem] lg:text-[6.15rem]">
-                Build the company.
-                <span className="mt-2 block text-[#0f8f91]">Firmic runs the operation.</span>
+              <h1 className="mt-5 max-w-[650px] text-[2.9rem] font-semibold leading-[1.06] tracking-[-0.05em] sm:text-[3.7rem] lg:text-[4rem]">
+                Create Your Company.
+                <span className="block text-[#4baa36]">
+                  Firmic Makes It Work.
+                </span>
               </h1>
 
-              <p className="mt-8 max-w-2xl text-lg leading-8 text-[#49677d] sm:text-xl">
-                Firmic is the operating system for AI-native companies: an Abu Dhabi virtual headquarters, AI workforce, business software, communications, and operational intelligence in one connected platform.
+              <p className="mt-6 max-w-[620px] text-lg leading-8 text-[#667080]">
+                From workforce and communications to mail, compliance,
+                operations and intelligent automation, Firmic gives your
+                company what it needs to operate and grow.
               </p>
 
-              <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-                <Link href={launchHref} className="group rounded-full bg-[#09233d] px-8 py-5 text-center text-base font-black text-white shadow-[0_18px_40px_rgba(9,35,61,0.22)] transition hover:-translate-y-1 hover:bg-[#0f8f91]">
-                  Start building in Abu Dhabi <span className="ml-2 inline-block transition group-hover:translate-x-1"><ArrowIcon /></span>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Link
+                  href={launchHref}
+                  className="rounded-md bg-[#4baa36] px-7 py-3.5 text-center text-sm font-bold text-white transition hover:bg-[#439b30]"
+                >
+                  Create Your Company <span className="ml-2"><Arrow /></span>
                 </Link>
-                <a href="#platform" className="rounded-full border border-[#09233d]/15 bg-white/75 px-8 py-5 text-center text-base font-black text-[#09233d] transition hover:-translate-y-1 hover:border-[#0f8f91]/40 hover:bg-white">
-                  Explore the platform
-                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setSonnyOpen(true)}
+                  className="rounded-md border border-black/[0.11] bg-white px-7 py-3.5 text-sm font-semibold shadow-sm transition hover:bg-[#f7f7f8]"
+                >
+                  Meet Sonny　▶
+                </button>
               </div>
 
-              <div className="mt-10 grid max-w-xl grid-cols-3 gap-4 border-t border-[#09233d]/10 pt-7">
-                {[ ["1", "Company OS"], ["15", "AI specialists"], ["Day one", "Operational start"] ].map(([value,label]) => (
-                  <div key={label}>
-                    <p className="text-2xl font-black text-[#09233d]">{value}</p>
-                    <p className="mt-1 text-xs font-bold uppercase tracking-[0.11em] text-[#698296]">{label}</p>
-                  </div>
-                ))}
+              <div className="mt-9">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#8b919a]">
+                  Trusted by innovative companies
+                </p>
+
+                <div className="mt-5 flex flex-wrap gap-x-8 gap-y-3 text-sm text-[#737a85]">
+                  <span>🚀 Startups</span>
+                  <span>▥ Scaleups</span>
+                  <span>▤ Enterprises</span>
+                  <span>♙ Agencies</span>
+                </div>
               </div>
             </div>
 
-            <div className="relative lg:pl-6">
-              <div className="absolute -inset-8 rounded-[3rem] bg-[#76d5d1]/20 blur-3xl" />
-              <div className="relative float-slow overflow-hidden rounded-[2rem] border border-white/80 bg-white p-2 shadow-[0_40px_100px_rgba(9,35,61,0.22)]">
-                <Image src="/firmic-platform.png" alt="Firmic company workspace platform" width={1600} height={950} priority className="h-auto w-full rounded-[1.55rem]" />
+            <div className="relative min-h-[520px] overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_40%_40%,#ffffff_0%,#f7f8f8_55%,#eff1f2_100%)] shadow-[0_18px_45px_rgba(0,0,0,.08)]">
+              <div className="absolute inset-y-0 left-[4%] flex items-end pb-3">
+                <ProfessorPortrait />
               </div>
 
-              <div className="absolute -bottom-9 -left-3 z-10 hidden w-64 rounded-2xl border border-white bg-[#09233d] p-5 text-white shadow-2xl sm:block">
-                <p className="text-[10px] font-black uppercase tracking-[0.17em] text-[#76d5d1]">Meet Sonny, your AI COO</p>
-                <p className="mt-2 font-black">Welcome to Firmic. I help keep your company moving.</p>
-                <p className="mt-2 text-xs leading-5 text-white/60">Operations, customer follow-ups, priorities, and compliance—coordinated from one workspace.</p>
-              </div>
-            </div>
-          </div>
-        </section>
+              <div className="absolute right-10 top-16">
+                <p className="text-xl font-bold text-[#4baa36]">
+                  SONNY
+                </p>
+                <p className="mt-2 text-sm text-[#7a8088]">
+                  AI Chief Operating Officer
+                </p>
 
-        <section className="overflow-hidden border-y border-[#09233d]/10 bg-white py-5">
-          <div className="marquee-track flex min-w-max gap-12 whitespace-nowrap px-6 text-sm font-black uppercase tracking-[0.18em] text-[#31526c]/70">
-            {[...Array(2)].flatMap((_, pass) => ["Virtual Headquarters", "AI Workforce", "Customer Hub", "Digital Mailroom", "Business Communications", "Sonny AI COO", "Compliance", "Reports"].map((item) => <span key={`${pass}-${item}`}>• {item}</span>))}
-          </div>
-        </section>
-
-        <section className="mx-auto max-w-[1440px] px-5 py-28 lg:px-10">
-          <div className="grid gap-14 lg:grid-cols-[0.78fr_1.22fr]">
-            <div className="lg:sticky lg:top-32 lg:self-start">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0f8f91]">Why Firmic exists</p>
-              <h2 className="mt-5 text-4xl font-black leading-[1.02] tracking-[-0.05em] text-[#09233d] sm:text-5xl">
-                Companies changed. Their infrastructure did not.
-              </h2>
-              <p className="mt-6 text-lg leading-8 text-[#587286]">
-                Modern founders can build globally, hire intelligently, and automate operations from the beginning. Yet launching a company still means stitching together addresses, providers, communication tools, software, documents, and manual workflows.
-              </p>
-              <p className="mt-5 text-lg font-bold leading-8 text-[#09233d]">
-                Firmic turns that fragmentation into one operating system.
-              </p>
-            </div>
-
-            <div className="space-y-5">
-              {platformCards.map((card) => (
-                <article key={card.number} className="group grid gap-8 rounded-[2rem] border border-[#09233d]/10 bg-white p-7 shadow-[0_14px_45px_rgba(9,35,61,0.06)] transition hover:-translate-y-1 hover:border-[#0f8f91]/30 hover:shadow-[0_24px_60px_rgba(9,35,61,0.1)] sm:grid-cols-[90px_1fr] sm:p-9">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#dff5f3] text-lg font-black text-[#0f7477] transition group-hover:bg-[#0f8f91] group-hover:text-white">{card.number}</div>
-                  <div>
-                    <h3 className="text-2xl font-black tracking-[-0.03em] text-[#09233d]">{card.title}</h3>
-                    <p className="mt-4 text-base leading-8 text-[#587286]">{card.text}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="platform" className="bg-[#09233d] py-28 text-white">
-          <div className="mx-auto max-w-[1440px] px-5 lg:px-10">
-            <div className="max-w-4xl">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-[#76d5d1]">The platform</p>
-              <h2 className="mt-5 text-4xl font-black leading-[1.02] tracking-[-0.05em] sm:text-6xl">A complete company workspace, not another isolated tool.</h2>
-              <p className="mt-6 max-w-3xl text-lg leading-8 text-white/60">Every module is designed around one active company, giving founders a connected view of the work, services, people, customers, and intelligence required to operate.</p>
-            </div>
-
-            <div className="mt-14 grid gap-8 lg:grid-cols-[0.72fr_1.28fr]">
-              <div className="space-y-2">
-                {modules.map(([title], index) => (
-                  <button key={title} type="button" onClick={() => setActiveModule(index)} className={`w-full rounded-2xl px-5 py-4 text-left font-bold transition ${activeModule === index ? "bg-[#76d5d1] text-[#09233d]" : "bg-white/5 text-white/65 hover:bg-white/10 hover:text-white"}`}>
-                    <span className="mr-4 text-xs opacity-60">{String(index + 1).padStart(2, "0")}</span>{title}
-                  </button>
-                ))}
+                <div className="mt-6 flex items-center gap-2 text-sm text-[#535b64]">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#43b83b]" />
+                  Online & Orchestrating
+                </div>
               </div>
 
-              <div className="relative min-h-[620px] overflow-hidden rounded-[2.25rem] border border-white/10 bg-[linear-gradient(145deg,rgba(255,255,255,0.1),rgba(255,255,255,0.03))] p-7 sm:p-10">
-                <div className="absolute right-0 top-0 h-72 w-72 rounded-full bg-[#76d5d1]/10 blur-3xl" />
-                <p className="relative text-xs font-black uppercase tracking-[0.18em] text-[#76d5d1]">Active module</p>
-                <h3 className="relative mt-5 text-4xl font-black tracking-[-0.04em]">{activeModuleContent[0]}</h3>
-                <p className="relative mt-5 max-w-xl text-lg leading-8 text-white/60">{activeModuleContent[1]}</p>
+              <div className="absolute bottom-10 right-8 w-[225px] rounded-[18px] border border-black/[0.07] bg-white/95 p-5 shadow-[0_12px_36px_rgba(0,0,0,.09)]">
+                <p className="text-base font-semibold">
+                  Your Company, Ready to Operate
+                </p>
 
-                <div className="relative mt-12 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  {["Live status", "Connected data", "Company context", "AI assistance", "Structured actions", "One workspace"].map((item, index) => (
-                    <div key={item} className={`rounded-2xl border p-5 ${index === 0 ? "border-[#76d5d1]/60 bg-[#76d5d1]/15" : "border-white/10 bg-white/5"}`}>
-                      <div className="mb-8 h-2 w-2 rounded-full bg-[#76d5d1]" />
-                      <p className="text-sm font-black">{item}</p>
+                <div className="mt-5 space-y-3">
+                  {[
+                    "Employ Your Workforce",
+                    "Get Your Calls",
+                    "Receive Your Mail",
+                    "Run Your Operations",
+                    "Stay Compliant",
+                  ].map((item) => (
+                    <div
+                      key={item}
+                      className="flex items-center gap-3 text-sm text-[#525963]"
+                    >
+                      <span className="text-[#48a737]">✓</span>
+                      <span>{item}</span>
                     </div>
                   ))}
                 </div>
 
-                <div className="relative mt-5 rounded-2xl border border-white/10 bg-black/10 p-5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-white/45">Firmic system status</p>
-                    <span className="rounded-full bg-[#76d5d1]/15 px-3 py-1 text-xs font-black text-[#76d5d1]">● Connected</span>
-                  </div>
-                  <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full w-[88%] rounded-full bg-[#76d5d1]" /></div>
+                <div className="mt-5 border-t border-black/[0.08] pt-4">
+                  <p className="text-xs font-semibold text-[#48a737]">
+                    Sonny coordinates it all.
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section id="how-it-works" className="mx-auto max-w-[1440px] px-5 py-28 lg:px-10">
-          <div className="text-center">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0f8f91]">How it works</p>
-            <h2 className="mx-auto mt-5 max-w-4xl text-4xl font-black tracking-[-0.05em] text-[#09233d] sm:text-6xl">From business idea to operating company.</h2>
-          </div>
+        {/* WORKFORCE */}
+        <section
+          id="workforce"
+          className="px-5 py-14 lg:px-9 lg:py-16"
+        >
+          <div className="mx-auto max-w-[1420px]">
+            <div className="text-center">
+              <h2 className="text-3xl font-semibold tracking-[-0.035em]">
+                Make Your Company AI-Native with Firmic.
+              </h2>
+              <p className="mt-2 text-sm text-[#777e88]">
+                Workforce, communications, mail, compliance, operations and intelligent automation — brought together by Firmic.
+              </p>
+            </div>
 
-          <div className="mt-16 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            {journey.map(([title, text], index) => (
-              <article key={title} className="relative min-h-[300px] overflow-hidden rounded-[2rem] border border-[#09233d]/10 bg-white p-7 shadow-[0_14px_45px_rgba(9,35,61,0.06)]">
-                <span className="absolute -right-3 -top-8 text-[9rem] font-black text-[#edf4f5]">{index + 1}</span>
-                <p className="relative text-xs font-black uppercase tracking-[0.16em] text-[#0f8f91]">Step {index + 1}</p>
-                <h3 className="relative mt-28 text-3xl font-black tracking-[-0.04em] text-[#09233d]">{title}</h3>
-                <p className="relative mt-4 leading-7 text-[#587286]">{text}</p>
-              </article>
-            ))}
+            <div className="mt-8 grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              {departments.map((department) => (
+                <article
+                  key={department.name}
+                  className="min-h-[330px] rounded-[16px] border border-black/[0.08] bg-white p-5 transition hover:-translate-y-1 hover:shadow-[0_16px_34px_rgba(0,0,0,.07)]"
+                >
+                  <p
+                    className="text-xs font-bold"
+                    style={{ color: department.accent }}
+                  >
+                    {department.name}
+                  </p>
+
+                  <EmployeePortrait initials={department.initials} />
+
+                  <div className="mt-3 space-y-2">
+                    {department.roles.map((role) => (
+                      <div
+                        key={role}
+                        className="flex gap-2 text-[11px] leading-5 text-[#41484f]"
+                      >
+                        <span style={{ color: department.accent }}>•</span>
+                        <span>{role}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    className="mt-3 text-right text-xl"
+                    style={{ color: department.accent }}
+                  >
+                    →
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="mt-7 text-center">
+              <a
+                href="#platform"
+                className="text-sm font-medium text-[#4baa36]"
+              >
+                Explore Firmic Capabilities　→
+              </a>
+            </div>
           </div>
         </section>
 
-        <section className="bg-white py-28">
-          <div className="mx-auto max-w-[1440px] px-5 lg:px-10">
-            <div className="grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:items-end">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0f8f91]">A better operating model</p>
-                <h2 className="mt-5 text-4xl font-black leading-[1.02] tracking-[-0.05em] text-[#09233d] sm:text-6xl">Built for the company you are becoming.</h2>
-              </div>
-              <p className="text-lg leading-8 text-[#587286]">Firmic is designed for founders who want to move quickly without losing operational clarity. Start lean, build intelligently, and expand through one connected infrastructure layer.</p>
-            </div>
+        {/* HOW */}
+        <section className="border-y border-black/[0.05] px-5 py-14 lg:px-9">
+          <div className="mx-auto max-w-[1140px]">
+            <h2 className="text-center text-3xl font-semibold">
+              How Firmic Works
+            </h2>
 
-            <div className="mt-14 grid gap-5 lg:grid-cols-3">
-              {principles.map((item, index) => (
-                <article key={item.title} className={`${index === 1 ? "bg-[#0f8f91] text-white" : "bg-[#edf4f5] text-[#09233d]"} rounded-[2rem] p-8 sm:p-10`}>
-                  <p className={`text-xs font-black uppercase tracking-[0.17em] ${index === 1 ? "text-[#c8fbf4]" : "text-[#0f8f91]"}`}>0{index + 1}</p>
-                  <h3 className="mt-20 text-3xl font-black tracking-[-0.04em]">{item.title}</h3>
-                  <p className={`mt-5 leading-8 ${index === 1 ? "text-white/75" : "text-[#587286]"}`}>{item.text}</p>
+            <div className="mt-10 grid gap-8 md:grid-cols-4">
+              {[
+                ["🚀", "1. Launch", "Form your company and set up your headquarters in minutes."],
+                ["👥", "2. Build Workforce", "Select AI employees from our catalog and build your departments."],
+                ["🔗", "3. Connect Tools", "Connect your data, apps, and systems. Firmic handles the integration."],
+                ["⚡", "4. Sonny Coordinates", "Sonny orchestrates your workforce to run and grow your business."],
+              ].map(([icon, title, text]) => (
+                <article key={title} className="text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#f7f8f8] text-2xl shadow-[0_10px_24px_rgba(0,0,0,.06)]">
+                    {icon}
+                  </div>
+
+                  <h3 className="mt-5 text-sm font-semibold">{title}</h3>
+
+                  <p className="mx-auto mt-3 max-w-[210px] text-xs leading-5 text-[#747b84]">
+                    {text}
+                  </p>
                 </article>
               ))}
             </div>
           </div>
         </section>
 
-        <section id="abu-dhabi" className="relative overflow-hidden bg-[#dff5f3] py-28">
-          <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full border-[70px] border-white/40" />
-          <div className="mx-auto grid max-w-[1440px] gap-14 px-5 lg:grid-cols-[0.88fr_1.12fr] lg:px-10">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0f7477]">Abu Dhabi foundation</p>
-              <h2 className="mt-5 text-4xl font-black leading-[1.02] tracking-[-0.05em] text-[#09233d] sm:text-6xl">Built in Abu Dhabi. Ready for the world.</h2>
-            </div>
-            <div>
-              <p className="text-xl font-bold leading-9 text-[#1e465e]">Firmic is being built for globally ambitious founders who want a credible Abu Dhabi business presence and an AI-native way to operate from day one.</p>
-              <p className="mt-6 text-lg leading-8 text-[#587286]">The platform connects local business infrastructure with a digital workspace that can support distributed teams, international customers, and modern company operations.</p>
-              <div className="mt-9 flex flex-wrap gap-3">
-                {["Abu Dhabi headquarters", "Global operating model", "AI-native infrastructure", "Founder-first platform"].map((item) => (
-                  <span key={item} className="rounded-full border border-[#0f8f91]/20 bg-white/65 px-4 py-2 text-sm font-black text-[#0f7477]">{item}</span>
-                ))}
-              </div>
+        {/* INFRASTRUCTURE */}
+        <section
+          id="platform"
+          className="px-5 py-12 lg:px-9"
+        >
+          <div className="mx-auto max-w-[1220px] text-center">
+            <h2 className="text-3xl font-semibold">
+              Built on a Complete Company Infrastructure
+            </h2>
+
+            <p className="mt-2 text-sm text-[#7c838c]">
+              Everything your company needs. All in one platform.
+            </p>
+
+            <div className="mt-9 grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+              {infrastructure.map(([icon, title, text]) => (
+                <article key={title} className="px-3">
+                  <div className="text-2xl text-[#4baa36]">{icon}</div>
+                  <h3 className="mt-4 text-sm font-semibold">{title}</h3>
+                  <p className="mt-2 text-xs leading-5 text-[#777e88]">
+                    {text}
+                  </p>
+                </article>
+              ))}
             </div>
           </div>
         </section>
 
-        <section className="px-5 py-28 lg:px-10">
-          <div className="mx-auto max-w-[1440px] overflow-hidden rounded-[2.75rem] bg-[#09233d] px-6 py-16 text-white shadow-[0_35px_80px_rgba(9,35,61,0.2)] sm:px-12 lg:px-20 lg:py-20">
-            <div className="grid items-center gap-12 lg:grid-cols-[0.72fr_1.28fr]">
-              <div className="relative h-56 overflow-hidden rounded-[2rem] bg-white/95 p-6">
-                <Image
-                  src="/firmic-logo.png"
-                  alt="Firmic Operating System"
-                  fill
-                  sizes="560px"
-                  className="object-contain object-center p-6"
-                />
-              </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-[#76d5d1]">Your company starts here</p>
-                <h2 className="mt-5 text-4xl font-black leading-[1.02] tracking-[-0.05em] sm:text-6xl">Start building your AI-native company from Abu Dhabi.</h2>
-                <p className="mt-6 max-w-3xl text-lg leading-8 text-white/60">Create the foundation, configure the infrastructure, and enter your company workspace through one guided experience.</p>
-                <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                  <Link href={launchHref} className="rounded-full bg-[#76d5d1] px-8 py-4 text-center font-black text-[#09233d] transition hover:-translate-y-1 hover:bg-white">Start building your company</Link>
-                  <a href="mailto:hello@firmic.io" className="rounded-full border border-white/15 bg-white/5 px-8 py-4 text-center font-black text-white transition hover:bg-white/10">Contact Firmic</a>
+        {/* INDUSTRIES */}
+        <section
+          id="solutions"
+          className="border-t border-black/[0.05] px-5 py-12 lg:px-9"
+        >
+          <div className="mx-auto max-w-[1220px]">
+            <h2 className="text-center text-3xl font-semibold">
+              Built for Every Industry
+            </h2>
+
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
+              {industries.map(([icon, name]) => (
+                <article
+                  key={name}
+                  className="rounded-[14px] border border-black/[0.08] p-5 text-center"
+                >
+                  <div className="text-2xl text-[#4baa36]">{icon}</div>
+                  <p className="mt-4 text-xs font-semibold">{name}</p>
+                </article>
+              ))}
+            </div>
+
+            <p className="mx-auto mt-5 max-w-[860px] text-center text-[10px] leading-5 text-[#9499a0]">
+              Healthcare and pharmaceutical workflows are intended for
+              administrative, analytical, research, documentation and
+              appropriately supervised applications — not autonomous diagnosis,
+              prescribing, or independent clinical decisions.
+            </p>
+          </div>
+        </section>
+
+        {/* PRICING */}
+        <section
+          id="pricing"
+          className="bg-[#f6f7f7] px-5 py-16 lg:px-9"
+        >
+          <div className="mx-auto max-w-[1080px]">
+            <div className="text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#4baa36]">
+                Pricing
+              </p>
+
+              <h2 className="mt-3 text-3xl font-semibold">
+                Choose the plan that fits your company.
+              </h2>
+
+              <p className="mx-auto mt-3 max-w-[650px] text-sm leading-6 text-[#747b84]">
+                Choose monthly flexibility or save 20% with annual billing.
+                Every plan includes an AI execution allowance, with additional
+                usage controlled and metered.
+              </p>
+
+              <div className="mt-7 flex justify-center">
+                <div className="inline-flex rounded-full border border-black/[0.07] bg-white p-1 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setAnnualBilling(false)}
+                    className={`rounded-full px-5 py-2.5 text-xs font-semibold transition ${
+                      !annualBilling
+                        ? "bg-[#1d1d1f] text-white"
+                        : "text-[#6f7680] hover:text-black"
+                    }`}
+                  >
+                    Monthly
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAnnualBilling(true)}
+                    className={`rounded-full px-5 py-2.5 text-xs font-semibold transition ${
+                      annualBilling
+                        ? "bg-[#4baa36] text-white"
+                        : "text-[#6f7680] hover:text-black"
+                    }`}
+                  >
+                    Yearly · Save 20%
+                  </button>
                 </div>
               </div>
             </div>
+
+            <div className="mt-10 grid gap-4 md:grid-cols-3">
+              {plans.map((plan) => (
+                <article
+                  key={plan.name}
+                  className={`relative rounded-[20px] p-7 ${
+                    plan.featured
+                      ? "border-2 border-[#4baa36] bg-white shadow-[0_16px_40px_rgba(75,170,54,.10)]"
+                      : "border border-black/[0.08] bg-white"
+                  }`}
+                >
+                  {plan.featured && (
+                    <span className="absolute right-5 top-5 rounded-full bg-[#4baa36] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-white">
+                      Most Popular
+                    </span>
+                  )}
+
+                  <p className="text-sm font-semibold">{plan.name}</p>
+
+                  {(() => {
+                    const pricing = displayPlanPrice(plan.price);
+
+                    return (
+                      <>
+                        <div className="mt-6 flex items-end gap-2">
+                          <p className="text-4xl font-semibold">
+                            {pricing.price}
+                          </p>
+
+                          <span className="pb-1 text-xs text-[#7b8189]">
+                            {pricing.suffix}
+                          </span>
+                        </div>
+
+                        {pricing.detail && (
+                          <p className="mt-2 text-xs font-semibold text-[#4baa36]">
+                            {pricing.detail}
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  <p className="mt-5 min-h-[48px] text-sm leading-6 text-[#6f7680]">
+                    {plan.description}
+                  </p>
+
+                  <Link
+                    href={launchHref}
+                    className={`mt-7 block rounded-lg px-5 py-3 text-center text-sm font-semibold ${
+                      plan.featured
+                        ? "bg-[#4baa36] text-white"
+                        : "bg-[#f4f5f5] text-[#34383d]"
+                    }`}
+                  >
+                    Choose {plan.name}
+                  </Link>
+                </article>
+              ))}
+            </div>
+
+            <p className="mt-6 text-center text-xs text-[#838991]">
+              $79 one-time Company Launch Fee · AI execution allowance included
+              · Additional AI usage may be metered
+            </p>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-[#09233d]/10 bg-[#edf4f5]">
-        <div className="mx-auto flex max-w-[1440px] flex-col gap-8 px-5 py-10 md:flex-row md:items-center md:justify-between lg:px-10">
+      <footer className="border-t border-black/[0.06] px-5 py-9 lg:px-9">
+        <div className="mx-auto flex max-w-[1220px] flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xl font-black tracking-[0.13em] text-[#09233d]">FIRMIC</p>
-            <p className="mt-2 text-sm text-[#698296]">The operating system for AI-native companies.</p>
+            <p className="font-black tracking-[0.1em]">FIRMIC</p>
+            <p className="mt-1 text-xs text-[#81868d]">
+              The operating system for agentic companies.
+            </p>
           </div>
-          <div className="flex flex-wrap gap-6 text-sm font-bold text-[#49677d]">
-            <a href="#vision" className="hover:text-[#0f8f91]">Vision</a>
-            <a href="#platform" className="hover:text-[#0f8f91]">Platform</a>
-            <a href="#how-it-works" className="hover:text-[#0f8f91]">How it works</a>
-            <a href="#abu-dhabi" className="hover:text-[#0f8f91]">Abu Dhabi</a>
-            <Link href="/virtual-offices" className="hover:text-[#0f8f91]">Launch</Link>
-            <a href="mailto:hello@firmic.io" className="hover:text-[#0f8f91]">Contact</a>
+
+          <div className="flex flex-wrap gap-6 text-xs text-[#697079]">
+            <a href="#platform">Platform</a>
+            <a href="#workforce">AI Workforce</a>
+            <a href="#solutions">Solutions</a>
+            <a href="#pricing">Pricing</a>
+            <Link href={loginHref}>Sign in</Link>
           </div>
-          <p className="text-xs font-semibold text-[#8aa0af]">© {new Date().getFullYear()} Firmic. Abu Dhabi, UAE.</p>
+
+          <p className="text-xs text-[#92979d]">
+            © {new Date().getFullYear()} Firmic · Abu Dhabi, UAE
+          </p>
         </div>
       </footer>
+
+      {/* Public Sonny presentation layer only */}
+      <div className="fixed bottom-5 right-5 z-[80] sm:bottom-7 sm:right-7">
+        {sonnyOpen && (
+          <div className="mb-3 w-[calc(100vw-40px)] max-w-[330px] overflow-hidden rounded-[20px] border border-black/[0.08] bg-white shadow-[0_22px_65px_rgba(0,0,0,.16)]">
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="flex items-center gap-3">
+                <ProfessorPortrait compact />
+
+                <div>
+                  <p className="text-sm font-bold text-[#4baa36]">
+                    SONNY
+                  </p>
+                  <p className="text-[10px] text-[#777d85]">
+                    AI COO · <span className="text-[#3fa536]">● Online</span>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSonnyOpen(false)}
+                className="h-7 w-7 rounded-full bg-[#f4f5f5] text-[#747a82]"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-4 pb-4">
+              <div className="rounded-[14px] border border-black/[0.07] p-4">
+                <p className="text-xs leading-5 text-[#464c53]">
+                  Hi! I’m Sonny, your AI COO. How can I help you build your
+                  AI-powered company?
+                </p>
+              </div>
+
+              {visitorQuestion && (
+                <>
+                  <div className="mt-3 rounded-[14px] bg-[#4baa36] p-3 text-white">
+                    <p className="text-xs leading-5">
+                      {visitorQuestion}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 rounded-[14px] bg-[#f5f6f6] p-3">
+                    <p className="text-xs leading-5 text-[#525960]">
+                      I’ll be connected to Firmic’s public product intelligence
+                      next. Your tenant/company data will remain isolated.
+                    </p>
+                  </div>
+                </>
+              )}
+
+              <div className="mt-3 space-y-2">
+                {[
+                  "What is Firmic?",
+                  "What AI employees do you have?",
+                  "How does pricing work?",
+                  "Which plan is right for me?",
+                ].map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => setVisitorQuestion(prompt)}
+                    className="w-full rounded-[12px] border border-black/[0.07] bg-[#fafafa] px-4 py-3 text-left text-[11px] text-[#42484f]"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <form
+              onSubmit={submitSonny}
+              className="border-t border-black/[0.06] p-4"
+            >
+              <div className="flex gap-2 rounded-[12px] bg-[#f6f7f7] p-1.5">
+                <input
+                  name="question"
+                  placeholder="Ask Sonny..."
+                  className="min-w-0 flex-1 bg-transparent px-3 py-2 text-xs outline-none"
+                />
+
+                <button
+                  type="submit"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-[#4baa36] text-white"
+                >
+                  ↗
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setSonnyOpen((value) => !value)}
+          className="flex items-center gap-3 rounded-full border-4 border-[#5bad44] bg-white p-1.5 pr-4 shadow-[0_14px_42px_rgba(0,0,0,.14)]"
+        >
+          <ProfessorPortrait compact />
+
+          <span className="hidden text-xs font-semibold text-[#4a5057] sm:block">
+            Ask Sonny
+          </span>
+        </button>
+      </div>
     </div>
   );
 }
