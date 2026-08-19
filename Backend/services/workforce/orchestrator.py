@@ -152,6 +152,217 @@ def create_sonny_workforce_orchestration(
     return orchestration, assignment
 
 
+
+def ensure_workflow_assignment_job(
+    db: Session,
+    *,
+    company: Any,
+    workflow: Any,
+    step: Any,
+    run: Any,
+    assignment: Any,
+    actor_id: str = "sonny",
+    commit: bool = True,
+) -> WorkforceJob:
+    """
+    Ensure one canonical WorkforceJob exists for a workflow
+    assignment that was already created by the Sonny workflow
+    execution bridge.
+
+    This function does NOT create another orchestration run or
+    another SonnyAgentAssignment.
+
+    Idempotency key:
+        company_id + source_type=sonny_workflow
+        + assignment_id in metadata_json
+    """
+
+    company_id = str(company.id)
+    workflow_id = str(workflow.id)
+    step_id = str(step.id)
+    run_id = str(run.id)
+    assignment_id = str(assignment.id)
+
+    if str(workflow.company_id) != company_id:
+        raise ValueError(
+            "Workflow does not belong to the supplied company."
+        )
+
+    if str(step.workflow_id) != workflow_id:
+        raise ValueError(
+            "Workflow step does not belong to the workflow."
+        )
+
+    if str(assignment.company_id) != company_id:
+        raise ValueError(
+            "Assignment does not belong to the supplied company."
+        )
+
+    if str(assignment.workflow_id) != workflow_id:
+        raise ValueError(
+            "Assignment does not belong to the workflow."
+        )
+
+    if str(assignment.workflow_step_id) != step_id:
+        raise ValueError(
+            "Assignment does not belong to the workflow step."
+        )
+
+    if str(assignment.orchestration_run_id) != run_id:
+        raise ValueError(
+            "Assignment does not belong to the orchestration run."
+        )
+
+    if str(run.company_id) != company_id:
+        raise ValueError(
+            "Orchestration run does not belong to the company."
+        )
+
+    if str(run.workflow_id) != workflow_id:
+        raise ValueError(
+            "Orchestration run does not belong to the workflow."
+        )
+
+    # --------------------------------------------------------
+    # Idempotency.
+    #
+    # SQLite/Postgres JSON querying differs, so keep this
+    # deterministic and portable by narrowing on company +
+    # source first, then validating metadata in Python.
+    # --------------------------------------------------------
+
+    candidates = (
+        db.query(WorkforceJob)
+        .filter(
+            WorkforceJob.company_id == company_id,
+            WorkforceJob.source_type == "sonny_workflow",
+            WorkforceJob.source_id == workflow_id,
+        )
+        .order_by(WorkforceJob.created_at.asc())
+        .all()
+    )
+
+    for existing in candidates:
+        metadata = existing.metadata_json or {}
+
+        if str(metadata.get("assignment_id") or "") == assignment_id:
+            return existing
+
+    assignment_metadata = (
+        assignment.assignment_metadata or {}
+    )
+
+    agent_code = clean(
+        assignment_metadata.get("agent_code")
+    )
+
+    assigned_agent = (
+        agent_code
+        or clean(getattr(assignment, "assigned_agent", None))
+        or clean(getattr(assignment, "assigned_role", None))
+        or clean(getattr(step, "assigned_role", None))
+        or "AI Employee"
+    )
+
+    assigned_role = (
+        clean(getattr(step, "assigned_role", None))
+        or clean(getattr(assignment, "required_capability", None))
+        or "AI Employee"
+    )
+
+    request_text = (
+        clean(getattr(assignment, "instructions", None))
+        or clean(getattr(step, "description", None))
+        or clean(getattr(step, "title", None))
+        or "Execute workflow step."
+    )
+
+    title = (
+        clean(getattr(assignment, "title", None))
+        or clean(getattr(step, "title", None))
+        or request_text[:120]
+    )
+
+    job = WorkforceJob(
+        company_id=company_id,
+        title=title[:255],
+        request_text=request_text,
+        assigned_agent=assigned_agent[:80],
+        assigned_role=assigned_role[:120],
+        status="accepted",
+        progress=10,
+        source_type="sonny_workflow",
+        source_id=workflow_id,
+        metadata_json={
+            "workflow_id": workflow_id,
+            "workflow_step_id": step_id,
+            "orchestration_run_id": run_id,
+            "assignment_id": assignment_id,
+            "agent_code": agent_code or None,
+            "required_capability": (
+                assignment.required_capability
+            ),
+            "action_code": assignment_metadata.get(
+                "action_code"
+            ),
+            "delegation_status": assignment.status,
+            "source": "sonny_workflow",
+        },
+        accepted_at=datetime.datetime.utcnow(),
+    )
+
+    db.add(job)
+    db.flush()
+
+    add_timeline_event(
+        db,
+        job=job,
+        event_type="work_delegated",
+        actor="Sonny",
+        title=f"Delegated workflow step to {job.assigned_agent}",
+        description=request_text,
+        status="accepted",
+        progress=10,
+        metadata={
+            "workflow_id": workflow_id,
+            "workflow_step_id": step_id,
+            "assignment_id": assignment_id,
+            "orchestration_run_id": run_id,
+        },
+    )
+
+    record_activity(
+        db,
+        company_id=company_id,
+        event_type="workforce_job_created",
+        title=f"{job.assigned_agent} received workflow work",
+        description=job.title,
+        actor_type="sonny",
+        actor_id=clean(actor_id) or "sonny",
+        source_type="workforce_job",
+        source_id=job.id,
+        metadata={
+            "workflow_id": workflow_id,
+            "workflow_step_id": step_id,
+            "assignment_id": assignment_id,
+            "orchestration_run_id": run_id,
+            "assigned_agent": job.assigned_agent,
+            "assigned_role": job.assigned_role,
+            "status": job.status,
+            "progress": job.progress,
+        },
+        commit=False,
+    )
+
+    if commit:
+        db.commit()
+        db.refresh(job)
+    else:
+        db.flush()
+
+    return job
+
+
 def create_workforce_job(
     db: Session,
     *,

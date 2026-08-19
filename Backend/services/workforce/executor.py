@@ -29,11 +29,13 @@ from services.sonny.orchestration import (
     start_orchestration_run,
 )
 from services.workforce.orchestrator import (
+    ensure_workflow_assignment_job,
     update_workforce_job,
 )
 from services.sonny.workflows import (
     complete_workflow_step,
     ensure_workflow_step_assignment,
+    resolve_step_execution,
 )
 
 
@@ -66,8 +68,17 @@ def resolve_assignment_action(
     B5.6 currently enables automatic execution only for Finance AI,
     using a fixed capability -> action mapping.
     """
+    # Workflow assignments store their explicit executable
+    # action in canonical assignment metadata. Older/manual
+    # assignment shapes may expose an action_code attribute,
+    # so support both without weakening the allowlist.
+    assignment_metadata = (
+        assignment.assignment_metadata or {}
+    )
+
     explicit = normalize(
         getattr(assignment, "action_code", None)
+        or assignment_metadata.get("action_code")
     )
 
     if explicit:
@@ -501,4 +512,400 @@ def execute_workforce_assignment(
 
     except Exception:
         db.rollback()
+        raise
+
+
+def run_workflow_autonomously(
+    db: Session,
+    *,
+    company: Company,
+    workflow: SonnyWorkflow,
+    actor_id: str = "sonny",
+    max_steps: int = 5,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """
+    Execute consecutive AI-owned workflow steps through the
+    canonical workforce executor.
+
+    Safety boundaries:
+    - bounded by max_steps
+    - stops at actor-owned steps
+    - stops at approval-required AI steps
+    - stops on unsupported/non-agent execution boundaries
+    - reuses canonical orchestration/assignment/job state
+    - canonical executor runs with commit=False
+    - this runner owns the outer transaction
+    """
+
+    if max_steps < 1:
+        raise ValueError(
+            "max_steps must be at least 1."
+        )
+
+    company_id = str(company.id)
+
+    if str(workflow.company_id) != company_id:
+        raise ValueError(
+            "Workflow does not belong to the supplied company."
+        )
+
+    steps_executed = 0
+    execution_results: list[dict[str, Any]] = []
+
+    try:
+        while steps_executed < max_steps:
+
+            db.flush()
+
+            # ------------------------------------------------
+            # Terminal workflow states.
+            # ------------------------------------------------
+
+            if workflow.status == "completed":
+                result = {
+                    "status": "completed",
+                    "workflow_id": workflow.id,
+                    "workflow_status": workflow.status,
+                    "steps_executed": steps_executed,
+                    "current_step_order": (
+                        workflow.current_step_order
+                    ),
+                    "progress_percent": (
+                        workflow.progress_percent
+                    ),
+                    "executions": execution_results,
+                }
+
+                if commit:
+                    db.commit()
+                    db.refresh(workflow)
+                else:
+                    db.flush()
+
+                return result
+
+            if workflow.status not in {
+                "running",
+                "waiting",
+            }:
+                result = {
+                    "status": "workflow_not_runnable",
+                    "workflow_id": workflow.id,
+                    "workflow_status": workflow.status,
+                    "steps_executed": steps_executed,
+                    "current_step_order": (
+                        workflow.current_step_order
+                    ),
+                    "progress_percent": (
+                        workflow.progress_percent
+                    ),
+                    "executions": execution_results,
+                }
+
+                if commit:
+                    db.commit()
+                    db.refresh(workflow)
+                else:
+                    db.flush()
+
+                return result
+
+            # ------------------------------------------------
+            # Resolve active workflow step.
+            # ------------------------------------------------
+
+            active_step = next(
+                (
+                    step
+                    for step in workflow.steps
+                    if (
+                        step.step_order
+                        == workflow.current_step_order
+                        and step.status == "in_progress"
+                    )
+                ),
+                None,
+            )
+
+            if active_step is None:
+                result = {
+                    "status": "no_active_step",
+                    "workflow_id": workflow.id,
+                    "workflow_status": workflow.status,
+                    "steps_executed": steps_executed,
+                    "current_step_order": (
+                        workflow.current_step_order
+                    ),
+                    "progress_percent": (
+                        workflow.progress_percent
+                    ),
+                    "executions": execution_results,
+                }
+
+                if commit:
+                    db.commit()
+                    db.refresh(workflow)
+                else:
+                    db.flush()
+
+                return result
+
+            execution = resolve_step_execution(
+                active_step
+            )
+
+            # ------------------------------------------------
+            # Human/system boundary.
+            # ------------------------------------------------
+
+            if execution["kind"] != "agent":
+                result = {
+                    "status": "waiting_for_actor",
+                    "workflow_id": workflow.id,
+                    "workflow_status": workflow.status,
+                    "steps_executed": steps_executed,
+                    "current_step_order": (
+                        workflow.current_step_order
+                    ),
+                    "progress_percent": (
+                        workflow.progress_percent
+                    ),
+                    "workflow_step_id": active_step.id,
+                    "step_code": active_step.step_code,
+                    "assigned_role": execution[
+                        "assigned_role"
+                    ],
+                    "executions": execution_results,
+                }
+
+                if commit:
+                    db.commit()
+                    db.refresh(workflow)
+                else:
+                    db.flush()
+
+                return result
+
+            # ------------------------------------------------
+            # Establish/reuse canonical B6 assignment.
+            # ------------------------------------------------
+
+            bridge = ensure_workflow_step_assignment(
+                db,
+                workflow=workflow,
+                step=active_step,
+                actor_id=actor_id,
+                commit=False,
+            )
+
+            run = bridge.get("run")
+            assignment = bridge.get("assignment")
+
+            if run is None or assignment is None:
+                raise RuntimeError(
+                    "Agent workflow step did not produce "
+                    "canonical execution state."
+                )
+
+            # ------------------------------------------------
+            # Approval boundary.
+            #
+            # Approval-required assignments must never be
+            # automatically approved/executed by this runner.
+            # ------------------------------------------------
+
+            if bool(assignment.approval_required):
+                result = {
+                    "status": "waiting_for_approval",
+                    "workflow_id": workflow.id,
+                    "workflow_status": workflow.status,
+                    "steps_executed": steps_executed,
+                    "current_step_order": (
+                        workflow.current_step_order
+                    ),
+                    "progress_percent": (
+                        workflow.progress_percent
+                    ),
+                    "workflow_step_id": active_step.id,
+                    "step_code": active_step.step_code,
+                    "assignment_id": assignment.id,
+                    "orchestration_run_id": run.id,
+                    "agent_code": execution.get(
+                        "agent_code"
+                    ),
+                    "required_capability": execution.get(
+                        "required_capability"
+                    ),
+                    "executions": execution_results,
+                }
+
+                if commit:
+                    db.commit()
+                    db.refresh(workflow)
+                else:
+                    db.flush()
+
+                return result
+
+            # ------------------------------------------------
+            # Auto-executable assignment must already have
+            # reached approved state through canonical B6.
+            # ------------------------------------------------
+
+            if run.status not in {
+                "approved",
+                "running",
+            }:
+                result = {
+                    "status": "assignment_not_runnable",
+                    "reason": (
+                        "orchestration_run_status"
+                    ),
+                    "workflow_id": workflow.id,
+                    "workflow_status": workflow.status,
+                    "steps_executed": steps_executed,
+                    "workflow_step_id": active_step.id,
+                    "assignment_id": assignment.id,
+                    "orchestration_run_id": run.id,
+                    "run_status": run.status,
+                    "assignment_status": (
+                        assignment.status
+                    ),
+                    "executions": execution_results,
+                }
+
+                if commit:
+                    db.commit()
+                    db.refresh(workflow)
+                else:
+                    db.flush()
+
+                return result
+
+            if assignment.status not in {
+                "approved",
+                "accepted",
+                "running",
+            }:
+                result = {
+                    "status": "assignment_not_runnable",
+                    "reason": "assignment_status",
+                    "workflow_id": workflow.id,
+                    "workflow_status": workflow.status,
+                    "steps_executed": steps_executed,
+                    "workflow_step_id": active_step.id,
+                    "assignment_id": assignment.id,
+                    "orchestration_run_id": run.id,
+                    "run_status": run.status,
+                    "assignment_status": (
+                        assignment.status
+                    ),
+                    "executions": execution_results,
+                }
+
+                if commit:
+                    db.commit()
+                    db.refresh(workflow)
+                else:
+                    db.flush()
+
+                return result
+
+            # ------------------------------------------------
+            # Establish/reuse B7 WorkforceJob.
+            # ------------------------------------------------
+
+            job = ensure_workflow_assignment_job(
+                db,
+                company=company,
+                workflow=workflow,
+                step=active_step,
+                run=run,
+                assignment=assignment,
+                actor_id=actor_id,
+                commit=False,
+            )
+
+            executed_step_id = active_step.id
+            executed_step_code = active_step.step_code
+            executed_assignment_id = assignment.id
+            executed_run_id = run.id
+            executed_job_id = job.id
+
+            # ------------------------------------------------
+            # Canonical execution.
+            # ------------------------------------------------
+
+            execution_result = (
+                execute_workforce_assignment(
+                    db,
+                    company=company,
+                    job=job,
+                    run=run,
+                    assignment=assignment,
+                    actor_id=actor_id,
+                    commit=False,
+                )
+            )
+
+            steps_executed += 1
+
+            execution_results.append(
+                {
+                    "workflow_step_id": executed_step_id,
+                    "step_code": executed_step_code,
+                    "assignment_id": (
+                        executed_assignment_id
+                    ),
+                    "orchestration_run_id": (
+                        executed_run_id
+                    ),
+                    "workforce_job_id": executed_job_id,
+                    "execution_status": (
+                        execution_result.get("status")
+                    ),
+                    "action_code": (
+                        execution_result.get(
+                            "action_code"
+                        )
+                    ),
+                }
+            )
+
+            # Executor may have promoted the next step and
+            # established its canonical assignment. Loop back
+            # and resolve the workflow from its new state.
+            db.flush()
+
+        # ----------------------------------------------------
+        # Hard safety boundary.
+        # ----------------------------------------------------
+
+        result = {
+            "status": "step_limit_reached",
+            "workflow_id": workflow.id,
+            "workflow_status": workflow.status,
+            "steps_executed": steps_executed,
+            "current_step_order": (
+                workflow.current_step_order
+            ),
+            "progress_percent": (
+                workflow.progress_percent
+            ),
+            "max_steps": max_steps,
+            "executions": execution_results,
+        }
+
+        if commit:
+            db.commit()
+            db.refresh(workflow)
+        else:
+            db.flush()
+
+        return result
+
+    except Exception:
+        if commit:
+            db.rollback()
         raise
