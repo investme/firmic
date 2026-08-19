@@ -72,6 +72,7 @@ function PlatformColumn({
 
 export default function PlatformPage() {
   const [sonnyOpen, setSonnyOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <>
@@ -86,14 +87,16 @@ export default function PlatformPage() {
       <main className="min-h-screen bg-[#fbfbfa] text-[#1d1d1f]">
         {/* NAVIGATION */}
         <header className="fixed inset-x-0 top-0 z-50 border-b border-black/[0.06] bg-white/90 backdrop-blur-xl">
-          <div className="mx-auto flex h-[74px] max-w-[1440px] items-center justify-between px-5 lg:px-9">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#4baa36] text-lg font-black text-white">
-                F
-              </div>
-              <span className="text-[1.35rem] font-black tracking-[-0.04em]">
-                FIRMIC
-              </span>
+          <div className="mx-auto flex h-[64px] max-w-[1440px] items-center justify-between px-4 sm:px-5 md:h-[74px] lg:px-9">
+            <Link href="/" className="flex items-center">
+              <Image
+                src="/firmic-logo-transparent.png"
+                alt="Firmic"
+                width={128}
+                height={48}
+                priority
+                className="h-8 w-auto object-contain sm:h-9 md:h-10"
+              />
             </Link>
 
             <nav className="hidden items-center gap-8 text-sm font-semibold text-[#545960] md:flex">
@@ -106,6 +109,17 @@ export default function PlatformPage() {
             </nav>
 
             <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((value) => !value)}
+                className="flex h-10 w-10 items-center justify-center rounded-lg border border-black/[0.08] bg-white text-[#1d1d1f] shadow-sm transition hover:bg-[#f5f5f3] md:hidden"
+                aria-label="Toggle navigation"
+                aria-expanded={mobileMenuOpen}
+              >
+                <span className="text-xl leading-none">
+                  {mobileMenuOpen ? "×" : "☰"}
+                </span>
+              </button>
               <Link
                 href="/login"
                 className="hidden text-sm font-semibold text-[#4f555d] sm:block"
@@ -115,17 +129,71 @@ export default function PlatformPage() {
 
               <Link
                 href="/create-company"
-                className="rounded-md bg-[#4baa36] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#429832]"
+                className="hidden rounded-md bg-[#4baa36] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#429832] sm:inline-flex"
               >
                 Create Your Company <span className="ml-1">→</span>
               </Link>
             </div>
           </div>
+
+          {mobileMenuOpen && (
+            <nav className="absolute inset-x-0 top-full z-[60] border-t border-black/[0.06] bg-white shadow-[0_18px_45px_rgba(0,0,0,0.10)] md:hidden">
+              <div className="mx-auto flex max-w-[1440px] flex-col px-4 py-1 sm:px-5">
+                <Link
+                  href="/platform"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="border-b border-black/[0.06] py-3 text-[15px] font-semibold text-[#1d1d1f] transition hover:text-[#4baa36]"
+                >
+                  Platform
+                </Link>
+
+                <Link
+                  href="/#workforce"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="border-b border-black/[0.06] py-3 text-[15px] font-semibold text-[#1d1d1f] transition hover:text-[#4baa36]"
+                >
+                  Capabilities
+                </Link>
+
+                <Link
+                  href="/#solutions"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="border-b border-black/[0.06] py-3 text-[15px] font-semibold text-[#1d1d1f] transition hover:text-[#4baa36]"
+                >
+                  Solutions
+                </Link>
+
+                <Link
+                  href="/pricing"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="border-b border-black/[0.06] py-3 text-[15px] font-semibold text-[#1d1d1f] transition hover:text-[#4baa36]"
+                >
+                  Pricing
+                </Link>
+
+                <Link
+                  href="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="py-3 text-[15px] font-semibold text-[#1d1d1f] transition hover:text-[#4baa36]"
+                >
+                  Sign In
+                </Link>
+
+                <Link
+                  href="/create-company"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="mb-3 mt-2 rounded-lg bg-[#4baa36] px-5 py-3 text-center text-sm font-bold text-white shadow-sm transition hover:bg-[#429832]"
+                >
+                  Create Your Company →
+                </Link>
+              </div>
+            </nav>
+          )}
         </header>
 
         {/* HERO */}
-        <section className="border-b border-black/[0.06] px-5 pb-20 pt-32 lg:px-9 lg:pb-24 lg:pt-36">
-          <div className="mx-auto grid max-w-[1420px] items-center gap-12 lg:grid-cols-[.92fr_1.08fr]">
+        <section className="border-b border-black/[0.06] px-4 pb-14 pt-24 sm:px-5 sm:pb-20 sm:pt-32 lg:px-9 lg:pb-24 lg:pt-36">
+          <div className="mx-auto grid max-w-[1420px] items-center gap-9 sm:gap-12 lg:grid-cols-[.92fr_1.08fr]">
 
             {/* LEFT */}
             <div className="max-w-[680px]">
@@ -133,20 +201,20 @@ export default function PlatformPage() {
                 The Firmic Platform
               </p>
 
-              <h1 className="mt-5 text-[3rem] font-semibold leading-[1.04] tracking-[-0.052em] sm:text-[3.8rem] lg:text-[4.25rem]">
+              <h1 className="mt-4 text-[2.65rem] font-semibold leading-[1.04] tracking-[-0.052em] sm:mt-5 sm:text-[3.8rem] lg:text-[4.25rem]">
                 Create Your Company.
                 <span className="block text-[#4baa36]">
                   Firmic Makes It Work.
                 </span>
               </h1>
 
-              <p className="mt-7 max-w-[640px] text-lg leading-8 text-[#6f7680]">
+              <p className="mt-5 max-w-[640px] text-base leading-7 text-[#6f7680] sm:mt-7 sm:text-lg sm:leading-8">
                 Virtual headquarters, communications, business mail,
                 AI workforce, compliance and operations — brought together
                 through Firmic.
               </p>
 
-              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-7 flex flex-col gap-3 sm:mt-9 sm:flex-row">
                 <Link
                   href="/create-company"
                   className="rounded-md bg-[#4baa36] px-7 py-3.5 text-center text-sm font-bold text-white transition hover:bg-[#429832]"
@@ -164,9 +232,9 @@ export default function PlatformPage() {
             </div>
 
             {/* RIGHT / SONNY */}
-            <div className="relative min-h-[530px] overflow-hidden rounded-[32px] bg-[#f5f6f4] shadow-[0_18px_55px_rgba(0,0,0,.06)]">
+            <div className="relative min-h-[455px] overflow-hidden rounded-[24px] bg-[#f5f6f4] shadow-[0_18px_55px_rgba(0,0,0,.06)] sm:min-h-[500px] sm:rounded-[32px] lg:min-h-[530px]">
 
-              <div className="absolute bottom-0 left-[4%] h-[500px] w-[62%]">
+              <div className="absolute bottom-0 left-[-5%] h-[410px] w-[72%] sm:left-[1%] sm:h-[470px] sm:w-[66%] lg:left-[4%] lg:h-[500px] lg:w-[62%]">
                 <Image
                   src="/agents/sonny-canonical-v1.png"
                   alt="Sonny, Firmic AI Chief Operating Officer"
@@ -177,7 +245,7 @@ export default function PlatformPage() {
                 />
               </div>
 
-              <div className="absolute right-8 top-14 w-[260px]">
+              <div className="absolute right-4 top-8 w-[205px] sm:right-6 sm:top-10 sm:w-[240px] lg:right-8 lg:top-14 lg:w-[260px]">
                 <p className="text-xl font-bold text-[#4baa36]">
                   SONNY
                 </p>
@@ -228,11 +296,11 @@ export default function PlatformPage() {
         {/* PLATFORM CAPABILITIES — PAGE 2 */}
         <section
           id="platform-capabilities"
-          className="px-5 py-24 lg:px-9 lg:py-28"
+          className="px-4 py-16 sm:px-5 sm:py-20 lg:px-9 lg:py-28"
         >
           <div className="mx-auto max-w-[1420px]">
             <div className="text-center">
-              <h2 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
+              <h2 className="text-[2rem] font-semibold leading-[1.08] tracking-[-0.04em] sm:text-4xl">
                 Make Your Company AI-Native with Firmic.
               </h2>
 
@@ -242,7 +310,7 @@ export default function PlatformPage() {
               </p>
             </div>
 
-            <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-8 grid gap-3 sm:mt-10 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
               {[
                 {
                   label: "COMPANY",
@@ -277,7 +345,7 @@ export default function PlatformPage() {
               ].map((item) => (
                 <article
                   key={item.title}
-                  className="group rounded-[24px] border border-black/[0.07] bg-white p-7 transition hover:-translate-y-1 hover:shadow-[0_16px_38px_rgba(0,0,0,.06)]"
+                  className="group rounded-[20px] border border-black/[0.07] bg-white p-5 transition hover:-translate-y-1 hover:shadow-[0_16px_38px_rgba(0,0,0,.06)] sm:rounded-[24px] sm:p-7"
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-[11px] font-bold tracking-[0.12em] text-[#4baa36]">
@@ -289,11 +357,11 @@ export default function PlatformPage() {
                     </span>
                   </div>
 
-                  <h3 className="mt-12 text-2xl font-semibold tracking-[-0.035em]">
+                  <h3 className="mt-7 text-[1.35rem] font-semibold tracking-[-0.035em] sm:mt-12 sm:text-2xl">
                     {item.title}
                   </h3>
 
-                  <p className="mt-4 text-sm leading-7 text-[#747b84]">
+                  <p className="mt-3 text-sm leading-6 text-[#747b84] sm:mt-4 sm:leading-7">
                     {item.text}
                   </p>
                 </article>
@@ -303,9 +371,9 @@ export default function PlatformPage() {
         </section>
 
         {/* THREE STORIES */}
-        <section className="border-y border-black/[0.05] bg-white px-5 py-24 lg:px-9">
+        <section className="border-y border-black/[0.05] bg-white px-4 py-16 sm:px-5 sm:py-20 lg:px-9 lg:py-24">
           <div className="mx-auto max-w-[1180px]">
-            <div className="grid gap-14 lg:grid-cols-3 lg:gap-8">
+            <div className="grid gap-10 sm:gap-12 lg:grid-cols-3 lg:gap-8">
               <div>
                 <span className="text-sm font-bold text-[#4baa36]">01</span>
                 <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em]">
@@ -346,14 +414,14 @@ export default function PlatformPage() {
         </section>
 
         {/* TRUST, PRIVACY & SECURITY */}
-        <section className="border-y border-black/[0.05] bg-[#f5f6f4] px-5 py-24 lg:px-9 lg:py-28">
+        <section className="border-y border-black/[0.05] bg-[#f5f6f4] px-4 py-16 sm:px-5 sm:py-20 lg:px-9 lg:py-28">
           <div className="mx-auto max-w-[1180px]">
             <div className="mx-auto max-w-[820px] text-center">
               <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#4baa36]">
                 Trust, Privacy & Security
               </p>
 
-              <h2 className="mt-5 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
+              <h2 className="mt-4 text-[2rem] font-semibold leading-[1.08] tracking-[-0.045em] sm:mt-5 sm:text-5xl">
                 Your company.
                 <span className="block text-[#4baa36]">
                   Your data. Your control.
@@ -367,8 +435,8 @@ export default function PlatformPage() {
               </p>
             </div>
 
-            <div className="mt-14 grid items-stretch gap-5 md:grid-cols-2">
-              <article className="flex h-full flex-col rounded-[28px] border border-black/[0.06] bg-white p-8">
+            <div className="mt-10 grid items-stretch gap-4 sm:mt-12 sm:gap-5 md:grid-cols-2">
+              <article className="flex h-full flex-col rounded-[22px] border border-black/[0.06] bg-white p-6 sm:rounded-[28px] sm:p-8">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#eef7eb] text-xl text-[#4baa36]">
                   🔒
                 </div>
@@ -524,7 +592,7 @@ export default function PlatformPage() {
         </section>
 
         {/* REAL WORKFLOW */}
-        <section className="px-5 py-24 lg:px-9">
+        <section className="px-4 py-16 sm:px-5 sm:py-20 lg:px-9 lg:py-24">
           <div className="mx-auto max-w-[1000px]">
             <div className="text-center">
               <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#4baa36]">
@@ -584,7 +652,7 @@ export default function PlatformPage() {
         </section>
 
         {/* GOVERNED EXECUTION */}
-        <section className="bg-[#f3f3f0] px-5 py-24 lg:px-9">
+        <section className="bg-[#f3f3f0] px-4 py-16 sm:px-5 sm:py-20 lg:px-9 lg:py-24">
           <div className="mx-auto grid max-w-[1100px] gap-12 lg:grid-cols-[.9fr_1.1fr] lg:items-center">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#4baa36]">
@@ -622,7 +690,7 @@ export default function PlatformPage() {
         </section>
 
         {/* FINAL CTA */}
-        <section className="px-5 py-28 text-center lg:px-9">
+        <section className="px-4 py-20 text-center sm:px-5 sm:py-24 lg:px-9 lg:py-28">
           <div className="mx-auto max-w-[820px]">
             <p className="text-lg font-semibold text-[#747b84]">
               Your company, ready to operate.
@@ -661,9 +729,9 @@ export default function PlatformPage() {
         <button
           type="button"
           onClick={() => setSonnyOpen((value) => !value)}
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-full border border-black/[0.07] bg-white py-2 pl-2 pr-5 shadow-[0_12px_40px_rgba(0,0,0,.14)]"
+          className={`${mobileMenuOpen ? "hidden md:flex" : "flex"} fixed bottom-4 right-3 z-40 items-center gap-2 rounded-full border border-black/[0.07] bg-white py-1.5 pl-1.5 pr-3 shadow-[0_12px_40px_rgba(0,0,0,.14)] sm:bottom-6 sm:right-6 sm:gap-3 sm:py-2 sm:pl-2 sm:pr-5`}
         >
-          <span className="h-11 w-11 overflow-hidden rounded-full bg-[#f2f2ef]">
+          <span className="h-9 w-9 overflow-hidden rounded-full bg-[#f2f2ef] sm:h-11 sm:w-11">
             <Image
               src="/agents/sonny-canonical-v1.png"
               alt="Sonny"
@@ -683,7 +751,7 @@ export default function PlatformPage() {
         </button>
 
         {sonnyOpen && (
-          <div className="fixed bottom-24 right-6 z-50 w-[330px] rounded-[24px] border border-black/[0.07] bg-white p-6 shadow-[0_24px_70px_rgba(0,0,0,.16)]">
+          <div className="fixed bottom-20 left-3 right-3 z-40 rounded-[24px] border border-black/[0.07] bg-white p-5 shadow-[0_24px_70px_rgba(0,0,0,.16)] sm:bottom-24 sm:left-auto sm:right-6 sm:w-[330px] sm:p-6">
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 overflow-hidden rounded-full bg-[#f2f2ef]">
                 <Image
