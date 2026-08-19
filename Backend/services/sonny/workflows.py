@@ -11,8 +11,16 @@ from models.sonny_workflow import (
     SonnyWorkflow,
     SonnyWorkflowStep,
 )
+from models.sonny_orchestration import (
+    SonnyAgentAssignment,
+)
+
 from services.activity_service import record_activity
 from services.sonny.decisions import serialize_decision
+from services.sonny.orchestration import (
+    create_assignment,
+    create_orchestration_run,
+)
 
 
 WORKFLOW_ACTIVE_STATUSES = {
@@ -51,6 +59,102 @@ class WorkflowTemplate:
 
 def utcnow() -> datetime.datetime:
     return datetime.datetime.utcnow()
+
+
+# Workflow ownership is intentionally broader than the AI-agent registry.
+#
+# assigned_role may identify:
+#   - a canonical AI agent,
+#   - a human/system actor,
+#   - or a semantic workflow role that resolves to an AI agent.
+#
+# Never pass assigned_role directly to the agent registry without resolving it.
+WORKFLOW_ACTOR_ROLES = {
+    "founder",
+    "firmic_admin",
+    "company_team",
+}
+
+
+WORKFLOW_AGENT_EXECUTION: dict[str, dict[str, str]] = {
+    "sonny": {
+        "agent_code": "sonny",
+        "required_capability": "workflow_coordination",
+    },
+    "hermes": {
+        "agent_code": "hermes",
+        "required_capability": "compliance_review",
+    },
+    "finance_ai": {
+        "agent_code": "finance_ai",
+        "required_capability": "billing_analysis",
+    },
+    "meeting_coordinator": {
+        "agent_code": "meeting_ai",
+        "required_capability": "meeting_review",
+    },
+}
+
+
+WORKFLOW_STEP_EXECUTION: dict[str, dict[str, Any]] = {
+    # Hermes external request. Approval remains required because this
+    # causes outward communication.
+    "request_missing_documents": {
+        "action_code": "request_missing_documents",
+        "approval_required": True,
+    },
+
+    # Finance B5.6 read/prepare operations. Neither mutates billing.
+    "inspect_usage_ledger": {
+        "action_code": "inspect_usage_ledger",
+        "approval_required": False,
+    },
+    "prepare_billing_action": {
+        "action_code": "prepare_billing_action",
+        "approval_required": False,
+    },
+
+    # Meeting review is observational/coordinative, not booking mutation.
+    "review_bookings": {
+        "action_code": "review_meeting_commitments",
+        "approval_required": False,
+    },
+}
+
+
+def resolve_step_execution(
+    step: StepTemplate | SonnyWorkflowStep,
+) -> dict[str, Any]:
+    """
+    Resolve workflow ownership without conflating workflow roles with
+    canonical AI agent codes.
+
+    Human/system-owned steps remain workflow actor steps. AI-owned steps
+    return the canonical agent and capability required by orchestration.
+    """
+    role = str(step.assigned_role or "").strip().lower()
+
+    if role in WORKFLOW_ACTOR_ROLES:
+        return {
+            "kind": "actor",
+            "assigned_role": role,
+            "agent_code": None,
+            "required_capability": None,
+        }
+
+    spec = WORKFLOW_AGENT_EXECUTION.get(role)
+
+    if not spec:
+        raise ValueError(
+            f"Workflow role '{role}' has no execution mapping."
+        )
+
+    return {
+        "kind": "agent",
+        "assigned_role": role,
+        "agent_code": spec["agent_code"],
+        "required_capability": spec["required_capability"],
+    }
 
 
 TEMPLATES: dict[str, WorkflowTemplate] = {
@@ -438,6 +542,207 @@ def serialize_workflow(
     }
 
 
+def ensure_workflow_step_assignment(
+    db: Session,
+    *,
+    workflow: SonnyWorkflow,
+    step: SonnyWorkflowStep,
+    actor_id: str = "sonny",
+    commit: bool = True,
+) -> dict[str, Any]:
+    """
+    Ensure the active workflow step has its canonical execution boundary.
+
+    Actor-owned steps remain inside the workflow engine and do not create
+    AI assignments.
+
+    Agent-owned steps receive:
+      - one step-specific Sonny orchestration run
+      - one idempotent canonical SonnyAgentAssignment
+      - workflow_id + workflow_step_id linkage
+      - tenant workforce enforcement through create_assignment()
+
+    This function does NOT execute the assignment and does NOT complete
+    the workflow step.
+    """
+
+    if str(step.workflow_id) != str(workflow.id):
+        raise ValueError(
+            "Workflow step does not belong to the supplied workflow."
+        )
+
+    if step.status != "in_progress":
+        raise ValueError(
+            "Only the active in-progress workflow step may be assigned."
+        )
+
+    execution = resolve_step_execution(step)
+
+    if execution["kind"] == "actor":
+        return {
+            "kind": "actor",
+            "created": False,
+            "workflow_id": workflow.id,
+            "workflow_step_id": step.id,
+            "assigned_role": execution["assigned_role"],
+            "run": None,
+            "assignment": None,
+        }
+
+    # --------------------------------------------------------
+    # Idempotency first:
+    # if this workflow step already owns an assignment, reuse it.
+    #
+    # This check deliberately happens before create_orchestration_run()
+    # because a previously executed step run may already be final.
+    # --------------------------------------------------------
+
+    existing = (
+        db.query(SonnyAgentAssignment)
+        .filter(
+            SonnyAgentAssignment.company_id
+            == workflow.company_id,
+            SonnyAgentAssignment.workflow_id
+            == workflow.id,
+            SonnyAgentAssignment.workflow_step_id
+            == step.id,
+        )
+        .order_by(
+            SonnyAgentAssignment.created_at.asc()
+        )
+        .first()
+    )
+
+    if existing:
+        return {
+            "kind": "agent",
+            "created": False,
+            "workflow_id": workflow.id,
+            "workflow_step_id": step.id,
+            "assigned_role": execution["assigned_role"],
+            "agent_code": (
+                existing.assignment_metadata or {}
+            ).get(
+                "agent_code"
+            ),
+            "required_capability": (
+                existing.required_capability
+            ),
+            "run": existing.orchestration_run,
+            "assignment": existing,
+        }
+
+    step_execution = WORKFLOW_STEP_EXECUTION.get(
+        str(step.step_code or "").strip().lower(),
+        {},
+    )
+
+    action_code = step_execution.get("action_code")
+
+    approval_required = bool(
+        step_execution.get(
+            "approval_required",
+            False,
+        )
+    )
+
+    actor = str(actor_id or "").strip() or "sonny"
+
+    # --------------------------------------------------------
+    # One orchestration run per executable workflow step.
+    # The B5 executor currently finalizes one orchestration run
+    # together with one assignment, so workflow-wide run reuse
+    # would violate the established lifecycle.
+    # --------------------------------------------------------
+
+    run = create_orchestration_run(
+        db,
+        company_id=workflow.company_id,
+        orchestration_type="workflow_step",
+        created_by=actor,
+        trigger_type="workflow",
+        decision_id=workflow.decision_id,
+        workflow_id=workflow.id,
+        approval_required=False,
+        input_payload={
+            "workflow_id": workflow.id,
+            "workflow_step_id": step.id,
+            "step_code": step.step_code,
+            "step_order": step.step_order,
+        },
+        orchestration_metadata={
+            "source": "sonny_workflow",
+            "workflow_template": workflow.template_code,
+            "workflow_step_id": step.id,
+            "workflow_step_code": step.step_code,
+        },
+        commit=False,
+    )
+
+    assignment = create_assignment(
+        db,
+        run=run,
+        assignment_code=(
+            f"workflow:{workflow.id}:{step.step_code}"
+        ),
+        title=step.title,
+        instructions=(
+            step.description
+            or step.title
+        ),
+        required_capability=(
+            execution["required_capability"]
+        ),
+        assigned_by="sonny",
+        action_code=action_code,
+        preferred_agent_code=(
+            execution["agent_code"]
+        ),
+        agent_code=execution["agent_code"],
+        approval_required=approval_required,
+        confidence=1.0,
+        input_payload={
+            "workflow_id": workflow.id,
+            "workflow_step_id": step.id,
+            "step_code": step.step_code,
+            "step_order": step.step_order,
+            "assigned_role": step.assigned_role,
+        },
+        workflow_id=workflow.id,
+        workflow_step_id=step.id,
+        assignment_metadata={
+            "source": "sonny_workflow",
+            "workflow_template": workflow.template_code,
+            "workflow_step_code": step.step_code,
+            "workflow_step_order": step.step_order,
+        },
+        commit=False,
+    )
+
+    if commit:
+        db.commit()
+        db.refresh(run)
+        db.refresh(assignment)
+    else:
+        db.flush()
+
+    return {
+        "kind": "agent",
+        "created": True,
+        "workflow_id": workflow.id,
+        "workflow_step_id": step.id,
+        "assigned_role": execution["assigned_role"],
+        "agent_code": execution["agent_code"],
+        "required_capability": (
+            execution["required_capability"]
+        ),
+        "action_code": action_code,
+        "approval_required": approval_required,
+        "run": run,
+        "assignment": assignment,
+    }
+
+
 def template_for_decision(
     decision: SonnyDecision,
 ) -> WorkflowTemplate:
@@ -698,6 +1003,7 @@ def complete_workflow_step(
     step_id: str,
     actor_id: str,
     output: dict[str, Any] | None,
+    commit: bool = True,
 ) -> SonnyWorkflow:
     if workflow.status not in {"running", "waiting"}:
         raise ValueError(
@@ -814,8 +1120,12 @@ def complete_workflow_step(
 
     update_progress(workflow)
 
-    db.commit()
-    db.refresh(workflow)
+    if commit:
+        db.commit()
+        db.refresh(workflow)
+    else:
+        db.flush()
+
     return workflow
 
 

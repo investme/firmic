@@ -10,6 +10,7 @@ from models.sonny_orchestration import (
     SonnyOrchestrationRun,
 )
 from models.workforce_job import WorkforceJob
+from models.sonny_workflow import SonnyWorkflow
 
 from services.sonny.agent_registry import (
     validate_agent_assignment,
@@ -29,6 +30,10 @@ from services.sonny.orchestration import (
 )
 from services.workforce.orchestrator import (
     update_workforce_job,
+)
+from services.sonny.workflows import (
+    complete_workflow_step,
+    ensure_workflow_step_assignment,
 )
 
 
@@ -118,6 +123,7 @@ def execute_workforce_assignment(
     run: SonnyOrchestrationRun,
     assignment: SonnyAgentAssignment,
     actor_id: str = "sonny",
+    commit: bool = True,
 ) -> dict[str, Any]:
     """
     Execute one canonical Firmic workforce assignment atomically.
@@ -284,6 +290,157 @@ def execute_workforce_assignment(
             commit=False,
         )
 
+        # ----------------------------------------------------
+        # B6.3 — advance linked workflow step atomically.
+        #
+        # Standalone B5 assignments have no workflow links and
+        # therefore retain their existing execution lifecycle.
+        # ----------------------------------------------------
+
+        workflow_progression = None
+
+        if assignment.workflow_id or assignment.workflow_step_id:
+            if not (
+                assignment.workflow_id
+                and assignment.workflow_step_id
+            ):
+                raise ValueError(
+                    "Workflow-linked assignment must include both "
+                    "workflow_id and workflow_step_id."
+                )
+
+            workflow = (
+                db.query(SonnyWorkflow)
+                .filter(
+                    SonnyWorkflow.id
+                    == assignment.workflow_id,
+                    SonnyWorkflow.company_id
+                    == company_id,
+                )
+                .first()
+            )
+
+            if not workflow:
+                raise ValueError(
+                    "Linked workflow not found for assignment."
+                )
+
+            complete_workflow_step(
+                db,
+                workflow=workflow,
+                step_id=assignment.workflow_step_id,
+                actor_id=agent.agent_code,
+                output=result_payload,
+                commit=False,
+            )
+
+            # ------------------------------------------------
+            # B6.4 — automatically establish the execution
+            # boundary for the newly promoted workflow step.
+            #
+            # This does NOT execute the next assignment.
+            # Actor-owned steps create no AI assignment.
+            # Agent-owned steps receive an idempotent canonical
+            # orchestration run + specialist assignment.
+            #
+            # commit=False preserves the executor as the single
+            # outer transaction owner.
+            # ------------------------------------------------
+
+            next_step_assignment = None
+
+            if (
+                workflow.status == "running"
+                and workflow.current_step_order is not None
+            ):
+                next_step = next(
+                    (
+                        item
+                        for item in workflow.steps
+                        if (
+                            item.step_order
+                            == workflow.current_step_order
+                            and item.status == "in_progress"
+                        )
+                    ),
+                    None,
+                )
+
+                if next_step:
+                    next_step_assignment = (
+                        ensure_workflow_step_assignment(
+                            db,
+                            workflow=workflow,
+                            step=next_step,
+                            actor_id="sonny",
+                            commit=False,
+                        )
+                    )
+
+            workflow_progression = {
+                "workflow_id": workflow.id,
+                "workflow_status": workflow.status,
+                "workflow_step_id": (
+                    assignment.workflow_step_id
+                ),
+                "current_step_order": (
+                    workflow.current_step_order
+                ),
+                "progress_percent": (
+                    workflow.progress_percent
+                ),
+                "next_step_assignment": (
+                    {
+                        "kind": next_step_assignment.get(
+                            "kind"
+                        ),
+                        "created": next_step_assignment.get(
+                            "created"
+                        ),
+                        "workflow_step_id": (
+                            next_step_assignment.get(
+                                "workflow_step_id"
+                            )
+                        ),
+                        "assigned_role": (
+                            next_step_assignment.get(
+                                "assigned_role"
+                            )
+                        ),
+                        "agent_code": (
+                            next_step_assignment.get(
+                                "agent_code"
+                            )
+                        ),
+                        "required_capability": (
+                            next_step_assignment.get(
+                                "required_capability"
+                            )
+                        ),
+                        "assignment_id": (
+                            next_step_assignment[
+                                "assignment"
+                            ].id
+                            if next_step_assignment.get(
+                                "assignment"
+                            )
+                            else None
+                        ),
+                        "orchestration_run_id": (
+                            next_step_assignment[
+                                "run"
+                            ].id
+                            if next_step_assignment.get(
+                                "run"
+                            )
+                            else None
+                        ),
+                    }
+                    if next_step_assignment
+                    else None
+                ),
+            }
+
         complete_orchestration_run(
             db,
             run=run,
@@ -317,16 +474,20 @@ def execute_workforce_assignment(
             "action_code": action_code,
             "assignment_id": assignment.id,
             "orchestration_run_id": run.id,
+            "workflow_progression": workflow_progression,
             "status": "completed",
         }
 
         job.metadata_json = metadata
 
-        db.commit()
+        if commit:
+            db.commit()
 
-        db.refresh(job)
-        db.refresh(run)
-        db.refresh(assignment)
+            db.refresh(job)
+            db.refresh(run)
+            db.refresh(assignment)
+        else:
+            db.flush()
 
         return {
             "status": "completed",
@@ -335,6 +496,7 @@ def execute_workforce_assignment(
             "assignment": assignment,
             "action_code": action_code,
             "result": result,
+            "workflow_progression": workflow_progression,
         }
 
     except Exception:
