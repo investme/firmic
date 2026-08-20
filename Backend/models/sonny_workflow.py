@@ -92,6 +92,35 @@ class SonnyWorkflow(Base):
         nullable=True,
     )
 
+    # --------------------------------------------------------
+    # B8.1 — production workflow execution lease.
+    #
+    # Workflow status describes business lifecycle.
+    # These fields describe temporary worker ownership only.
+    # --------------------------------------------------------
+
+    execution_claimed_by = Column(
+        String,
+        nullable=True,
+        index=True,
+    )
+
+    execution_claimed_at = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    execution_lease_expires_at = Column(
+        DateTime,
+        nullable=True,
+        index=True,
+    )
+
+    execution_heartbeat_at = Column(
+        DateTime,
+        nullable=True,
+    )
+
     cancelled_at = Column(
         DateTime,
         nullable=True,

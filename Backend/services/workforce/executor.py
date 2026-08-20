@@ -510,8 +510,104 @@ def execute_workforce_assignment(
             "workflow_progression": workflow_progression,
         }
 
-    except Exception:
-        db.rollback()
+    except Exception as exc:
+        # ----------------------------------------------------
+        # B8.3 — persist canonical execution failure state.
+        #
+        # When commit=False, the caller owns the outer
+        # transaction. Do not destroy that transaction with an
+        # inner rollback. Instead mark the existing canonical
+        # execution records failed and flush them so the outer
+        # dispatcher can commit failure + lease release
+        # atomically.
+        #
+        # assignment.attempt_count was already incremented by
+        # start_assignment().
+        #
+        # fail_orchestration_run() consumes one retry by
+        # incrementing run.retry_count.
+        # ----------------------------------------------------
+
+        error_message = (
+            clean(str(exc))
+            or exc.__class__.__name__
+        )
+
+        try:
+            if assignment.status == "running":
+                fail_assignment(
+                    db,
+                    run=run,
+                    assignment=assignment,
+                    error_message=error_message,
+                    commit=False,
+                )
+
+            if run.status == "running":
+                fail_orchestration_run(
+                    db,
+                    run=run,
+                    actor_id=actor,
+                    error_message=error_message,
+                    commit=False,
+                )
+
+            if job.status not in {
+                "completed",
+                "cancelled",
+                "failed",
+            }:
+                update_workforce_job(
+                    db,
+                    job=job,
+                    status="failed",
+                    failure_reason=error_message,
+                    actor=agent.agent_code,
+                    commit=False,
+                )
+
+            metadata = dict(
+                job.metadata_json or {}
+            )
+
+            metadata["execution"] = {
+                "executor_version": EXECUTOR_VERSION,
+                "agent_code": agent.agent_code,
+                "action_code": action_code,
+                "assignment_id": assignment.id,
+                "orchestration_run_id": run.id,
+                "status": "failed",
+                "error_message": error_message,
+                "attempt_count": (
+                    assignment.attempt_count
+                ),
+                "max_attempts": (
+                    assignment.max_attempts
+                ),
+                "retry_count": (
+                    run.retry_count
+                ),
+                "max_retries": (
+                    run.max_retries
+                ),
+            }
+
+            job.metadata_json = metadata
+
+            if commit:
+                db.commit()
+                db.refresh(job)
+                db.refresh(run)
+                db.refresh(assignment)
+            else:
+                db.flush()
+
+        except Exception:
+            # If failure recording itself fails, preserve the
+            # previous executor safety behavior.
+            db.rollback()
+            raise
+
         raise
 
 
