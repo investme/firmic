@@ -934,6 +934,41 @@ def get_company_workflow(
     return workflow
 
 
+
+def _assert_control_plane_execution_lease_clear(
+    workflow: SonnyWorkflow,
+    *,
+    operation: str,
+) -> None:
+    """
+    Prevent tenant/control-plane lifecycle mutations from racing
+    a production worker that currently owns an active execution
+    lease.
+
+    Expired leases do not block control-plane operations and may
+    be reclaimed through the normal B8 lease service.
+    """
+    from services.sonny.workflow_leases import (
+        workflow_lease_is_active,
+    )
+
+    if workflow_lease_is_active(workflow):
+        owner = str(
+            workflow.execution_claimed_by
+            or ""
+        ).strip()
+
+        raise ValueError(
+            "Workflow cannot be "
+            f"{operation} while autonomous execution is active"
+            + (
+                f" under worker {owner}."
+                if owner
+                else "."
+            )
+        )
+
+
 def start_workflow(
     db: Session,
     *,
@@ -1005,6 +1040,13 @@ def complete_workflow_step(
     output: dict[str, Any] | None,
     commit: bool = True,
 ) -> SonnyWorkflow:
+
+    if commit:
+        _assert_control_plane_execution_lease_clear(
+            workflow,
+            operation="advanced",
+        )
+
     if workflow.status not in {"running", "waiting"}:
         raise ValueError(
             "Only running or waiting workflows can advance."
@@ -1135,6 +1177,12 @@ def cancel_workflow(
     workflow: SonnyWorkflow,
     actor_id: str,
 ) -> SonnyWorkflow:
+
+    _assert_control_plane_execution_lease_clear(
+        workflow,
+        operation="cancelled",
+    )
+
     if workflow.status in WORKFLOW_FINAL_STATUSES:
         raise ValueError(
             "This workflow is already final."

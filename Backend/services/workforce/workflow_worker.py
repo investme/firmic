@@ -20,6 +20,14 @@ from services.workforce.workflow_dispatcher import (
     dispatch_result_summary,
 )
 
+from services.workforce.workflow_worker_heartbeat import (
+    heartbeat_worker,
+    mark_worker_stopped,
+    record_worker_dispatch,
+    record_worker_error,
+    register_worker,
+)
+
 
 logger = logging.getLogger(
     __name__
@@ -285,6 +293,113 @@ class WorkflowWorker:
             self.handle_signal,
         )
 
+    def _write_worker_state(
+        self,
+        operation,
+    ) -> None:
+        """
+        Persist worker-process observability state using a fresh
+        database session independent from workflow execution.
+
+        Heartbeat failures are operationally important but must
+        not corrupt the dispatcher transaction.
+        """
+        db = SessionLocal()
+
+        try:
+            operation(
+                db
+            )
+
+        except Exception:
+            db.rollback()
+
+            logger.exception(
+                "workflow_worker_heartbeat_failed",
+                extra={
+                    "worker_id": (
+                        self.config.worker_id
+                    ),
+                },
+            )
+
+        finally:
+            db.close()
+
+    def register_liveness(
+        self,
+    ) -> None:
+        self._write_worker_state(
+            lambda db: register_worker(
+                db,
+                worker_id=(
+                    self.config.worker_id
+                ),
+                company_id=(
+                    self.config.company_id
+                ),
+            )
+        )
+
+    def heartbeat_liveness(
+        self,
+    ) -> None:
+        self._write_worker_state(
+            lambda db: heartbeat_worker(
+                db,
+                worker_id=(
+                    self.config.worker_id
+                ),
+            )
+        )
+
+    def record_dispatch_liveness(
+        self,
+        result: dict[str, Any],
+    ) -> None:
+        self._write_worker_state(
+            lambda db: record_worker_dispatch(
+                db,
+                worker_id=(
+                    self.config.worker_id
+                ),
+                dispatch_status=str(
+                    result.get(
+                        "status"
+                    )
+                    or ""
+                ),
+            )
+        )
+
+    def record_error_liveness(
+        self,
+        exc: BaseException,
+    ) -> None:
+        self._write_worker_state(
+            lambda db: record_worker_error(
+                db,
+                worker_id=(
+                    self.config.worker_id
+                ),
+                error_message=str(
+                    exc
+                ),
+            )
+        )
+
+    def mark_stopped_liveness(
+        self,
+    ) -> None:
+        self._write_worker_state(
+            lambda db: mark_worker_stopped(
+                db,
+                worker_id=(
+                    self.config.worker_id
+                ),
+            )
+        )
+
     def dispatch_once(
         self,
     ) -> dict[str, Any]:
@@ -338,6 +453,8 @@ class WorkflowWorker:
     ) -> int:
         self.install_signal_handlers()
 
+        self.register_liveness()
+
         logger.info(
             "workflow_worker_started",
             extra={
@@ -364,12 +481,18 @@ class WorkflowWorker:
 
         while not self.stop_event.is_set():
             try:
+                self.heartbeat_liveness()
+
                 result = self.dispatch_once()
 
                 summary = (
                     dispatch_result_summary(
                         result
                     )
+                )
+
+                self.record_dispatch_liveness(
+                    result
                 )
 
                 logger.info(
@@ -394,7 +517,11 @@ class WorkflowWorker:
             except KeyboardInterrupt:
                 self.request_stop()
 
-            except Exception:
+            except Exception as exc:
+                self.record_error_liveness(
+                    exc
+                )
+
                 logger.exception(
                     "workflow_worker_iteration_failed",
                     extra={
@@ -406,6 +533,8 @@ class WorkflowWorker:
 
                 if not self.stop_event.is_set():
                     self._sleep_until_next_poll()
+
+        self.mark_stopped_liveness()
 
         logger.info(
             "workflow_worker_stopped",

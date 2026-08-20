@@ -7,6 +7,7 @@ import string
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import Query
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, inspect, text
 from sqlalchemy.orm import Session
@@ -21,6 +22,10 @@ from models.usage_ledger import UsageLedger
 from models.support_ticket import SupportMessage, SupportTicket
 from models.launch import CompanyLaunch
 from models.subscription import CompanySubscription
+from services.compliance_requirements import (
+    REQUIRED_COMPLIANCE_DOCUMENTS,
+    requirement_applies_to_company,
+)
 from services.ledger_service import record_usage
 from services.email_service import (
     send_company_activation_email,
@@ -35,6 +40,14 @@ from services.launch_service import (
     update_provisioning,
 )
 
+
+
+from services.workforce.workflow_health import (
+    build_execution_health_snapshot,
+)
+from services.workforce.workflow_worker_heartbeat import (
+    DEFAULT_WORKER_STALE_SECONDS,
+)
 
 router = APIRouter(
     prefix="/api/admin",
@@ -1733,102 +1746,14 @@ def update_admin_support_ticket(
 # Hermes Compliance Queue — Launch Engine controlled
 # ------------------------------------------------------------------
 
-REQUIRED_COMPLIANCE_DOCUMENTS = [
-    {
-        "key": "passport",
-        "label": "Passport Copy",
-        "aliases": [
-            "passport",
-            "passport copy",
-            "owner passport",
-            "government id",
-        ],
-    },
-    {
-        "key": "proof_of_address",
-        "label": "Proof of Address",
-        "aliases": [
-            "proof of address",
-            "address proof",
-            "utility bill",
-            "bank statement",
-            "tenancy contract",
-        ],
-    },
-    {
-        "key": "trade_license",
-        "label": "Trade License",
-        "aliases": [
-            "trade license",
-            "business license",
-            "commercial license",
-        ],
-    },
-    {
-        "key": "certificate_of_incorporation",
-        "label": "Company Formation Documents",
-        "aliases": [
-            "company formation",
-            "formation documents",
-            "incorporation certificate",
-            "certificate of incorporation",
-            "memorandum",
-            "articles of association",
-            "incorporation",
-        ],
-    },
-    {
-        "key": "beneficial_owner_declaration",
-        "label": "Beneficial Owner Declaration",
-        "aliases": [
-            "beneficial owner",
-            "beneficial owner declaration",
-            "ubo",
-            "ultimate beneficial owner",
-            "ownership declaration",
-        ],
-    },
-    {
-        "key": "emirates_id",
-        "label": "Emirates ID",
-        "aliases": [
-            "emirates id",
-            "emirates_id",
-            "uae id",
-            "emirates identity card",
-        ],
-    },
-    {
-        "key": "kyc_questionnaire",
-        "label": "KYC Questionnaire",
-        "aliases": [
-            "kyc questionnaire",
-            "kyc_questionnaire",
-            "kyc",
-            "know your customer questionnaire",
-            "kyc form",
-            "kyc submission",
-        ],
-    },
-]
-
-
 def _requirement_applies_to_company(
     company: Company,
     requirement: dict[str, Any],
 ) -> bool:
-    if requirement.get("key") != "emirates_id":
-        return True
-
-    # Emirates ID is required unless residency has explicitly
-    # been declared non-UAE. This is fail-closed for legacy/null
-    # records and prevents accidental compliance bypass.
-    return getattr(
+    return requirement_applies_to_company(
         company,
-        "is_uae_resident",
-        None,
-    ) is not False
-
+        requirement,
+    )
 
 def _norm(value: Any) -> str:
     return " ".join(
@@ -3295,3 +3220,28 @@ def mark_live_admin_company_paid(
         entry.status = "paid"
     db.commit()
     return {"message": "Company usage marked as paid", "updated_entries": len(entries)}
+
+@router.get("/operations/workflow-execution-health")
+def get_workflow_execution_health(
+    company_id: str | None = None,
+    worker_stale_seconds: int = Query(
+        DEFAULT_WORKER_STALE_SECONDS,
+        ge=1,
+        le=3600,
+    ),
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Read-only operational health for the production workflow
+    execution runtime.
+
+    Admin-only. Supports global or company-scoped visibility.
+    This endpoint does not mutate workflow, lease, retry, worker,
+    or heartbeat state.
+    """
+    return build_execution_health_snapshot(
+        db,
+        company_id=company_id,
+        worker_stale_seconds=worker_stale_seconds,
+    )
