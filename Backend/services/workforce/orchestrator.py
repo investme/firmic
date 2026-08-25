@@ -3,17 +3,21 @@ from __future__ import annotations
 import datetime
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
+from models.sonny_orchestration import SonnyAgentAssignment
 from models.workforce_job import (
     WorkforceJob,
     WorkforceTimelineEvent,
 )
 from services.activity_service import record_activity
-from services.workforce.dispatcher import dispatch_work
 from services.sonny.orchestration import (
     create_assignment,
     create_orchestration_run,
+)
+from services.workforce.dispatcher import (
+    dispatch_work,
+    dispatch_work_targets,
 )
 
 
@@ -26,10 +30,8 @@ VALID_STATUSES = {
     "cancelled",
 }
 
-
 def clean(value: Any) -> str:
     return str(value or "").strip()
-
 
 def clamp_progress(value: Any) -> int:
     try:
@@ -363,6 +365,371 @@ def ensure_workflow_assignment_job(
     return job
 
 
+
+def create_workforce_fanout_plan(
+    db: Session,
+    *,
+    company: Any,
+    request_text: str,
+    preferred_agent: str | None = None,
+    actor_id: str | None = None,
+    source_type: str = "manual",
+    source_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """
+    Create one canonical Sonny orchestration run with one assignment
+    and one WorkforceJob per eligible specialist target.
+
+    Important authority rules:
+      - no CompanyAIAgent row is created or activated here;
+      - inactive tenant specialists are reported as unavailable;
+      - each created assignment retains create_assignment() as the
+        canonical capability + tenant-employment authority;
+      - every specialist assignment receives its own WorkforceJob;
+      - all assignments share one Sonny orchestration run;
+      - no specialist is executed by this function.
+    """
+
+    request_text = clean(request_text)
+
+    if not request_text:
+        raise ValueError(
+            "Work request cannot be empty."
+        )
+
+    company_id = str(company.id)
+    actor = clean(actor_id) or "sonny"
+
+    dispatch_targets = dispatch_work_targets(
+        request_text=request_text,
+        preferred_agent=preferred_agent,
+    )
+
+    if not dispatch_targets:
+        raise ValueError(
+            "Workforce fan-out produced no dispatch targets."
+        )
+
+    # --------------------------------------------------------
+    # One orchestration run represents the founder objective.
+    # The entire dispatch-target set participates in the
+    # idempotent orchestration input.
+    # --------------------------------------------------------
+
+    orchestration = create_orchestration_run(
+        db,
+        company_id=company_id,
+        orchestration_type="workforce_fanout",
+        created_by=actor,
+        trigger_type=clean(source_type) or "manual",
+        approval_required=False,
+        input_payload={
+            "request_text": request_text,
+            "source_type": clean(source_type) or "manual",
+            "source_id": clean(source_id) or None,
+            "dispatch_targets": dispatch_targets,
+            "metadata": metadata or {},
+        },
+        orchestration_metadata={
+            "source": "workforce_orchestrator",
+            "fanout": True,
+            "dispatch_target_count": len(
+                dispatch_targets
+            ),
+        },
+        commit=False,
+    )
+
+    created: list[dict[str, Any]] = []
+    unavailable: list[dict[str, Any]] = []
+
+    for dispatch in dispatch_targets:
+        agent_key = clean(
+            dispatch.get("agent_key")
+        ).lower()
+
+        capabilities = (
+            dispatch.get("capabilities")
+            or []
+        )
+
+        if not agent_key:
+            unavailable.append(
+                {
+                    "agent_key": None,
+                    "agent_name": dispatch.get(
+                        "agent_name"
+                    ),
+                    "reason": (
+                        "Dispatch target has no agent key."
+                    ),
+                }
+            )
+            continue
+
+        if not capabilities:
+            unavailable.append(
+                {
+                    "agent_key": agent_key,
+                    "agent_name": dispatch.get(
+                        "agent_name"
+                    ),
+                    "reason": (
+                        "Dispatch target has no "
+                        "executable capability."
+                    ),
+                }
+            )
+            continue
+
+        required_capability = clean(
+            capabilities[0]
+        )
+
+        try:
+            assignment = create_assignment(
+                db,
+                run=orchestration,
+                assignment_code=(
+                    f"workforce_fanout:{agent_key}"
+                ),
+                title=request_text[:255],
+                instructions=request_text,
+                required_capability=(
+                    required_capability
+                ),
+                assigned_by="sonny",
+                preferred_agent_code=agent_key,
+                agent_code=agent_key,
+                approval_required=False,
+                confidence=float(
+                    dispatch.get("confidence")
+                    or 1.0
+                ),
+                input_payload={
+                    "request_text": request_text,
+                    "source_type": (
+                        clean(source_type)
+                        or "manual"
+                    ),
+                    "source_id": (
+                        clean(source_id)
+                        or None
+                    ),
+                    "metadata": metadata or {},
+                    "dispatch": dispatch,
+                },
+                assignment_metadata={
+                    "source": (
+                        "workforce_fanout"
+                    ),
+                    "requested_by": actor,
+                    "fanout": True,
+                },
+                commit=False,
+            )
+
+        except ValueError as exc:
+            # create_assignment() remains the canonical
+            # authority. We report an unavailable target
+            # rather than activating or provisioning it.
+            unavailable.append(
+                {
+                    "agent_key": agent_key,
+                    "agent_name": dispatch.get(
+                        "agent_name"
+                    ),
+                    "required_capability": (
+                        required_capability
+                    ),
+                    "reason": str(exc),
+                }
+            )
+            continue
+
+        job = WorkforceJob(
+            company_id=company_id,
+            title=request_text[:255],
+            request_text=request_text,
+            assigned_agent=clean(
+                dispatch.get("agent_name")
+            )
+            or agent_key,
+            assigned_role=clean(
+                dispatch.get("agent_role")
+            )
+            or required_capability,
+            status="accepted",
+            progress=10,
+            source_type=(
+                clean(source_type)
+                or "manual"
+            ),
+            source_id=(
+                clean(source_id)
+                or None
+            ),
+            metadata_json={
+                **(metadata or {}),
+                "dispatch": dispatch,
+                "fanout": True,
+                "orchestration_run_id": (
+                    orchestration.id
+                ),
+                "assignment_id": assignment.id,
+                "agent_code": agent_key,
+                "required_capability": (
+                    required_capability
+                ),
+                "delegation_status": (
+                    assignment.status
+                ),
+            },
+            accepted_at=(
+                datetime.datetime.utcnow()
+            ),
+        )
+
+        db.add(job)
+        db.flush()
+
+        add_timeline_event(
+            db,
+            job=job,
+            event_type="request_received",
+            actor="Sonny",
+            title=(
+                "Sonny accepted the founder request"
+            ),
+            description=request_text,
+            status="accepted",
+            progress=10,
+            metadata={
+                "fanout": True,
+                "orchestration_run_id": (
+                    orchestration.id
+                ),
+                "assignment_id": assignment.id,
+            },
+        )
+
+        add_timeline_event(
+            db,
+            job=job,
+            event_type="work_delegated",
+            actor="Sonny",
+            title=(
+                f"Delegated to "
+                f"{job.assigned_agent}"
+            ),
+            description=dispatch.get(
+                "reason"
+            ),
+            status="accepted",
+            progress=10,
+            metadata={
+                "fanout": True,
+                "dispatch_confidence": (
+                    dispatch.get("confidence")
+                ),
+                "orchestration_run_id": (
+                    orchestration.id
+                ),
+                "assignment_id": assignment.id,
+            },
+        )
+
+        record_activity(
+            db,
+            company_id=company_id,
+            event_type=(
+                "workforce_job_created"
+            ),
+            title=(
+                f"{job.assigned_agent} "
+                "received fan-out work"
+            ),
+            description=job.title,
+            actor_type="sonny",
+            actor_id=actor,
+            source_type="workforce_job",
+            source_id=job.id,
+            metadata={
+                "fanout": True,
+                "orchestration_run_id": (
+                    orchestration.id
+                ),
+                "assignment_id": assignment.id,
+                "assigned_agent": (
+                    job.assigned_agent
+                ),
+                "assigned_role": (
+                    job.assigned_role
+                ),
+                "status": job.status,
+                "progress": job.progress,
+            },
+            commit=False,
+        )
+
+        created.append(
+            {
+                "dispatch": dispatch,
+                "assignment": assignment,
+                "job": job,
+            }
+        )
+
+    # --------------------------------------------------------
+    # An orchestration with zero assignments cannot execute.
+    # Roll back the in-memory/transactional run by raising
+    # before commit.
+    # --------------------------------------------------------
+
+    if not created:
+        raise ValueError(
+            "None of the requested specialist targets "
+            "are active in this company's AI workforce."
+        )
+
+    orchestration.orchestration_metadata = {
+        **(
+            orchestration.orchestration_metadata
+            or {}
+        ),
+        "fanout": True,
+        "requested_target_count": len(
+            dispatch_targets
+        ),
+        "created_assignment_count": len(
+            created
+        ),
+        "unavailable_target_count": len(
+            unavailable
+        ),
+        "unavailable_targets": unavailable,
+    }
+
+    db.flush()
+
+    if commit:
+        db.commit()
+        db.refresh(orchestration)
+
+        for item in created:
+            db.refresh(item["assignment"])
+            db.refresh(item["job"])
+
+    return {
+        "orchestration": orchestration,
+        "created": created,
+        "unavailable": unavailable,
+        "dispatch_targets": dispatch_targets,
+    }
+
+
 def create_workforce_job(
     db: Session,
     *,
@@ -556,6 +923,27 @@ def update_workforce_job(
     return job
 
 
+def serialize_workforce_agent_message(
+    message: Any,
+) -> dict[str, Any]:
+    return {
+        "id": message.id,
+        "assignment_id": message.assignment_id,
+        "company_id": message.company_id,
+        "sender_agent_code": message.sender_agent_code,
+        "recipient_agent_code": message.recipient_agent_code,
+        "message_type": message.message_type,
+        "subject": message.subject,
+        "content": message.content,
+        "message_data": message.message_data or {},
+        "created_at": (
+            message.created_at.isoformat()
+            if message.created_at
+            else None
+        ),
+    }
+
+
 def serialize_timeline_event(
     event: WorkforceTimelineEvent,
 ) -> dict[str, Any]:
@@ -612,6 +1000,36 @@ def serialize_job(
             else None
         ),
     }
+    payload["agent_messages"] = []
+
+    metadata = job.metadata_json or {}
+    assignment_id = str(
+        metadata.get("assignment_id") or ""
+    ).strip()
+
+    if assignment_id:
+        session = object_session(job)
+
+        if session is not None:
+            assignment = (
+                session.query(
+                    SonnyAgentAssignment
+                )
+                .filter(
+                    SonnyAgentAssignment.id
+                    == assignment_id
+                )
+                .first()
+            )
+
+            if assignment is not None:
+                payload["agent_messages"] = [
+                    serialize_workforce_agent_message(
+                        message
+                    )
+                    for message in assignment.messages
+                ]
+
 
     if include_timeline:
         payload["timeline"] = [

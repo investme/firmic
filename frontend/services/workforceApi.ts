@@ -10,6 +10,7 @@ async function request(path: string, options: RequestInit = {}) {
   const token = getToken();
 
   const response = await fetch(`${API_URL}${path}`, {
+    cache: "no-store",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -42,6 +43,19 @@ export type WorkforceAgent = {
   route_keywords?: string[];
   default_status?: string;
   mvp_enabled?: boolean;
+};
+
+export type WorkforceAgentMessage = {
+  id: string;
+  assignment_id: string;
+  company_id: string;
+  sender_agent_code: string;
+  recipient_agent_code: string;
+  message_type: string;
+  subject?: string | null;
+  content: string;
+  message_data?: Record<string, unknown>;
+  created_at?: string | null;
 };
 
 export type WorkforceTimelineEvent = {
@@ -81,6 +95,7 @@ export type WorkforceJob = {
   updated_at?: string | null;
   completed_at?: string | null;
   timeline?: WorkforceTimelineEvent[];
+  agent_messages?: WorkforceAgentMessage[];
 };
 
 export function getWorkforceRegistry() {
@@ -105,28 +120,10 @@ export function executeWorkforceJob(data: {
   source_type?: string;
   source_id?: string;
   metadata?: Record<string, unknown>;
+  fanout?: boolean;
 }) {
   return request("/api/workforce/execute", {
     method: "POST",
     body: JSON.stringify(data),
   });
-}
-
-export function updateWorkforceJob(
-  jobId: string,
-  data: {
-    company_id: string;
-    status: string;
-    progress?: number;
-    result_summary?: string;
-    failure_reason?: string;
-  }
-) {
-  return request(
-    `/api/workforce/jobs/${encodeURIComponent(jobId)}/progress`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    }
-  );
 }

@@ -683,11 +683,148 @@ def prepare_billing_action(
 
 
 
+
+def review_support_queue_action(
+    context: dict[str, Any],
+    parameters: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Read-only Support AI inspection of the verified tenant's
+    support-ticket queue.
+
+    This action never mutates, assigns, responds to, or closes
+    a support ticket.
+    """
+    db = get_db(context)
+    company = get_company(context)
+
+    company_id = str(company.id)
+
+    requested_company_id = clean_text(
+        parameters.get("company_id")
+    )
+
+    if (
+        requested_company_id
+        and requested_company_id != company_id
+    ):
+        raise ValueError(
+            "The requested support company does not match "
+            "the verified company."
+        )
+
+    try:
+        from models.support_ticket import SupportTicket
+    except ImportError:
+        from models.company import SupportTicket
+
+    limit = int(parameters.get("limit") or 100)
+    limit = max(1, min(limit, 500))
+
+    tickets = (
+        db.query(SupportTicket)
+        .filter(
+            SupportTicket.company_id == company_id
+        )
+        .order_by(
+            SupportTicket.updated_at.desc()
+        )
+        .limit(limit)
+        .all()
+    )
+
+    terminal_statuses = {
+        "resolved",
+        "closed",
+        "completed",
+        "cancelled",
+        "canceled",
+    }
+
+    serialized = []
+    open_count = 0
+    urgent_count = 0
+
+    for ticket in tickets:
+        status = clean_text(
+            getattr(ticket, "status", "")
+        ).lower()
+
+        priority = clean_text(
+            getattr(ticket, "priority", "")
+        ).lower()
+
+        is_open = status not in terminal_statuses
+
+        if is_open:
+            open_count += 1
+
+        if is_open and priority == "urgent":
+            urgent_count += 1
+
+        serialized.append(
+            {
+                "id": str(ticket.id),
+                "status": status,
+                "priority": priority,
+                "subject": getattr(
+                    ticket,
+                    "subject",
+                    None,
+                ),
+                "assigned_to": getattr(
+                    ticket,
+                    "assigned_to",
+                    None,
+                ),
+                "created_at": (
+                    ticket.created_at.isoformat()
+                    if getattr(
+                        ticket,
+                        "created_at",
+                        None,
+                    )
+                    else None
+                ),
+                "updated_at": (
+                    ticket.updated_at.isoformat()
+                    if getattr(
+                        ticket,
+                        "updated_at",
+                        None,
+                    )
+                    else None
+                ),
+            }
+        )
+
+    return {
+        "status": "completed",
+        "message": (
+            f"Reviewed {len(tickets)} support tickets "
+            "for the verified company."
+        ),
+        "data": {
+            "company_id": company_id,
+            "ticket_count": len(tickets),
+            "open_count": open_count,
+            "urgent_open_count": urgent_count,
+            "tickets": serialized,
+            "mutation_performed": False,
+        },
+    }
+
+
 register_action("schedule_meeting", schedule_meeting_action)
 register_action("cancel_meeting", cancel_meeting_action)
 register_action("create_task", create_task_action)
 register_action("assign_task", assign_task_action)
 register_action("inspect_usage_ledger", inspect_usage_ledger_action)
+
+register_action(
+    "review_support_queue",
+    review_support_queue_action,
+)
 register_action("prepare_billing_action", prepare_billing_action)
 
 

@@ -49,6 +49,12 @@ FINANCE_CAPABILITY_ACTIONS = {
 }
 
 
+SUPPORT_CAPABILITY_ACTIONS = {
+    "support_queue_review": "review_support_queue",
+    "ticket_triage": "review_support_queue",
+}
+
+
 def clean(value: Any) -> str:
     return str(value or "").strip()
 
@@ -94,6 +100,15 @@ def resolve_assignment_action(
 
     if agent_code == "finance_ai":
         action = FINANCE_CAPABILITY_ACTIONS.get(
+            capability
+        )
+
+        if action:
+            return action
+
+
+    if agent_code == "support_ai":
+        action = SUPPORT_CAPABILITY_ACTIONS.get(
             capability
         )
 
@@ -452,13 +467,29 @@ def execute_workforce_assignment(
                 ),
             }
 
-        complete_orchestration_run(
-            db,
-            run=run,
-            actor_id=actor,
-            output_payload=result_payload,
-            commit=False,
-        )
+        # B11.4D — A canonical orchestration run may contain
+        # multiple specialist assignments. Completing one assignment
+        # must not attempt to finalize the run while sibling
+        # assignments remain incomplete.
+        db.flush()
+
+        incomplete_assignments = [
+            item
+            for item in run.assignments
+            if item.status != "completed"
+        ]
+
+        orchestration_completed = False
+
+        if not incomplete_assignments:
+            complete_orchestration_run(
+                db,
+                run=run,
+                actor_id=actor,
+                output_payload=result_payload,
+                commit=False,
+            )
+            orchestration_completed = True
 
         summary = (
             clean(result.get("message"))

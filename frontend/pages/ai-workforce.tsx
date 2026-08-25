@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, useRef } from "react";
 import FirmicSidebar from "../components/FirmicSidebar";
 import ProtectedRoute from "../components/ProtectedRoute";
 import {
@@ -13,42 +13,331 @@ import {
   WorkforceJob,
 } from "../services/workforceApi";
 import {
-  getCompanyLedger,
-  getCompanyLedgerSummary,
-} from "../services/ledgerApi";
+  CompanySubscription,
+  getCompanySubscription,
+} from "../services/subscriptionApi";
+import {
+  deactivateAIAgent,
+  getCompanyAIAgents,
+  hireAIAgent,
+} from "../services/aiWorkforceApi";
 
 const CORE_AGENTS = ["Sonny", "Hermes", "Julia"];
 
-type LedgerEntry = {
+const CORE_AGENT_CODES = new Set([
+  "sonny",
+  "hermes",
+  "julia",
+]);
+
+type CompanyAIAgent = {
   id: string;
-  service: string;
+  company_id: string;
+  registry_agent_id?: string | null;
+  agent_name: string;
+  monthly_price_usd: number;
   status: string;
-  total_amount: number;
+  activated_at?: string | null;
+  deactivated_at?: string | null;
 };
 
-type LedgerSummary = {
-  total: number;
-  services?: Array<{
-    service: string;
-    total: number;
-    entries: number;
-  }>;
+function agentDisplayName(
+  agentCode?: string | null
+) {
+  const normalized = String(
+    agentCode || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (normalized === "sonny") {
+    return "Sonny";
+  }
+
+  return normalized
+    .split("_")
+    .filter(Boolean)
+    .map(
+      (part) =>
+        part.charAt(0).toUpperCase()
+        + part.slice(1)
+    )
+    .join(" ");
+}
+
+type AgentVoiceProfile = {
+  rate: number;
+  pitch: number;
 };
+
+function normalizeVoiceCode(
+  value?: string | null
+) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function agentVoiceProfile(
+  senderAgentCode: string
+): AgentVoiceProfile {
+  const sender = normalizeVoiceCode(
+    senderAgentCode
+  );
+
+  if (sender === "sonny") {
+    return {
+      rate: 0.91,
+      pitch: 0.9,
+    };
+  }
+
+  if (sender === "finance_ai") {
+    return {
+      rate: 0.97,
+      pitch: 1.08,
+    };
+  }
+
+  return {
+    rate: 0.96,
+    pitch: 1.02,
+  };
+}
+
+function stableAgentVoiceIndex(
+  agentCode: string,
+  availableVoiceCount: number
+) {
+  if (availableVoiceCount <= 1) {
+    return 0;
+  }
+
+  const normalized = normalizeVoiceCode(
+    agentCode
+  );
+
+  if (normalized === "sonny") {
+    return 0;
+  }
+
+  if (normalized === "finance_ai") {
+    return 1;
+  }
+
+  let hash = 0;
+
+  for (
+    let index = 0;
+    index < normalized.length;
+    index += 1
+  ) {
+    hash = (
+      (hash * 31)
+      + normalized.charCodeAt(index)
+    ) >>> 0;
+  }
+
+  return (
+    1
+    + (
+      hash
+      % Math.max(
+          availableVoiceCount - 1,
+          1
+        )
+    )
+  );
+}
+
+function preferredBrowserVoices(
+  voices: SpeechSynthesisVoice[]
+) {
+  const english = voices.filter(
+    (voice) =>
+      String(
+        voice.lang || ""
+      )
+        .toLowerCase()
+        .startsWith("en")
+  );
+
+  const candidates =
+    english.length > 0
+      ? english
+      : voices;
+
+  return [...candidates].sort(
+    (left, right) => {
+      const leftKey = `${
+        left.localService
+          ? "0"
+          : "1"
+      }:${left.lang}:${left.name}:${left.voiceURI}`;
+
+      const rightKey = `${
+        right.localService
+          ? "0"
+          : "1"
+      }:${right.lang}:${right.name}:${right.voiceURI}`;
+
+      return leftKey.localeCompare(
+        rightKey
+      );
+    }
+  );
+}
+
+async function loadBrowserVoices() {
+  if (
+    typeof window === "undefined"
+    || !window.speechSynthesis
+  ) {
+    return [] as SpeechSynthesisVoice[];
+  }
+
+  const immediate =
+    window.speechSynthesis.getVoices();
+
+  if (immediate.length > 0) {
+    return immediate;
+  }
+
+  return await new Promise<
+    SpeechSynthesisVoice[]
+  >((resolve) => {
+    let settled = false;
+
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+
+      window.speechSynthesis.removeEventListener(
+        "voiceschanged",
+        handleVoicesChanged
+      );
+
+      resolve(
+        window.speechSynthesis.getVoices()
+      );
+    };
+
+    const handleVoicesChanged = () => {
+      finish();
+    };
+
+    window.speechSynthesis.addEventListener(
+      "voiceschanged",
+      handleVoicesChanged
+    );
+
+    window.setTimeout(
+      finish,
+      1200
+    );
+  });
+}
+
+async function resolveAgentVoice(
+  senderAgentCode: string
+) {
+  const voices = preferredBrowserVoices(
+    await loadBrowserVoices()
+  );
+
+  if (voices.length === 0) {
+    return null;
+  }
+
+  const index = stableAgentVoiceIndex(
+    senderAgentCode,
+    voices.length
+  );
+
+  return (
+    voices[index]
+    || voices[0]
+    || null
+  );
+}
+
+async function speakAgentMessage(
+  senderAgentCode: string,
+  content: string
+) {
+  if (
+    typeof window === "undefined"
+    || !window.speechSynthesis
+    || typeof SpeechSynthesisUtterance
+      === "undefined"
+  ) {
+    return;
+  }
+
+  const sender = normalizeVoiceCode(
+    senderAgentCode
+  );
+
+  const profile = agentVoiceProfile(
+    sender
+  );
+
+  const voice = await resolveAgentVoice(
+    sender
+  );
+
+  const utterance =
+    new SpeechSynthesisUtterance(
+      `${agentDisplayName(sender)}. ${content}`
+    );
+
+  if (voice) {
+    utterance.voice = voice;
+    utterance.lang =
+      voice.lang
+      || "en-US";
+  } else {
+    utterance.lang = "en-US";
+  }
+
+  utterance.rate = profile.rate;
+  utterance.pitch = profile.pitch;
+  utterance.volume = 1;
+
+  window.speechSynthesis.cancel();
+
+  window.speechSynthesis.speak(
+    utterance
+  );
+}
+
 
 export default function AIWorkforcePage() {
   const [workspace, setWorkspace] = useState(() => getActiveWorkspace());
   const [registry, setRegistry] = useState<WorkforceAgent[]>([]);
   const [jobs, setJobs] = useState<WorkforceJob[]>([]);
-  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
-  const [ledgerSummary, setLedgerSummary] = useState<LedgerSummary | null>(null);
+  const [subscription, setSubscription] =
+    useState<CompanySubscription | null>(null);
+  const [companyAgents, setCompanyAgents] =
+    useState<CompanyAIAgent[]>([]);
   const [title, setTitle] = useState("");
   const [requestText, setRequestText] = useState("");
   const [preferredAgent, setPreferredAgent] = useState("");
+  const [fanoutMode, setFanoutMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [agentMutation, setAgentMutation] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  // Only the newest workforce refresh may update browser state.
+  // This prevents an older in-flight request from overwriting a
+  // newer canonical job snapshot.
+  const workforceLoadSequence = useRef(0);
 
   useEffect(() => {
     const sync = () => setWorkspace(getActiveWorkspace());
@@ -79,11 +368,15 @@ export default function AIWorkforcePage() {
     if (!workspace?.id) {
       setRegistry([]);
       setJobs([]);
-      setLedgerEntries([]);
-      setLedgerSummary(null);
+      setSubscription(null);
+      setCompanyAgents([]);
       setLoading(false);
       return;
     }
+
+    const requestedWorkspaceId = workspace.id;
+    const requestSequence =
+      ++workforceLoadSequence.current;
 
     try {
       showLoading ? setLoading(true) : setRefreshing(true);
@@ -92,14 +385,25 @@ export default function AIWorkforcePage() {
       const [
         registryResult,
         jobsResult,
-        ledgerEntriesResult,
-        ledgerSummaryResult,
+        subscriptionResult,
+        companyAgentsResult,
       ] = await Promise.all([
         getWorkforceRegistry(),
         getCompanyWorkforceJobs(workspace.id, 40),
-        getCompanyLedger(workspace.id),
-        getCompanyLedgerSummary(workspace.id),
+        getCompanySubscription(workspace.id),
+        getCompanyAIAgents(workspace.id),
       ]);
+
+      // Ignore stale responses. A slower request that began
+      // earlier must never overwrite a newer canonical snapshot.
+      if (
+        requestSequence !==
+          workforceLoadSequence.current ||
+        getActiveWorkspace()?.id !==
+          requestedWorkspaceId
+      ) {
+        return;
+      }
 
       setRegistry(
         Array.isArray(registryResult)
@@ -109,28 +413,43 @@ export default function AIWorkforcePage() {
           : []
       );
 
-      setJobs(
+      const authoritativeJobs =
         Array.isArray(jobsResult)
           ? jobsResult
           : Array.isArray(jobsResult?.jobs)
           ? jobsResult.jobs
-          : []
+          : [];
+
+
+      setJobs(authoritativeJobs);
+
+      setSubscription(
+        subscriptionResult || null
       );
 
-      setLedgerEntries(
-        Array.isArray(ledgerEntriesResult)
-          ? ledgerEntriesResult.filter(
-              (entry: LedgerEntry) => entry.status !== "void"
-            )
+      setCompanyAgents(
+        Array.isArray(companyAgentsResult)
+          ? companyAgentsResult
           : []
       );
-
-      setLedgerSummary(ledgerSummaryResult || null);
     } catch (err: any) {
-      setError(err?.message || "Failed to load AI workforce.");
+      if (
+        requestSequence ===
+        workforceLoadSequence.current
+      ) {
+        setError(
+          err?.message ||
+            "Failed to load AI workforce."
+        );
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (
+        requestSequence ===
+        workforceLoadSequence.current
+      ) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }
 
@@ -158,17 +477,53 @@ export default function AIWorkforcePage() {
         request_text: requestText.trim(),
         preferred_agent: preferredAgent || undefined,
         source_type: "dashboard",
+        fanout: fanoutMode,
       });
 
-      const createdJob = response?.job || response;
+      if (
+        response?.mode === "fanout" &&
+        Array.isArray(response?.jobs)
+      ) {
+        const createdJobs = response.jobs;
 
-      if (createdJob?.id) {
-        setJobs((current) => [createdJob, ...current]);
+        setJobs((current) => [
+          ...createdJobs,
+          ...current.filter(
+            (job) =>
+              !createdJobs.some(
+                (createdJob: WorkforceJob) =>
+                  createdJob.id === job.id
+              )
+          ),
+        ]);
+
+        const unavailableCount =
+          Array.isArray(response?.unavailable)
+            ? response.unavailable.length
+            : 0;
+
+        setNotice(
+          unavailableCount > 0
+            ? `Sonny delegated ${createdJobs.length} specialist job${createdJobs.length === 1 ? "" : "s"}. ${unavailableCount} specialist${unavailableCount === 1 ? "" : "s"} unavailable.`
+            : `Sonny delegated ${createdJobs.length} specialist job${createdJobs.length === 1 ? "" : "s"}.`
+        );
+      } else {
+        const createdJob =
+          response?.job || response;
+
+        if (createdJob?.id) {
+          setJobs((current) => [
+            createdJob,
+            ...current.filter(
+              (job) => job.id !== createdJob.id
+            ),
+          ]);
+        }
+        setNotice(
+          `${createdJob?.assigned_agent || "Sonny"} accepted the request.`
+        );
       }
 
-      setNotice(
-        `${createdJob?.assigned_agent || "Sonny"} accepted the request.`
-      );
       setTitle("");
       setRequestText("");
       setPreferredAgent("");
@@ -178,6 +533,65 @@ export default function AIWorkforcePage() {
       setError(err?.message || "Could not create workforce request.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function changeAgentStatus(
+    agent: WorkforceAgent,
+    activate: boolean
+  ) {
+    if (!workspace?.id) {
+      setError("Select a company first.");
+      return;
+    }
+
+    if (CORE_AGENT_CODES.has(agent.key)) {
+      setError(
+        `${agent.name} is part of Firmic's core executive team and is not managed through AI Employee controls.`
+      );
+      return;
+    }
+
+    const mutationKey =
+      `${activate ? "hire" : "deactivate"}:${agent.key}`;
+
+    try {
+      setAgentMutation(mutationKey);
+      setError("");
+      setNotice("");
+
+      if (activate) {
+        await hireAIAgent({
+          company_id: workspace.id,
+          agent_code: agent.key,
+        });
+
+        setNotice(
+          `${agent.name} has been activated for ${
+            workspace.name || "the company"
+          }.`
+        );
+      } else {
+        await deactivateAIAgent({
+          company_id: workspace.id,
+          agent_code: agent.key,
+        });
+
+        setNotice(
+          `${agent.name} has been deactivated.`
+        );
+      }
+
+      await loadWorkforce(false);
+    } catch (err: any) {
+      setError(
+        err?.message ||
+          `Could not ${
+            activate ? "hire" : "deactivate"
+          } ${agent.name}.`
+      );
+    } finally {
+      setAgentMutation("");
     }
   }
 
@@ -215,23 +629,124 @@ export default function AIWorkforcePage() {
     });
   }, [jobs, registry]);
 
+  const hireableAgents = useMemo(
+    () =>
+      registry.filter(
+        (agent) =>
+          !CORE_AGENT_CODES.has(
+            String(agent.key || "").toLowerCase()
+          )
+      ),
+    [registry]
+  );
+
+  function activeCompanyAgentFor(
+    definition: WorkforceAgent
+  ) {
+    return companyAgents.find(
+      (agent) =>
+        String(agent.status || "").toLowerCase() ===
+          "active" &&
+        String(agent.agent_name || "").toLowerCase() ===
+          String(definition.name || "").toLowerCase()
+    );
+  }
+
+  const activeSpecialistDefinitions = useMemo(
+    () =>
+      hireableAgents.filter((definition) =>
+        companyAgents.some(
+          (agent) =>
+            String(agent.status || "").toLowerCase() ===
+              "active" &&
+            String(agent.agent_name || "").toLowerCase() ===
+              String(definition.name || "").toLowerCase()
+        )
+      ),
+    [companyAgents, hireableAgents]
+  );
+
+  function specialistOperationalState(
+    definition: WorkforceAgent
+  ) {
+    const agentJobs = jobs.filter(
+      (job) =>
+        String(job.assigned_agent || "").toLowerCase() ===
+        String(definition.name || "").toLowerCase()
+    );
+
+    const currentJob = agentJobs.find((job) =>
+      ["pending", "accepted", "working"].includes(job.status)
+    );
+
+    return {
+      currentJob,
+      completed: agentJobs.filter(
+        (job) => job.status === "completed"
+      ).length,
+      failed: agentJobs.filter(
+        (job) => job.status === "failed"
+      ).length,
+    };
+  }
+
   const activeJobs = jobs.filter((job) =>
     ["pending", "accepted", "working"].includes(job.status)
   );
   const completedJobs = jobs.filter((job) => job.status === "completed");
   const failedJobs = jobs.filter((job) => job.status === "failed");
 
-  const activeAIEmployees = ledgerEntries.filter(
-    (entry) => entry.service === "ai_workforce"
+  const activeAIEmployees = companyAgents.filter(
+    (agent) =>
+      String(agent.status || "").toLowerCase() === "active"
   ).length;
 
-  const workforcePayroll = Number(
-    ledgerSummary?.services?.find(
-      (service) => service.service === "ai_workforce"
-    )?.total || 0
-  );
+  const aiEmployeeLimit =
+    subscription?.plan?.max_ai_employees ?? 0;
 
-  const companyOperatingCost = Number(ledgerSummary?.total || 0);
+  const unlimitedAIEmployees =
+    Boolean(subscription?.plan) &&
+    aiEmployeeLimit === 0;
+
+  const availableAISlots =
+    unlimitedAIEmployees
+      ? null
+      : Math.max(
+          aiEmployeeLimit - activeAIEmployees,
+          0
+        );
+
+  const aiEmployeeCapacityLabel =
+    unlimitedAIEmployees
+      ? `${activeAIEmployees} / Unlimited`
+      : `${activeAIEmployees} / ${aiEmployeeLimit}`;
+
+  const recurringCompanyOperatingCost = Number(
+    subscription?.monthly_total || 0
+  );
+  const agentConversation = useMemo(() => {
+    const messages = jobs.flatMap((job) =>
+      (job.agent_messages || []).map(
+        (message) => ({
+          ...message,
+          jobTitle: job.title,
+          assignedAgent: job.assigned_agent,
+        })
+      )
+    );
+
+    return messages.sort(
+      (left, right) =>
+        new Date(
+          left.created_at || 0
+        ).getTime()
+        -
+        new Date(
+          right.created_at || 0
+        ).getTime()
+    );
+  }, [jobs]);
+
 
   const timeline = useMemo(
     () =>
@@ -284,10 +799,10 @@ export default function AIWorkforcePage() {
 
             <div className="flex flex-wrap gap-3">
               <a
-                href="/configure-office?mode=workforce"
+                href="#manage-ai-employees"
                 className="bg-violet-600 text-white rounded-xl px-5 py-3 font-bold hover:bg-violet-700 transition"
               >
-                Add AI Employees
+                Manage AI Employees
               </a>
 
               <a
@@ -296,6 +811,25 @@ export default function AIWorkforcePage() {
               >
                 Delegate Work
               </a>
+
+              <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 mb-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={fanoutMode}
+                  onChange={(event) =>
+                    setFanoutMode(event.target.checked)
+                  }
+                  className="mt-1"
+                />
+                <span>
+                  <span className="block text-sm font-bold text-slate-900">
+                    Enable multi-specialist delegation
+                  </span>
+                  <span className="block text-xs text-slate-500 mt-1">
+                    Sonny may delegate this objective to multiple active AI employees when their domains match.
+                  </span>
+                </span>
+              </label>
 
               <button
                 type="button"
@@ -407,7 +941,7 @@ export default function AIWorkforcePage() {
           <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-4 mt-6">
             <Stat
               title="AI Employees"
-              value={`${activeAIEmployees} / 15`}
+              value={aiEmployeeCapacityLabel}
               icon="🤖"
             />
             <Stat title="Departments" value="4" icon="🏢" />
@@ -415,22 +949,25 @@ export default function AIWorkforcePage() {
             <Stat title="Completed" value={String(completedJobs.length)} icon="✅" />
             <Stat title="Failed" value={String(failedJobs.length)} icon="⚠️" />
             <Stat
-              title="AI Workforce Payroll"
-              value={`$${workforcePayroll.toFixed(2)}`}
+              title="Active Specialists"
+              value={String(activeSpecialistDefinitions.length)}
               icon="💼"
             />
             <Stat
-              title="Company Operating Cost"
-              value={`$${companyOperatingCost.toFixed(2)}`}
+              title="Monthly Operating Cost"
+              value={`$${recurringCompanyOperatingCost.toFixed(2)}`}
               icon="💳"
             />
           </section>
 
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 shadow-sm">
-            <span className="font-bold text-slate-900">Billing clarity:</span>{" "}
-            AI Workforce Payroll includes only AI employee charges. Company
-            Operating Cost includes the complete PostgreSQL Usage Ledger,
-            including headquarters, meetings, setup fees, and AI workforce.
+            <span className="font-bold text-slate-900">
+              Commercial authority:
+            </span>{" "}
+            AI employee hiring is reflected through Firmic&apos;s subscription
+            service catalog. Monthly Operating Cost is the authoritative
+            recurring subscription total. Workforce execution activity does
+            not create a separate browser-calculated payroll value.
           </div>
 
           {loading ? (
@@ -459,6 +996,198 @@ export default function AIWorkforcePage() {
                   {coreAgents.map((agent) => (
                     <AgentCard key={agent.name} agent={agent} />
                   ))}
+                </div>
+              </section>
+
+              <section
+                id="manage-ai-employees"
+                className="mt-8 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm scroll-mt-6"
+              >
+                <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-violet-700 font-bold">
+                      AI Employees
+                    </p>
+
+                    <h2 className="text-2xl font-bold text-slate-950 mt-1">
+                      Build your specialist workforce
+                    </h2>
+
+                    <p className="text-sm text-slate-500 mt-2 max-w-2xl">
+                      Activate specialist AI employees for your company.
+                      Employees inside your plan allowance are included.
+                      Any overage is calculated by Firmic&apos;s
+                      server-side commercial catalog.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-violet-50 border border-violet-100 px-5 py-3">
+                    <p className="text-xs uppercase tracking-wide text-violet-700 font-bold">
+                      Plan Capacity
+                    </p>
+
+                    <p className="text-xl font-bold text-slate-950 mt-1">
+                      {aiEmployeeCapacityLabel}
+                    </p>
+
+                    {availableAISlots !== null && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        {availableAISlots} included slot
+                        {availableAISlots === 1 ? "" : "s"} remaining
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {hireableAgents.length === 0 ? (
+                  <Empty text="No specialist AI employees are currently available." />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mt-6">
+                    {hireableAgents.map((agent) => {
+                      const activeAgent =
+                        activeCompanyAgentFor(agent);
+
+                      const isActive =
+                        Boolean(activeAgent);
+
+                      const operational =
+                        specialistOperationalState(agent);
+
+                      const mutationKey =
+                        `${isActive ? "deactivate" : "hire"}:${agent.key}`;
+
+                      const changing =
+                        agentMutation === mutationKey;
+
+                      return (
+                        <article
+                          key={agent.key}
+                          className="rounded-2xl border border-slate-200 bg-slate-50 p-5"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="h-11 w-11 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center text-xl">
+                                🤖
+                              </div>
+
+                              <h3 className="font-bold text-slate-950 mt-4">
+                                {agent.name}
+                              </h3>
+
+                              <p className="text-sm font-semibold text-violet-700 mt-1">
+                                {agent.role}
+                              </p>
+                            </div>
+
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-bold ${
+                                isActive
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-slate-200 text-slate-600"
+                              }`}
+                            >
+                              {isActive
+                                ? "Active"
+                                : "Available"}
+                            </span>
+                          </div>
+
+                          <p className="text-sm text-slate-500 mt-4 min-h-[40px]">
+                            {agent.description ||
+                              "Specialist Firmic AI employee."}
+                          </p>
+
+                          {isActive && activeAgent && (
+                            <>
+                              <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-500">
+                                Catalog price snapshot:{" "}
+                                <span className="font-bold text-slate-900">
+                                  $
+                                  {Number(
+                                    activeAgent.monthly_price_usd ||
+                                      0
+                                  ).toFixed(2)}
+                                </span>{" "}
+                                per employee/month before plan
+                                inclusion.
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2 mt-3">
+                                <Mini
+                                  title="State"
+                                  value={
+                                    operational.currentJob?.status ||
+                                    "Ready"
+                                  }
+                                />
+                                <Mini
+                                  title="Completed"
+                                  value={String(
+                                    operational.completed
+                                  )}
+                                />
+                                <Mini
+                                  title="Failed"
+                                  value={String(
+                                    operational.failed
+                                  )}
+                                />
+                              </div>
+
+                              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                                <p className="text-xs text-slate-500">
+                                  Current assignment
+                                </p>
+                                <p className="text-sm font-bold text-slate-900 mt-1 truncate">
+                                  {operational.currentJob?.title ||
+                                    "Ready for work"}
+                                </p>
+                                <Progress
+                                  value={
+                                    operational.currentJob?.progress ||
+                                    0
+                                  }
+                                />
+                              </div>
+                            </>
+                          )}
+
+                          <button
+                            type="button"
+                            disabled={
+                              Boolean(agentMutation) ||
+                              !workspace?.id
+                            }
+                            onClick={() =>
+                              changeAgentStatus(
+                                agent,
+                                !isActive
+                              )
+                            }
+                            className={`mt-5 w-full rounded-xl px-4 py-3 font-bold transition disabled:opacity-50 ${
+                              isActive
+                                ? "border border-red-200 bg-white text-red-700 hover:bg-red-50"
+                                : "bg-violet-600 text-white hover:bg-violet-700"
+                            }`}
+                          >
+                            {changing
+                              ? isActive
+                                ? "Deactivating..."
+                                : "Activating..."
+                              : isActive
+                              ? `Deactivate ${agent.name}`
+                              : `Hire ${agent.name}`}
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-600">
+                  Sonny, Hermes, and Julia are Firmic core
+                  executives and are managed separately from
+                  AI Employee controls.
                 </div>
               </section>
 
@@ -546,14 +1275,32 @@ export default function AIWorkforcePage() {
                             className="input bg-white"
                           >
                             <option value="">Let Sonny decide</option>
-                            {coreAgents.map((agent) => (
-                              <option
-                                key={agent.name}
-                                value={agent.name.toLowerCase()}
-                              >
-                                {agent.name} — {agent.role}
-                              </option>
-                            ))}
+
+                            <optgroup label="Firmic executives">
+                              {coreAgents.map((agent) => (
+                                <option
+                                  key={agent.name}
+                                  value={agent.name.toLowerCase()}
+                                >
+                                  {agent.name} — {agent.role}
+                                </option>
+                              ))}
+                            </optgroup>
+
+                            {activeSpecialistDefinitions.length > 0 && (
+                              <optgroup label="Active AI employees">
+                                {activeSpecialistDefinitions.map(
+                                  (agent) => (
+                                    <option
+                                      key={agent.key}
+                                      value={agent.key}
+                                    >
+                                      {agent.name} — {agent.role}
+                                    </option>
+                                  )
+                                )}
+                              </optgroup>
+                            )}
                           </select>
                         </Field>
                       </div>
@@ -609,6 +1356,111 @@ export default function AIWorkforcePage() {
                     )}
                   </section>
                 </div>
+
+                <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between gap-4 mb-5">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-600">
+                        Agent communication
+                      </p>
+
+                      <h2 className="text-xl font-black text-slate-950 mt-1">
+                        Sonny ↔ AI Employee Conversation
+                      </h2>
+
+                      <p className="text-sm text-slate-500 mt-1">
+                        Persisted messages from real workforce assignments.
+                      </p>
+                    </div>
+
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                      {agentConversation.length} messages
+                    </span>
+                  </div>
+
+                  {agentConversation.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">
+                      No agent conversation has been recorded yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+                      {agentConversation
+                        .slice(-40)
+                        .map((message) => {
+                          const sonnySpeaking =
+                            String(
+                              message.sender_agent_code || ""
+                            ).toLowerCase() === "sonny";
+
+                          return (
+                            <div
+                              key={message.id}
+                              className={[
+                                "rounded-2xl border p-4",
+                                sonnySpeaking
+                                  ? "border-indigo-200 bg-indigo-50/70"
+                                  : "border-emerald-200 bg-emerald-50/70",
+                              ].join(" ")}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div>
+                                  <p className="text-sm font-black text-slate-950">
+                                    {agentDisplayName(
+                                      message.sender_agent_code
+                                    )}
+                                    {" → "}
+                                    {agentDisplayName(
+                                      message.recipient_agent_code
+                                    )}
+                                  </p>
+
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    {message.message_type}
+                                    {message.jobTitle
+                                      ? ` · ${message.jobTitle}`
+                                      : ""}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-400">
+                                    {message.created_at
+                                      ? new Date(
+                                          message.created_at
+                                        ).toLocaleTimeString()
+                                      : "—"}
+                                  </span>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      speakAgentMessage(
+                                        message.sender_agent_code,
+                                        message.content
+                                      )
+                                    }
+                                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                                  >
+                                    🔊 Speak
+                                  </button>
+                                </div>
+                              </div>
+
+                              {message.subject && (
+                                <p className="mt-3 text-sm font-bold text-slate-800">
+                                  {message.subject}
+                                </p>
+                              )}
+
+                              <p className="mt-2 text-sm leading-6 text-slate-700">
+                                {message.content}
+                              </p>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </section>
 
                 <section className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm h-fit">
                   <p className="text-xs uppercase tracking-[0.18em] text-violet-700 font-bold">
@@ -781,9 +1633,11 @@ function JobCard({ job }: { job: WorkforceJob }) {
       ? "bg-red-50 text-red-700"
       : "bg-violet-50 text-violet-700";
 
+
   return (
     <article className="border border-slate-200 rounded-2xl p-5">
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3"
+    >
         <div>
           <p className="font-bold text-slate-950">{job.title}</p>
           <p className="text-sm text-slate-500 mt-1">{job.request_text}</p>

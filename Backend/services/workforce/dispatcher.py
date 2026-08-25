@@ -82,6 +82,88 @@ def dispatch_work(
     )
 
 
+
+def dispatch_work_targets(
+    request_text: str,
+    preferred_agent: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Resolve every specialist domain explicitly represented in a
+    founder workforce request.
+
+    Contract:
+    - preferred_agent preserves explicit single-agent routing;
+    - every matching specialist may receive one dispatch target;
+    - Sonny remains the fallback only when no specialist matches;
+    - result ordering follows AGENT_REGISTRY ordering;
+    - this function does not inspect or mutate tenant activation.
+      Canonical assignment creation remains responsible for that
+      authority boundary.
+    """
+
+    message = normalize(request_text)
+
+    if preferred_agent:
+        selected = match_agent_by_name(preferred_agent)
+
+        if selected:
+            return [
+                build_dispatch_result(
+                    selected,
+                    confidence=1.0,
+                    reason="The founder selected this AI employee.",
+                )
+            ]
+
+    targets: list[dict[str, Any]] = []
+
+    for key, definition in AGENT_REGISTRY.items():
+        if key == "sonny":
+            continue
+
+        matched_keywords = [
+            keyword
+            for keyword in definition.route_keywords
+            if keyword in message
+        ]
+
+        if not matched_keywords:
+            continue
+
+        score = len(matched_keywords)
+
+        confidence = min(
+            0.98,
+            0.60 + (score * 0.09),
+        )
+
+        targets.append(
+            build_dispatch_result(
+                definition,
+                confidence=confidence,
+                reason=(
+                    "Matched capabilities: "
+                    + ", ".join(matched_keywords[:5])
+                ),
+            )
+        )
+
+    if targets:
+        return targets
+
+    sonny = AGENT_REGISTRY["sonny"]
+
+    return [
+        build_dispatch_result(
+            sonny,
+            confidence=0.58,
+            reason=(
+                "No specialist match was found, so Sonny "
+                "will coordinate the work."
+            ),
+        )
+    ]
+
 def build_dispatch_result(
     agent: WorkforceAgentDefinition,
     *,

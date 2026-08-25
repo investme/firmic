@@ -11,9 +11,9 @@ from database import get_db
 from models.company import Company
 from models.workforce_job import WorkforceJob
 from services.workforce.orchestrator import (
+    create_workforce_fanout_plan,
     create_workforce_job,
     serialize_job,
-    update_workforce_job,
 )
 from services.workforce.registry import list_agents
 
@@ -32,14 +32,9 @@ class WorkforceExecuteRequest(BaseModel):
     source_type: str = Field(default="manual", max_length=80)
     source_id: str | None = None
     metadata: dict[str, Any] | None = None
+    fanout: bool = False
 
 
-class WorkforceProgressRequest(BaseModel):
-    company_id: str
-    status: str
-    progress: int | None = Field(default=None, ge=0, le=100)
-    result_summary: str | None = None
-    failure_reason: str | None = None
 
 
 def is_admin(token: dict) -> bool:
@@ -69,6 +64,22 @@ def authorize_company(
         raise HTTPException(status_code=404, detail="Company not found")
 
     return company
+
+
+def require_active_company(
+    company: Company,
+) -> Company:
+    if str(company.status or "").strip().lower() != "active":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "AI Workforce execution is available only "
+                "after the company platform is fully activated."
+            ),
+        )
+
+    return company
+
 
 
 def get_authorized_job(
@@ -111,22 +122,70 @@ def execute_workforce_request(
     db: Session = Depends(get_db),
 ):
     company = authorize_company(payload.company_id, token, db)
+    require_active_company(company)
 
     try:
+        actor_id = str(
+            token.get("sub")
+            or token.get("email")
+            or ""
+        )
+
+        if payload.fanout:
+            result = create_workforce_fanout_plan(
+                db,
+                company=company,
+                request_text=payload.request_text,
+                preferred_agent=payload.preferred_agent,
+                actor_id=actor_id,
+                source_type=payload.source_type,
+                source_id=payload.source_id,
+                metadata={
+                    **(payload.metadata or {}),
+                    **(
+                        {"title": payload.title}
+                        if payload.title
+                        else {}
+                    ),
+                },
+            )
+
+            return {
+                "mode": "fanout",
+                "orchestration_run_id": (
+                    result["orchestration"].id
+                ),
+                "jobs": [
+                    serialize_job(item["job"])
+                    for item in result["created"]
+                ],
+                "unavailable": (
+                    result["unavailable"]
+                ),
+                "dispatch_targets": (
+                    result["dispatch_targets"]
+                ),
+            }
+
         job = create_workforce_job(
             db,
             company=company,
             request_text=payload.request_text,
             title=payload.title,
             preferred_agent=payload.preferred_agent,
-            actor_id=str(token.get("sub") or token.get("email") or ""),
+            actor_id=actor_id,
             source_type=payload.source_type,
             source_id=payload.source_id,
             metadata=payload.metadata,
         )
+
         return serialize_job(job)
+
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/company/{company_id}")
@@ -218,32 +277,3 @@ def get_workforce_job(
         db,
     )
     return serialize_job(job)
-
-
-@router.patch("/jobs/{job_id}/progress")
-def update_job_progress(
-    job_id: str,
-    payload: WorkforceProgressRequest,
-    token: dict = Depends(get_token_payload),
-    db: Session = Depends(get_db),
-):
-    job = get_authorized_job(
-        job_id,
-        payload.company_id,
-        token,
-        db,
-    )
-
-    try:
-        updated = update_workforce_job(
-            db,
-            job=job,
-            status=payload.status,
-            progress=payload.progress,
-            result_summary=payload.result_summary,
-            failure_reason=payload.failure_reason,
-            actor=job.assigned_agent,
-        )
-        return serialize_job(updated)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
