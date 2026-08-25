@@ -12,6 +12,8 @@ from models.meeting_booking import MeetingBooking
 from models.sonny_memory import SonnyMemory
 from models.support_ticket import SupportTicket
 from models.usage_ledger import UsageLedger
+from models.subscription import CompanySubscription
+from services.compliance_requirements import compliance_requirement_signals
 
 DONE = {"completed", "complete", "done", "closed"}
 OPEN_SUPPORT = {"open", "pending", "waiting_on_tenant"}
@@ -33,27 +35,35 @@ def amount(value: Any) -> float:
         return 0.0
 
 
-def document_signals(documents: list[Document]) -> dict[str, Any]:
-    texts = [norm(f"{doc.name or ''} {doc.type or ''}") for doc in documents]
-
-    def has(*terms: str) -> bool:
-        return any(any(term in text for term in terms) for text in texts)
-
+def document_signals(
+    company: Company,
+    documents: list[Document],
+) -> dict[str, Any]:
     return {
         "total": len(documents),
-        "approved": sum(norm(doc.status) == "approved" for doc in documents),
-        "pending": sum(norm(doc.status) != "approved" for doc in documents),
-        "requirements": {
-            "trade_license": has("trade license", "trade licence"),
-            "passport_copy": has("passport"),
-            "incorporation_certificate": has("incorporation certificate", "certificate of incorporation"),
-            "proof_of_address": has("proof of address", "address proof"),
-            "kyb": has("kyb", "know your business"),
-            "beneficial_owner": has("beneficial owner", "ubo", "ownership declaration"),
-            "office_agreement": has("office agreement", "virtual office agreement", "headquarters agreement"),
-        },
+        "approved": sum(
+            norm(doc.status) in {
+                "approved",
+                "verified",
+                "complete",
+                "completed",
+            }
+            for doc in documents
+        ),
+        "pending": sum(
+            norm(doc.status) not in {
+                "approved",
+                "verified",
+                "complete",
+                "completed",
+            }
+            for doc in documents
+        ),
+        "requirements": compliance_requirement_signals(
+            company,
+            documents,
+        ),
     }
-
 
 def ledger_state(entries: list[UsageLedger]) -> dict[str, Any]:
     status_totals: dict[str, float] = {}
@@ -103,8 +113,12 @@ def build_intelligence(state: dict[str, Any]) -> dict[str, Any]:
         alerts.append({"code": "headquarters_missing", "severity": "high", "title": "Headquarters is not active", "source": "company"})
         recommendations.append({"code": "activate_headquarters", "priority": "high", "title": "Activate company headquarters", "target": "/virtual-offices"})
 
-    required = {"trade_license", "passport_copy", "incorporation_certificate", "proof_of_address"}
-    missing = [key for key in required if not docs["requirements"].get(key)]
+    required = set(docs["requirements"])
+    missing = [
+        key
+        for key in sorted(required)
+        if not docs["requirements"].get(key)
+    ]
     if missing:
         alerts.append({
             "code": "compliance_documents_incomplete",
@@ -150,6 +164,11 @@ def build_company_state(db: Session, company: Company, *, activity_limit: int = 
     tasks = db.query(Task).filter(Task.company_id == company_id).order_by(Task.created_at.desc()).all()
     workflows = db.query(Workflow).filter(Workflow.company_id == company_id).order_by(Workflow.created_at.desc()).all()
     agents = db.query(CompanyAIAgent).filter(CompanyAIAgent.company_id == company_id).order_by(CompanyAIAgent.agent_name.asc()).all()
+    subscription = (
+        db.query(CompanySubscription)
+        .filter(CompanySubscription.company_id == company_id)
+        .first()
+    )
     bookings = db.query(MeetingBooking).filter(MeetingBooking.company_id == company_id).order_by(MeetingBooking.created_at.desc()).all()
     ledger = db.query(UsageLedger).filter(UsageLedger.company_id == company_id).order_by(UsageLedger.created_at.desc()).all()
     tickets = db.query(SupportTicket).filter(SupportTicket.company_id == company_id).order_by(SupportTicket.updated_at.desc()).all()
@@ -159,11 +178,60 @@ def build_company_state(db: Session, company: Company, *, activity_limit: int = 
     pending_tasks = [task for task in tasks if norm(task.status) not in DONE]
     completed_tasks = [task for task in tasks if norm(task.status) in DONE]
     active_agents = [agent for agent in agents if norm(agent.status) == "active"]
+
+    plan = subscription.plan if subscription else None
+    workforce_limit = (
+        int(plan.max_ai_employees or 0)
+        if plan
+        else 0
+    )
+    workforce_unlimited = bool(
+        plan and workforce_limit == 0
+    )
+    available_slots = (
+        None
+        if workforce_unlimited
+        else max(workforce_limit - len(active_agents), 0)
+    )
     active_bookings = [booking for booking in bookings if norm(booking.status) in {"confirmed", "active", "booked"}]
     open_tickets = [ticket for ticket in tickets if norm(ticket.status) in OPEN_SUPPORT]
     resolved_tickets = [ticket for ticket in tickets if norm(ticket.status) in RESOLVED_SUPPORT]
     urgent_tickets = [ticket for ticket in open_tickets if norm(ticket.priority) == "urgent"]
-    docs = document_signals(documents)
+    docs = document_signals(company, documents)
+
+    # --------------------------------------------------------
+    # Authoritative billing contract
+    #
+    # Ledger totals describe posted usage/charges.
+    # Subscription totals describe recurring commercial terms.
+    # Never present a ledger month containing a one-time setup
+    # charge as the recurring monthly subscription.
+    # --------------------------------------------------------
+    billing = ledger_state(ledger)
+
+    recurring_monthly_total = amount(
+        getattr(subscription, "monthly_total", 0.0)
+        if subscription
+        else billing.get("current_month_total_usd", 0.0)
+    )
+
+    launch_activation_fee = amount(
+        getattr(subscription, "launch_activation_fee", 0.0)
+        if subscription
+        else 0.0
+    )
+
+    first_month_total = amount(
+        recurring_monthly_total + launch_activation_fee
+    )
+
+    billing["ledger_current_month_total_usd"] = billing.get(
+        "current_month_total_usd",
+        0.0,
+    )
+    billing["recurring_monthly_total_usd"] = recurring_monthly_total
+    billing["launch_activation_fee_usd"] = launch_activation_fee
+    billing["first_month_total_usd"] = first_month_total
 
     state: dict[str, Any] = {
         "state_version": "b1.1",
@@ -197,14 +265,40 @@ def build_company_state(db: Session, company: Company, *, activity_limit: int = 
             } for item in workflows],
         },
         "ai_workforce": {
-            "summary": {"total": len(agents), "active": len(active_agents), "inactive": len(agents) - len(active_agents), "active_monthly_cost_usd": amount(sum(amount(item.monthly_price_usd) for item in active_agents))},
-            "items": [{"id": item.id, "agent_name": item.agent_name, "monthly_price_usd": amount(item.monthly_price_usd), "status": item.status, "activated_at": iso(item.activated_at), "deactivated_at": iso(item.deactivated_at)} for item in agents],
+            "summary": {
+                "total": len(agents),
+                "assigned": len(agents),
+                "active": len(active_agents),
+                "inactive": len(agents) - len(active_agents),
+                "included_capacity": None if workforce_unlimited else workforce_limit,
+                "available_slots": available_slots,
+                "unlimited": workforce_unlimited,
+                "plan_code": plan.code if plan else None,
+                "plan_name": plan.name if plan else None,
+                "active_monthly_cost_usd": amount(
+                    sum(
+                        amount(item.monthly_price_usd)
+                        for item in active_agents
+                    )
+                ),
+            },
+            "items": [
+                {
+                    "id": item.id,
+                    "agent_name": item.agent_name,
+                    "monthly_price_usd": amount(item.monthly_price_usd),
+                    "status": item.status,
+                    "activated_at": iso(item.activated_at),
+                    "deactivated_at": iso(item.deactivated_at),
+                }
+                for item in agents
+            ],
         },
         "meetings": {
             "summary": {"total": len(bookings), "active": len(active_bookings), "cancelled": sum(norm(item.status) == "cancelled" for item in bookings), "booked_hours": amount(sum(float(item.duration_hours or 0) for item in active_bookings))},
             "items": [{"id": item.id, "room_id": item.room_id, "room_name": item.room_name, "booking_date": item.booking_date, "booking_time": item.booking_time, "duration_hours": item.duration_hours, "hourly_price_usd": amount(item.hourly_price_usd), "status": item.status, "created_at": iso(item.created_at)} for item in bookings],
         },
-        "billing": ledger_state(ledger),
+        "billing": billing,
         "support": {
             "summary": {"total": len(tickets), "open": len(open_tickets), "urgent": len(urgent_tickets), "resolved": len(resolved_tickets)},
             "items": [{"id": item.id, "subject": item.subject, "category": item.category, "priority": item.priority, "status": item.status, "assigned_admin_id": item.assigned_admin_id, "message_count": len(item.messages or []), "created_at": iso(item.created_at), "updated_at": iso(item.updated_at), "resolved_at": iso(item.resolved_at)} for item in tickets],
@@ -215,14 +309,36 @@ def build_company_state(db: Session, company: Company, *, activity_limit: int = 
 
     components = {
         "company_active": norm(company.status) == "active",
-        "headquarters_active": bool(company.headquarters_office_code),
+        "headquarters_active": bool(
+            company.headquarters_office_code
+        ),
         "has_documents": bool(documents),
-        "has_ai_workforce": bool(active_agents),
-        "tasks_have_progress": bool(tasks) and bool(completed_tasks),
+        "has_ai_workforce": (
+            workforce_unlimited or workforce_limit > 0
+        ),
     }
+
+    task_progress = (
+        round(
+            len(completed_tasks)
+            / len(tasks)
+            * 100
+        )
+        if tasks
+        else None
+    )
+
     state["progress"] = {
-        "score": round(sum(bool(value) for value in components.values()) / len(components) * 100),
-        "task_progress": round(len(completed_tasks) / len(tasks) * 100) if tasks else 0,
+        "score": round(
+            sum(
+                bool(value)
+                for value in components.values()
+            )
+            / len(components)
+            * 100
+        ),
+        "task_progress": task_progress,
+        "task_progress_applicable": bool(tasks),
         "components": components,
     }
     state["intelligence"] = build_intelligence(state)
@@ -243,14 +359,29 @@ def build_state_prompt_context(state: dict[str, Any]) -> str:
     return "\n".join([
         f'Company: {company["name"]}',
         f'Status: {company["status"]}',
+        (
+            'AI workforce: '
+            f'{workforce["active"]} active assignment(s); '
+            + (
+                'unlimited employee capacity'
+                if workforce.get("unlimited")
+                else (
+                    f'{workforce.get("included_capacity", 0)} included slot(s); '
+                    f'{workforce.get("available_slots", 0)} available'
+                )
+            )
+        ),
         f'Headquarters: {company["headquarters"]["office_code"] or "Not active"}',
         f'Tasks: {tasks["total"]} total, {tasks["pending"]} pending, {tasks["completed"]} completed',
         f'Documents: {documents["total"]} total, {documents["approved"]} approved',
-        f'AI workforce: {workforce["active"]} active',
         f'Meetings: {meetings["active"]} active, {meetings["booked_hours"]} booked hours',
         f'Support: {support["open"]} open, {support["urgent"]} urgent',
-        f'Current billing: ${billing["current_month_total_usd"]:.2f}',
+        f'Recurring monthly operating cost: ${billing["recurring_monthly_total_usd"]:.2f}',
+        f'Company Launch Fee: ${billing["launch_activation_fee_usd"]:.2f} one time',
+        f'First month total: ${billing["first_month_total_usd"]:.2f}',
         f'Operational progress: {progress["score"]}%',
         f'Alerts: {alerts}',
         f'Recommendations: {recommendations}',
+        'Risk policy: Only items listed in Alerts are operational risks. Recommendations are not risks.',
+        'AI workforce policy: Zero active AI assignments is not an operational risk by itself when there is no pending workload or failed execution.',
     ])

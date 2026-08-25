@@ -16,6 +16,7 @@ from services.workforce.orchestrator import (
     serialize_job,
 )
 from services.workforce.registry import list_agents
+from services.workforce.workflow_health import build_execution_health_snapshot
 
 
 router = APIRouter(
@@ -261,6 +262,34 @@ def list_company_workforce_jobs(
         "agents": list(agent_states.values()),
         "jobs": serialized,
     }
+
+
+
+
+@router.get("/company/{company_id}/health")
+def get_company_workforce_health(
+    company_id: str,
+    worker_stale_seconds: int = Query(
+        default=120,
+        ge=1,
+        le=3600,
+    ),
+    token: dict = Depends(get_token_payload),
+    db: Session = Depends(get_db),
+):
+    """
+    Read-only tenant-scoped workflow execution health.
+
+    Authorization is enforced against the requested company.
+    This endpoint does not mutate workflow execution state.
+    """
+    authorize_company(company_id, token, db)
+
+    return build_execution_health_snapshot(
+        db,
+        company_id=company_id,
+        worker_stale_seconds=worker_stale_seconds,
+    )
 
 
 @router.get("/jobs/{job_id}")

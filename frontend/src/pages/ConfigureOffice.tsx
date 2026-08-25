@@ -266,7 +266,7 @@ export default function ConfigureOffice() {
     // initial launch, but the user did not complete the Sonny -> Hermes
     // handoff. Do not generate a $0 upgrade order or charge again.
     if (
-      previousOrder?.paymentStatus === "paid_demo" &&
+      previousOrder?.paymentStatus === "paid" &&
       previousOrder.orderType === "initial"
     ) {
       localStorage.setItem(

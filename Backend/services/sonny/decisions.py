@@ -12,6 +12,7 @@ from models.company import Company
 from models.sonny_decision import SonnyDecision
 from services.activity_service import record_activity
 from services.sonny.state import build_company_state
+from services.compliance_requirements import compliance_requirement_labels
 
 
 ACTIVE_DECISION_STATUSES = {
@@ -214,12 +215,9 @@ def build_candidates(
             )
         )
 
-    core_requirements = {
-        "trade_license": "Trade License",
-        "passport_copy": "Passport Copy",
-        "incorporation_certificate": "Incorporation Certificate",
-        "proof_of_address": "Proof of Address",
-    }
+    core_requirements = compliance_requirement_labels(
+        company
+    )
 
     missing_documents = [
         label
@@ -239,7 +237,7 @@ def build_candidates(
                 ),
                 reasoning=(
                     "Sonny compared the company document inventory with "
-                    "Firmic's four core compliance requirements."
+                    "Firmic's applicable compliance requirements."
                 ),
                 recommended_action=(
                     "Upload and submit the missing documents through the "
@@ -411,33 +409,60 @@ def build_candidates(
             )
         )
 
-    active_agents = int(workforce["summary"]["active"] or 0)
+    workforce_summary = workforce["summary"]
+    active_agents = int(workforce_summary["active"] or 0)
+    included_capacity = workforce_summary.get("included_capacity")
+    unlimited_capacity = bool(workforce_summary.get("unlimited"))
+    available_slots = workforce_summary.get("available_slots")
 
-    if active_agents == 0:
+    has_workforce_entitlement = (
+        unlimited_capacity
+        or int(included_capacity or 0) > 0
+    )
+
+    if (
+        has_workforce_entitlement
+        and active_agents == 0
+    ):
+        capacity_text = (
+            "unlimited AI employee capacity"
+            if unlimited_capacity
+            else f"{int(included_capacity or 0)} included AI employee slots"
+        )
+
         candidates.append(
             DecisionCandidate(
-                code="evaluate_ai_workforce",
+                code="evaluate_ai_workforce_utilization",
                 decision_type="ai_workforce",
-                title="Evaluate an AI workforce activation",
-                summary="The company has no active AI employees.",
+                title="Evaluate AI workforce utilization",
+                summary=(
+                    f"The company has {capacity_text}, "
+                    "with no company-specific AI employee "
+                    "assignments currently active."
+                ),
                 reasoning=(
-                    "Firmic is designed to operate with an AI-native workforce, "
-                    "but the company currently has no active AI role."
+                    "The subscription already provides AI workforce "
+                    "capacity. Activating an assignment is therefore an "
+                    "optional utilization decision, not a missing company "
+                    "capability or activation blocker."
                 ),
                 recommended_action=(
-                    "Review available AI templates and activate a role only "
-                    "where a defined operational need and budget exist."
+                    "Only activate an AI employee when a defined "
+                    "repeatable workload would benefit from automation."
                 ),
                 expected_outcome=(
-                    "A suitable AI employee can begin handling repeatable company work."
+                    "Included AI workforce capacity is deployed only "
+                    "where it creates measurable operational value."
                 ),
                 priority="low",
-                confidence=0.88,
+                confidence=0.96,
                 risk_level="low",
                 approval_required=True,
                 evidence={
-                    "active_agents": 0,
-                    "available_current_agents": workforce["summary"]["total"],
+                    "active_agents": active_agents,
+                    "included_capacity": included_capacity,
+                    "available_slots": available_slots,
+                    "unlimited": unlimited_capacity,
                 },
             )
         )

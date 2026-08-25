@@ -153,6 +153,7 @@ export default function Billing() {
   const tax = Number(subscription?.tax_total || 0);
   const total = Number(subscription?.monthly_total || 0);
   const launchFee = Number(subscription?.launch_activation_fee || 0);
+  const firstMonthTotal = total + launchFee;
 
   function downloadAccountStatement() {
     if (!subscription) {
@@ -398,6 +399,18 @@ ${formatDate(subscription.next_invoice_date)}
                         One time only
                       </p>
                     </div>
+
+                    <div className="mt-3 rounded-2xl border border-violet-200 bg-white p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                        First Month Total
+                      </p>
+                      <p className="mt-1 text-2xl font-bold text-slate-950">
+                        {formatMoney(firstMonthTotal)}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Monthly subscription + one-time Company Launch Fee
+                      </p>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -480,8 +493,21 @@ ${formatDate(subscription.next_invoice_date)}
 
                       <div className="border-t border-slate-200 pt-4">
                         <InfoRow
-                          label="Monthly total"
+                          label="Recurring monthly total"
                           value={formatMoney(total)}
+                          strong
+                        />
+                      </div>
+
+                      <InfoRow
+                        label="Company Launch Fee"
+                        value={`${formatMoney(launchFee)} · one time`}
+                      />
+
+                      <div className="border-t border-slate-200 pt-4">
+                        <InfoRow
+                          label="First month total"
+                          value={formatMoney(firstMonthTotal)}
                           strong
                         />
                       </div>

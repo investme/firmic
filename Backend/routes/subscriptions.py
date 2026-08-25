@@ -216,15 +216,16 @@ def activate_company_subscription(
         payload.company_id,
     )
 
-    activate_subscription(
-        db,
-        subscription=subscription,
-        actor=user_id,
-    )
-
-    return commit_and_refresh(
-        db,
-        subscription,
+    # SECURITY / BILLING BOUNDARY:
+    # Tenant authentication proves identity, not payment.
+    #
+    # Subscription activation must only be performed by an
+    # authoritative server-side payment-success flow.
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "Subscription activation requires verified payment."
+        ),
     )
 
 

@@ -100,7 +100,6 @@ def generate_executive_intelligence(
 
     infrastructure = 40
     infrastructure += 35 if headquarters_active else 0
-    infrastructure += min(len(active_agents) * 8, 25)
 
     operations = 55
     if tasks:
@@ -118,9 +117,14 @@ def generate_executive_intelligence(
     compliance -= min(pending_documents * 4, 25)
 
     growth = 45
-    growth += min(len(active_agents) * 8, 24)
-    growth += min(len(confirmed_meetings) * 4, 16)
-    growth += min(len(activity) * 1, 15)
+    growth += min(
+        len(confirmed_meetings) * 4,
+        16,
+    )
+    growth += min(
+        len(activity) * 1,
+        15,
+    )
 
     infrastructure = clamp(infrastructure)
     operations = clamp(operations)
@@ -157,12 +161,6 @@ def generate_executive_intelligence(
             "severity": "medium",
             "title": "Billing items pending",
             "description": f"${outstanding_amount:.2f} is currently unbilled or pending.",
-        })
-    if not active_agents:
-        risks.append({
-            "severity": "medium",
-            "title": "No active AI workforce",
-            "description": "Activate at least one AI executive to automate operations.",
         })
     if failed_workflows:
         risks.append({

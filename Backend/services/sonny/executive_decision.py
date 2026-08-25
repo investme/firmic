@@ -329,9 +329,26 @@ def build_meetings_response(context: dict[str, Any]) -> str:
 def build_agents_response(context: dict[str, Any]) -> str:
     summary = get_summary(context, "ai_workforce")
     items = get_items(context, "ai_workforce")
+    active = as_int(summary.get("active"))
+    assigned = as_int(
+        summary.get("assigned", summary.get("total"))
+    )
+    included_capacity = summary.get("included_capacity")
+    unlimited = bool(summary.get("unlimited"))
+
+    capacity_text = (
+        "Unlimited"
+        if unlimited
+        else str(as_int(included_capacity))
+    )
+
     lines = [
         "AI workforce overview:",
-        f"Active AI employees: {as_int(summary.get('active'))}. Total AI employees: {as_int(summary.get('total'))}.",
+        (
+            f"Included AI employee capacity: {capacity_text}. "
+            f"Activated assignments: {active}. "
+            f"Company-specific assignments: {assigned}."
+        ),
     ]
     for item in items[:8]:
         if not isinstance(item, dict):

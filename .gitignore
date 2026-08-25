@@ -73,3 +73,9 @@ response_*.json
 .venv/
 .venv-production-test/
 venv/
+
+# Local secrets
+API Key.txt
+Resend_API_Keys.txt
+Backend/.env
+backend/.env

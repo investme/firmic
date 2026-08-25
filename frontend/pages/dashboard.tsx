@@ -186,6 +186,9 @@ export default function Dashboard() {
   const monthlyTotal =
     confirmedOrder?.monthlyTotalUsd ?? Number(summary?.total || 0);
 
+  const companyLaunchFee = 79;
+  const firstMonthTotal = monthlyTotal + companyLaunchFee;
+
   const subtotal =
     confirmedOrder?.monthlySubtotalUsd ?? Number(summary?.subtotal || 0);
 
@@ -322,9 +325,9 @@ export default function Dashboard() {
                 />
 
                 <Stat
-                  title="Current Billing"
+                  title="Monthly Billing"
                   value={`$${monthlyTotal.toFixed(2)}`}
-                  detail={`AED ${toAED(monthlyTotal)}`}
+                  detail="Recurring monthly operating cost"
                   icon="💳"
                 />
               </section>
@@ -497,6 +500,14 @@ export default function Dashboard() {
                     <div className="space-y-1">
                       <Row title="Subtotal" value={`$${subtotal.toFixed(2)}`} />
                       <Row title="Tax" value={`$${tax.toFixed(2)}`} />
+                      <Row
+                        title="Company Launch Fee"
+                        value="$79.00 · one time"
+                      />
+                      <Row
+                        title="First Month Total"
+                        value={`$${firstMonthTotal.toFixed(2)}`}
+                      />
                       <Row
                         title="Active Services"
                         value={String(activeServices)}

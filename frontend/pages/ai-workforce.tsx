@@ -8,8 +8,10 @@ import {
 import {
   executeWorkforceJob,
   getCompanyWorkforceJobs,
+  getCompanyWorkforceHealth,
   getWorkforceRegistry,
   WorkforceAgent,
+  WorkforceExecutionHealth,
   WorkforceJob,
 } from "../services/workforceApi";
 import {
@@ -315,10 +317,23 @@ async function speakAgentMessage(
 }
 
 
+import {
+  approveSonnyOrchestration,
+  cancelSonnyOrchestration,
+  getSonnyOrchestrations,
+  SonnyOrchestrationRun,
+} from "../services/sonnyApi";
+
 export default function AIWorkforcePage() {
   const [workspace, setWorkspace] = useState(() => getActiveWorkspace());
   const [registry, setRegistry] = useState<WorkforceAgent[]>([]);
   const [jobs, setJobs] = useState<WorkforceJob[]>([]);
+  const [orchestrationRuns, setOrchestrationRuns] =
+    useState<SonnyOrchestrationRun[]>([]);
+  const [orchestrationMutation, setOrchestrationMutation] =
+    useState("");
+  const [executionHealth, setExecutionHealth] =
+    useState<WorkforceExecutionHealth | null>(null);
   const [subscription, setSubscription] =
     useState<CompanySubscription | null>(null);
   const [companyAgents, setCompanyAgents] =
@@ -368,6 +383,8 @@ export default function AIWorkforcePage() {
     if (!workspace?.id) {
       setRegistry([]);
       setJobs([]);
+      setOrchestrationRuns([]);
+      setExecutionHealth(null);
       setSubscription(null);
       setCompanyAgents([]);
       setLoading(false);
@@ -385,11 +402,15 @@ export default function AIWorkforcePage() {
       const [
         registryResult,
         jobsResult,
+        orchestrationResult,
+        healthResult,
         subscriptionResult,
         companyAgentsResult,
       ] = await Promise.all([
         getWorkforceRegistry(),
         getCompanyWorkforceJobs(workspace.id, 40),
+        getSonnyOrchestrations(workspace.id, 20),
+        getCompanyWorkforceHealth(workspace.id),
         getCompanySubscription(workspace.id),
         getCompanyAIAgents(workspace.id),
       ]);
@@ -423,6 +444,16 @@ export default function AIWorkforcePage() {
 
       setJobs(authoritativeJobs);
 
+      setOrchestrationRuns(
+        Array.isArray(orchestrationResult)
+          ? orchestrationResult
+          : Array.isArray(orchestrationResult?.runs)
+          ? orchestrationResult.runs
+          : []
+      );
+
+      setExecutionHealth(healthResult || null);
+
       setSubscription(
         subscriptionResult || null
       );
@@ -450,6 +481,48 @@ export default function AIWorkforcePage() {
         setLoading(false);
         setRefreshing(false);
       }
+    }
+  }
+
+  async function controlOrchestration(
+    run: SonnyOrchestrationRun,
+    action: "approve" | "cancel"
+  ) {
+    if (!workspace?.id || !run?.id) return;
+
+    const mutationKey = `${run.id}:${action}`;
+
+    try {
+      setOrchestrationMutation(mutationKey);
+      setError("");
+      setNotice("");
+
+      if (action === "approve") {
+        await approveSonnyOrchestration(
+          workspace.id,
+          run.id
+        );
+        setNotice(
+          "Founder approval recorded for orchestration run."
+        );
+      } else {
+        await cancelSonnyOrchestration(
+          workspace.id,
+          run.id
+        );
+        setNotice(
+          "Orchestration run cancelled by founder control."
+        );
+      }
+
+      await loadWorkforce(false);
+    } catch (err: any) {
+      setError(
+        err?.message ||
+          `Failed to ${action} orchestration run.`
+      );
+    } finally {
+      setOrchestrationMutation("");
     }
   }
 
@@ -779,6 +852,27 @@ export default function AIWorkforcePage() {
     { name: "Customer Success", active: false },
   ];
 
+
+  const workforceHealthStatus = String(
+    executionHealth?.health?.status ||
+      executionHealth?.health?.status ||
+      "unknown"
+  ).toLowerCase();
+
+  const workforceHealthReasons =
+    Array.isArray(executionHealth?.health?.reasons)
+      ? executionHealth.health.reasons
+      : [];
+
+  const workforceFailureCounts =
+    executionHealth?.failures || {};
+
+  const workforceLeaseCounts =
+    executionHealth?.leases || {};
+
+  const workforceWorkerState =
+    executionHealth?.worker || {};
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-slate-50 flex">
@@ -847,6 +941,83 @@ export default function AIWorkforcePage() {
               {error}
             </div>
           )}
+
+
+          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Execution health
+                </p>
+                <div className="flex items-center gap-3 mt-1">
+                  <h2 className="text-lg font-bold text-slate-950">
+                    Workforce runtime
+                  </h2>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${
+                      workforceHealthStatus === "healthy"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : workforceHealthStatus === "critical"
+                        ? "bg-red-50 text-red-700"
+                        : workforceHealthStatus === "degraded"
+                        ? "bg-amber-50 text-amber-700"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {workforceHealthStatus}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <Mini
+                  title="Failed jobs"
+                  value={String(
+                    workforceFailureCounts.failed_jobs || 0
+                  )}
+                />
+                <Mini
+                  title="Exhausted"
+                  value={String(
+                    Number(
+                      workforceFailureCounts.exhausted_runs || 0
+                    ) +
+                      Number(
+                        workforceFailureCounts.exhausted_assignments || 0
+                      )
+                  )}
+                />
+                <Mini
+                  title="Expired leases"
+                  value={String(
+                    workforceLeaseCounts.expired || 0
+                  )}
+                />
+                <Mini
+                  title="Stale workers"
+                  value={String(
+                    workforceWorkerState.stale || 0
+                  )}
+                />
+              </div>
+            </div>
+
+            {workforceHealthReasons.length > 0 && (
+              <div className="mt-4 rounded-xl bg-amber-50 border border-amber-100 p-4">
+                <p className="text-sm font-bold text-amber-900">
+                  Runtime attention required
+                </p>
+                <ul className="mt-2 space-y-1 text-sm text-amber-800">
+                  {workforceHealthReasons.map((reason, index) => (
+                    <li key={`${reason}-${index}`}>
+                      • {reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+
 
           {notice && (
             <div className="mt-6 bg-green-50 border border-green-200 text-green-700 rounded-2xl p-4">
@@ -1188,6 +1359,175 @@ export default function AIWorkforcePage() {
                   Sonny, Hermes, and Julia are Firmic core
                   executives and are managed separately from
                   AI Employee controls.
+                </div>
+              </section>
+
+              <section className="mt-8 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-violet-700 font-bold">
+                      Founder Control
+                    </p>
+                    <h2 className="text-xl font-bold text-slate-950 mt-1">
+                      Orchestration approval boundary
+                    </h2>
+                    <p className="text-sm text-slate-500 mt-2">
+                      Review orchestration runs before approving or cancelling
+                      founder-controlled work.
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
+                    {orchestrationRuns.length} recent run
+                    {orchestrationRuns.length === 1 ? "" : "s"}
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  {orchestrationRuns.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">
+                      No orchestration runs are waiting for founder review.
+                    </div>
+                  ) : (
+                    orchestrationRuns.slice(0, 8).map((run) => {
+                      const status = String(
+                        run.status || "unknown"
+                      ).toLowerCase();
+
+                      const canApprove =
+                        Boolean(run.approval_required) &&
+                        [
+                          "pending",
+                          "awaiting_approval",
+                        ].includes(status);
+
+                      const terminal = [
+                        "completed",
+                        "failed",
+                        "cancelled",
+                      ].includes(status);
+
+                      const canCancel = !terminal;
+
+                      const approving =
+                        orchestrationMutation ===
+                        `${run.id}:approve`;
+
+                      const cancelling =
+                        orchestrationMutation ===
+                        `${run.id}:cancel`;
+
+                      return (
+                        <div
+                          key={run.id}
+                          className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                        >
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-bold text-slate-950">
+                                  {run.orchestration_type ||
+                                    "workforce orchestration"}
+                                </span>
+
+                                <span className="rounded-full bg-white border border-slate-200 px-2.5 py-1 text-xs font-bold capitalize text-slate-700">
+                                  {status.replaceAll("_", " ")}
+                                </span>
+
+                                {run.approval_required && (
+                                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">
+                                    Founder approval
+                                  </span>
+                                )}
+                              </div>
+
+                              <p className="text-xs text-slate-500 mt-2">
+                                Run {run.id}
+                              </p>
+
+                              <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-600">
+                                <span>
+                                  Coordinator:{" "}
+                                  <strong>
+                                    {run.coordinator_agent_code ||
+                                      "Sonny"}
+                                  </strong>
+                                </span>
+                                <span>
+                                  Assignments:{" "}
+                                  <strong>
+                                    {Number(
+                                      run.metrics
+                                        ?.total_assignments || 0
+                                    )}
+                                  </strong>
+                                </span>
+                                <span>
+                                  Retries:{" "}
+                                  <strong>
+                                    {Number(run.retry_count || 0)}
+                                  </strong>
+                                </span>
+                              </div>
+
+                              {run.error_message && (
+                                <p className="mt-3 text-sm text-red-700">
+                                  {run.error_message}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              {canApprove && (
+                                <button
+                                  type="button"
+                                  disabled={Boolean(
+                                    orchestrationMutation
+                                  )}
+                                  onClick={() =>
+                                    controlOrchestration(
+                                      run,
+                                      "approve"
+                                    )
+                                  }
+                                  className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50"
+                                >
+                                  {approving
+                                    ? "Approving..."
+                                    : "Approve"}
+                                </button>
+                              )}
+
+                              {canCancel && (
+                                <button
+                                  type="button"
+                                  disabled={Boolean(
+                                    orchestrationMutation
+                                  )}
+                                  onClick={() =>
+                                    controlOrchestration(
+                                      run,
+                                      "cancel"
+                                    )
+                                  }
+                                  className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                >
+                                  {cancelling
+                                    ? "Cancelling..."
+                                    : "Cancel"}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  Approval is explicit. This panel does not automatically
+                  approve or execute orchestration work.
                 </div>
               </section>
 

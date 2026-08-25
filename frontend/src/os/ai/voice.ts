@@ -102,6 +102,35 @@ export type SpeakEnglishOptions = {
   onError?: (event: SpeechSynthesisErrorEvent) => void;
 };
 
+export function sanitizeSpeechText(text: string): string {
+  return String(text || "")
+    // Markdown links -> visible text only.
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    // Fenced / inline code markers.
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    // Markdown headings.
+    .replace(/^\s*#{1,6}\s*/gm, "")
+    // Blockquotes.
+    .replace(/^\s*>\s?/gm, "")
+    // Tables / separators.
+    .replace(/^\s*\|?[\s:-]+\|[\s|:-]*$/gm, " ")
+    .replace(/\|/g, ", ")
+    // Bold / italics / strike markers.
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    // Bullets become natural pauses.
+    .replace(/^\s*[-+*]\s+/gm, "")
+    // Horizontal rules.
+    .replace(/^\s*[-*_]{3,}\s*$/gm, " ")
+    // Collapse whitespace.
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function speakEnglish(
   text: string,
   options: SpeakEnglishOptions = {},
@@ -111,6 +140,12 @@ export async function speakEnglish(
     !("speechSynthesis" in window) ||
     !text.trim()
   ) {
+    return false;
+  }
+
+  const cleanText = sanitizeSpeechText(text);
+
+  if (!cleanText) {
     return false;
   }
 
@@ -131,7 +166,7 @@ export async function speakEnglish(
     return false;
   }
 
-  const utterance = new SpeechSynthesisUtterance(text);
+  const utterance = new SpeechSynthesisUtterance(cleanText);
 
   // This is the critical lock that was missing.
   utterance.lang = language.code || DEFAULT_AI_LANGUAGE.code;

@@ -13,6 +13,15 @@ type Props = {
   children: ReactNode;
 };
 
+
+const NO_WORKSPACE_ALLOWED_PATHS = new Set([
+  "/companies",
+  "/create-company",
+  "/onboarding",
+  "/checkout",
+  "/configure-office",
+]);
+
 export default function ProtectedRoute({ children }: Props) {
   const router = useRouter();
   const { checkingAuth } = useRequireAuth();
@@ -36,9 +45,32 @@ export default function ProtectedRoute({ children }: Props) {
        * workspace do not need a company compliance lookup.
        */
       if (!workspace?.id) {
-        if (!cancelled) {
-          setCheckingAccess(false);
+        if (cancelled) {
+          return;
         }
+
+        const cleanPath =
+          String(router.pathname || "")
+            .split("?")[0]
+            .replace(/\/+$/, "") || "/";
+
+        if (
+          NO_WORKSPACE_ALLOWED_PATHS.has(
+            cleanPath
+          )
+        ) {
+          setCheckingAccess(false);
+          return;
+        }
+
+        /*
+         * An authenticated tenant without an authoritative
+         * company workspace must not enter the operational
+         * Tenant OS.
+         *
+         * Send them to company selection/creation first.
+         */
+        void router.replace("/companies");
         return;
       }
 
@@ -82,16 +114,25 @@ export default function ProtectedRoute({ children }: Props) {
          * Documents, Hermes, compliance review and the waiting
          * screen available while operational pages stay locked.
          */
-        const redirect = getComplianceRedirect(
-          router,
-        );
-
-        if (redirect) {
-          void router.replace(redirect);
+        /*
+         * Hermes authoritatively confirmed that this company is NOT active.
+         * Never allow operational Tenant OS access merely because the browser
+         * has no/stale compliance snapshot.
+         *
+         * Activation-safe routes remain accessible; every other protected
+         * tenant route is forced back into the activation journey.
+         */
+        if (
+          isPathAllowedDuringCompliance(
+            router.pathname,
+          )
+        ) {
+          setCheckingAccess(false);
           return;
         }
 
-        setCheckingAccess(false);
+        void router.replace("/awaiting-compliance");
+        return;
       } catch (error) {
         /*
          * Fail closed for operational routes if the authoritative

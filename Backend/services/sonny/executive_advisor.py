@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from services.compliance_requirements import REQUIRED_COMPLIANCE_DOCUMENTS
 
 
 EXECUTIVE_ADVISOR_VERSION = "b7.4.0"
@@ -138,16 +139,14 @@ def analyze_documents(
     if not isinstance(requirements, dict):
         requirements = {}
 
-    required_documents = {
-        "trade_license": "Trade License",
-        "passport_copy": "Passport Copy",
-        "incorporation_certificate": "Incorporation Certificate",
-        "proof_of_address": "Proof of Address",
+    labels = {
+        item["key"]: item["label"]
+        for item in REQUIRED_COMPLIANCE_DOCUMENTS
     }
 
     missing = [
-        label
-        for key, label in required_documents.items()
+        labels.get(key, key.replace("_", " ").title())
+        for key in sorted(requirements)
         if not bool(requirements.get(key))
     ]
 
@@ -169,9 +168,8 @@ def analyze_documents(
             build_recommendation(
                 title="Complete compliance file",
                 detail=(
-                    "Upload and verify the missing core documents, "
-                    "starting with the Trade License and "
-                    "Incorporation Certificate."
+                    "Upload and verify the currently missing "
+                    "compliance documents through Hermes."
                 ),
                 priority="high",
                 category="compliance",
@@ -431,19 +429,38 @@ def analyze_workforce(
         summary = {}
 
     active = as_int(summary.get("active"))
-    total = as_int(summary.get("total"))
+    included_capacity = summary.get("included_capacity")
+    unlimited = bool(summary.get("unlimited"))
 
-    if total > 0 and active == 0:
+    has_entitlement = (
+        unlimited
+        or as_int(included_capacity) > 0
+    )
+
+    if has_entitlement and active == 0:
+        capacity_text = (
+            "unlimited AI employee capacity"
+            if unlimited
+            else (
+                f"{as_int(included_capacity)} included "
+                "AI employee slots"
+            )
+        )
+
         recommendations.append(
             build_recommendation(
-                title="Activate AI workforce",
+                title="Evaluate AI workforce utilization",
                 detail=(
-                    "AI employees exist but none are currently active."
+                    f"The current plan provides {capacity_text}, "
+                    "but no company-specific AI employee "
+                    "assignment is active. Activate one only "
+                    "when there is a defined workload to automate."
                 ),
-                priority="medium",
+                priority="low",
                 category="workforce",
                 expected_result=(
-                    "Increase operational automation and execution."
+                    "Use included AI capacity where it produces "
+                    "measurable operational value."
                 ),
             )
         )

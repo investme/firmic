@@ -1840,12 +1840,11 @@ def _synchronize_launch_operational_state(
         else None
     )
 
+    # Only an authoritatively activated subscription satisfies
+    # the Launch Engine subscription gate. Merely selecting a
+    # plan / creating a TRIAL subscription is not payment.
     launch.subscription_completed = (
-        subscription_status
-        in {
-            "active",
-            "trial",
-        }
+        subscription_status == "active"
     )
 
     launch.office_reserved = bool(

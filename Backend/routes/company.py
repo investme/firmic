@@ -12,7 +12,6 @@ import uuid
 import threading
 from services.subscription_service import (
     create_company_subscription,
-    activate_subscription,
 )
 from services.launch_service import ensure_company_launch
 
@@ -170,12 +169,11 @@ def create_company(
             actor=str(user_id),
         )
 
-        activate_subscription(
-            db=db,
-            subscription=subscription,
-            actor=str(user_id),
-        )
-
+        # Plan selection is NOT payment authority.
+        #
+        # create_company_subscription() intentionally creates the
+        # commercial record in TRIAL state. Activation must happen
+        # only after an authoritative payment-success flow.
         db.commit()
         db.refresh(company)
 

@@ -71,6 +71,54 @@ export type WorkforceTimelineEvent = {
   created_at?: string | null;
 };
 
+
+export type WorkforceExecutionHealth = {
+  generated_at?: string;
+  scope?: {
+    company_id?: string;
+    global?: boolean;
+  };
+  health?: {
+    status?: string;
+    healthy?: boolean;
+    reasons?: string[];
+    worker_process_liveness_known?: boolean;
+  };
+  workflows?: {
+    total?: number;
+    draft?: number;
+    running?: number;
+    waiting?: number;
+    completed?: number;
+    cancelled?: number;
+  };
+  leases?: {
+    active?: number;
+    expired?: number;
+    non_runnable_with_owner?: number;
+    active_items?: unknown[];
+    expired_items?: unknown[];
+    non_runnable_items?: unknown[];
+  };
+  failures?: {
+    failed_runs?: number;
+    failed_assignments?: number;
+    failed_jobs?: number;
+    exhausted_runs?: number;
+    exhausted_assignments?: number;
+  };
+  worker?: {
+    alive?: number;
+    available?: boolean;
+    liveness?: string;
+    reason?: string;
+    stale?: number;
+    stopped?: number;
+    unknown?: number;
+    workers?: unknown[];
+  };
+};
+
 export type WorkforceJob = {
   id: string;
   company_id: string;
@@ -105,6 +153,15 @@ export function getWorkforceRegistry() {
 export function getCompanyWorkforceJobs(companyId: string, limit = 30) {
   return request(
     `/api/workforce/company/${encodeURIComponent(companyId)}?limit=${limit}`
+  );
+}
+
+
+export function getCompanyWorkforceHealth(
+  companyId: string
+) {
+  return request(
+    `/api/workforce/company/${encodeURIComponent(companyId)}/health`
   );
 }
 

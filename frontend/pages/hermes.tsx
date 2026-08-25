@@ -4,7 +4,7 @@ import FirmicSidebar from "../components/FirmicSidebar";
 import { chatHermes, getHermes } from "../services/hermesApi";
 import { getCompanyDocuments } from "../services/documentApi";
 import { getCompanyTasks, createTask } from "../services/taskApi";
-import { getProgress } from "../services/sonnyApi";
+import { getCompanyLaunch } from "../services/launchApi";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { getActiveWorkspace } from "../src/utils/workspaceContext";
 import {
@@ -88,7 +88,7 @@ export default function HermesCompliance() {
         getHermes(String(companyId)),
         getCompanyDocuments(String(companyId)),
         getCompanyTasks(String(companyId)),
-        getProgress(String(companyId)),
+        getCompanyLaunch(String(companyId)),
       ]);
 
       const hermesResult = results[0];
@@ -369,9 +369,7 @@ export default function HermesCompliance() {
       : "Monitoring");
 
   const companyProgress =
-    progress?.progress ??
-    progress?.score ??
-    0;
+    Number(progress?.progress_percent ?? 0);
 
   const dynamicAlerts = [
     !hasTradeLicense

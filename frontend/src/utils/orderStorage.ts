@@ -52,7 +52,7 @@ export type FirmicOrder = {
   amountDueVatUsd?: number;
   amountDueUsd?: number;
   amountDueAed?: number;
-  paymentStatus: "unpaid" | "paid_demo";
+  paymentStatus: "unpaid" | "paid";
   paymentMethod?: FirmicPaymentMethod;
   createdAt: string;
   confirmedAt?: string;
@@ -227,7 +227,7 @@ export function buildFirmicOrder(input: {
       [],
   );
   const isUpgrade =
-    input.previousOrder?.paymentStatus === "paid_demo";
+    input.previousOrder?.paymentStatus === "paid";
 
   const chargeItems = isUpgrade
     ? items.filter(
@@ -453,7 +453,7 @@ export function confirmOrder(
 
   const confirmed = {
     ...order,
-    paymentStatus: "paid_demo" as const,
+    paymentStatus: "paid" as const,
     paymentMethod,
     confirmedAt: new Date().toISOString(),
   };

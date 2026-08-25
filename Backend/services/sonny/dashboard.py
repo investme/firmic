@@ -274,22 +274,13 @@ def build_sonny_dashboard(
     meetings = state["meetings"]
     progress = state["progress"]
 
-    required_documents = {
-        "trade_license",
-        "passport_copy",
-        "incorporation_certificate",
-        "proof_of_address",
-    }
-
     requirements = documents[
         "signals"
     ]["requirements"]
 
     missing_documents = [
         key
-        for key in sorted(
-            required_documents
-        )
+        for key in sorted(requirements)
         if not requirements.get(key)
     ]
 
@@ -547,6 +538,18 @@ def build_sonny_dashboard(
                 ),
                 "current_month_total_usd": billing.get(
                     "current_month_total_usd"
+                ),
+                "ledger_current_month_total_usd": billing.get(
+                    "ledger_current_month_total_usd"
+                ),
+                "recurring_monthly_total_usd": billing.get(
+                    "recurring_monthly_total_usd"
+                ),
+                "launch_activation_fee_usd": billing.get(
+                    "launch_activation_fee_usd"
+                ),
+                "first_month_total_usd": billing.get(
+                    "first_month_total_usd"
                 ),
                 "unbilled_usd": billing.get(
                     "unbilled_usd"

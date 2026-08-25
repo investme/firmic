@@ -43,6 +43,7 @@ from models.launch_center import (
     LaunchMilestone,
 )
 from routes.subscriptions import router as subscriptions_router
+from routes.payments import router as payments_router
 from routes.launch_center import router as launch_center_router
 from routes.launch import router as launch_router
 
@@ -272,6 +273,7 @@ app.include_router(
 app.include_router(customer_hub_router)
 
 app.include_router(subscriptions_router)
+app.include_router(payments_router)
 app.include_router(launch_router)
 
 

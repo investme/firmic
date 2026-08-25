@@ -59,8 +59,8 @@ export async function getCompanyAIAgents(
 
 export async function hireAIAgent(payload: {
   company_id: string;
-  agent_name: string;
-  monthly_price_usd: number;
+  agent_name?: string;
+  agent_code?: string;
 }) {
   const response = await fetch(
     `${API_URL}/api/ai-workforce/hire`,
@@ -79,7 +79,8 @@ export async function hireAIAgent(payload: {
 
 export async function deactivateAIAgent(payload: {
   company_id: string;
-  agent_name: string;
+  agent_name?: string;
+  agent_code?: string;
 }) {
   const response = await fetch(
     `${API_URL}/api/ai-workforce/deactivate`,

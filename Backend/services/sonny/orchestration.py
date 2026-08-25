@@ -1049,7 +1049,10 @@ def accept_assignment(
         recipient_agent_code="sonny",
         message_type="assignment_accepted",
         subject=assignment.title,
-        content="Assignment accepted.",
+        content=(
+            "Understood, Sonny. I've accepted the assignment "
+            "and I'm ready to begin."
+        ),
         message_data={},
         commit=False,
     )
@@ -1106,7 +1109,10 @@ def start_assignment(
         recipient_agent_code="sonny",
         message_type="assignment_started",
         subject=assignment.title,
-        content="Assignment execution started.",
+        content=(
+            "Sonny, I'm starting the assignment now. "
+            "I'll report back when the work is complete."
+        ),
         message_data={
             "attempt_count": assignment.attempt_count,
         },
@@ -1154,6 +1160,40 @@ def complete_assignment(
     assignment.updated_at = utcnow()
     assignment.error_message = None
 
+    execution_result = (
+        assignment.result_payload.get(
+            "execution_result"
+        )
+        if isinstance(
+            assignment.result_payload,
+            dict,
+        )
+        else None
+    )
+
+    execution_summary = ""
+
+    if isinstance(
+        execution_result,
+        dict,
+    ):
+        execution_summary = str(
+            execution_result.get(
+                "message"
+            )
+            or ""
+        ).strip()
+
+    completion_message = (
+        "Sonny, the assignment is complete."
+    )
+
+    if execution_summary:
+        completion_message = (
+            "Sonny, the assignment is complete. "
+            + execution_summary
+        )
+
     add_agent_message(
         db,
         assignment=assignment,
@@ -1161,9 +1201,32 @@ def complete_assignment(
         recipient_agent_code="sonny",
         message_type="assignment_completed",
         subject=assignment.title,
-        content="Assignment completed successfully.",
+        content=completion_message,
         message_data={
             "result_payload": assignment.result_payload,
+        },
+        commit=False,
+    )
+
+    add_agent_message(
+        db,
+        assignment=assignment,
+        sender_agent_code="sonny",
+        recipient_agent_code=(
+            assignment.agent.agent_code
+        ),
+        message_type=(
+            "assignment_result_acknowledged"
+        ),
+        subject=assignment.title,
+        content=(
+            "Received. I've recorded the completed result "
+            "and made it available to the founder."
+        ),
+        message_data={
+            "result_payload": (
+                assignment.result_payload
+            ),
         },
         commit=False,
     )
@@ -1215,9 +1278,33 @@ def fail_assignment(
         recipient_agent_code="sonny",
         message_type="assignment_failed",
         subject=assignment.title,
-        content=error_message,
+        content=(
+            "Sonny, I couldn't complete the assignment. "
+            + str(error_message).strip()
+        ),
         message_data={
             "attempt_count": assignment.attempt_count,
+        },
+        commit=False,
+    )
+
+    add_agent_message(
+        db,
+        assignment=assignment,
+        sender_agent_code="sonny",
+        recipient_agent_code=(
+            assignment.agent.agent_code
+        ),
+        message_type=(
+            "assignment_failure_acknowledged"
+        ),
+        subject=assignment.title,
+        content=(
+            "Understood. I've recorded the failure and "
+            "will surface it for founder review."
+        ),
+        message_data={
+            "error_message": error_message,
         },
         commit=False,
     )

@@ -251,6 +251,29 @@ def build_operational_snapshot(
         "active_ai_employees": as_int(
             workforce.get("active")
         ),
+        "assigned_ai_employees": as_int(
+            workforce.get(
+                "assigned",
+                workforce.get("total"),
+            )
+        ),
+        "included_ai_employee_capacity": (
+            None
+            if bool(workforce.get("unlimited"))
+            else as_int(
+                workforce.get("included_capacity")
+            )
+        ),
+        "available_ai_employee_slots": (
+            None
+            if bool(workforce.get("unlimited"))
+            else as_int(
+                workforce.get("available_slots")
+            )
+        ),
+        "unlimited_ai_employee_capacity": bool(
+            workforce.get("unlimited")
+        ),
         "active_meetings": as_int(
             meetings.get("active")
         ),
@@ -262,8 +285,15 @@ def build_operational_snapshot(
         ),
         "current_month_billing_usd": as_float(
             billing.get(
-                "current_month_total_usd"
+                "recurring_monthly_total_usd",
+                billing.get("current_month_total_usd"),
             )
+        ),
+        "launch_activation_fee_usd": as_float(
+            billing.get("launch_activation_fee_usd")
+        ),
+        "first_month_total_usd": as_float(
+            billing.get("first_month_total_usd")
         ),
         "unbilled_usage_usd": as_float(
             billing.get("unbilled_usd")
@@ -514,12 +544,33 @@ def build_brief_prompt_context(
                 f'{as_int(snapshot.get("open_support_tickets"))}'
             ),
             (
-                f'Active AI employees: '
-                f'{as_int(snapshot.get("active_ai_employees"))}'
+                f'AI workforce: '
+                + (
+                    "unlimited included capacity"
+                    if snapshot.get(
+                        "unlimited_ai_employee_capacity"
+                    )
+                    else (
+                        f'{as_int(snapshot.get("included_ai_employee_capacity"))} '
+                        "included slots"
+                    )
+                )
+                + (
+                    f'; {as_int(snapshot.get("active_ai_employees"))} '
+                    "active assignment(s)"
+                )
             ),
             (
-                f'Current billing: '
+                f'Recurring monthly operating cost: '
                 f'${as_float(snapshot.get("current_month_billing_usd")):.2f}'
+            ),
+            (
+                f'Company Launch Fee: '
+                f'${as_float(snapshot.get("launch_activation_fee_usd")):.2f} one time'
+            ),
+            (
+                f'First month total: '
+                f'${as_float(snapshot.get("first_month_total_usd")):.2f}'
             ),
         ]
     )

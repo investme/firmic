@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { toAED } from "../data/pricing";
 import { rentOffice } from "../../services/officeApi";
+import {
+  createCheckoutSession,
+  createPayment,
+  getPayment,
+  paymentIsVerified,
+  PaymentResponse,
+} from "../../services/paymentApi";
 import { useWorkspace } from "../context/WorkspaceProvider";
 import {
   getActiveWorkspace,
@@ -17,6 +24,33 @@ import {
 } from "../utils/orderStorage";
 
 const COMPANY_LAUNCH_FEE_USD = 79;
+
+function getPendingPaymentKey(
+  companyId: string,
+) {
+  return `firmic_pending_payment:${companyId}`;
+}
+
+function getPaymentAttemptKey(
+  companyId: string,
+) {
+  return `firmic_payment_attempt:${companyId}`;
+}
+
+function createPaymentAttemptKey(
+  companyId: string,
+) {
+  const random =
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}`;
+
+  return `firmic-checkout:${companyId}:${random}`;
+}
+
 
 function detectBrand(cardNumber: string) {
   const digits = cardNumber.replace(/\D/g, "");
@@ -285,6 +319,364 @@ export default function Checkout() {
     "checkout" | "processing" | "paid" | "handoff"
   >("checkout");
 
+
+  const paymentReturnHandled =
+    useRef(false);
+
+  async function waitForVerifiedPayment(
+    paymentId: string,
+  ): Promise<PaymentResponse> {
+    let latest: PaymentResponse | null = null;
+
+    /*
+     * Stripe may redirect before the webhook finishes.
+     * The redirect itself is never payment authority.
+     */
+    for (
+      let attempt = 0;
+      attempt < 12;
+      attempt += 1
+    ) {
+      latest = await getPayment(
+        paymentId,
+      );
+
+      if (paymentIsVerified(latest)) {
+        return latest;
+      }
+
+      if (latest.status === "failed") {
+        throw new Error(
+          "Stripe reported that this payment failed. Please try again.",
+        );
+      }
+
+      await wait(750);
+    }
+
+    throw new Error(
+      "Stripe returned successfully, but Firmic is still waiting for authoritative payment verification. Refresh this page in a moment.",
+    );
+  }
+
+  async function finalizeVerifiedPayment(
+    paymentId: string,
+  ) {
+    const workspace =
+      getActiveWorkspace();
+
+    if (!workspace?.id) {
+      throw new Error(
+        "No active company workspace was found.",
+      );
+    }
+
+    if (!order) {
+      throw new Error(
+        "Your configured order was not found. Return to company configuration.",
+      );
+    }
+
+    if (
+      !order.headquarters?.office_code
+    ) {
+      throw new Error(
+        "Choose a headquarters before checkout.",
+      );
+    }
+
+    setActivating(true);
+    setError("");
+    setPaymentStage("processing");
+
+    try {
+      /*
+       * Authoritative payment boundary:
+       *
+       * - Stripe redirect is NOT authority
+       * - LocalStorage is NOT authority
+       * - Checkout Session is NOT authority
+       *
+       * Firmic's verified payment resource is authority.
+       */
+      await waitForVerifiedPayment(
+        paymentId,
+      );
+
+      const selectedOfficeCode =
+        String(
+          order.headquarters.office_code,
+        ).trim();
+
+      const activeWorkspace =
+        getActiveWorkspace();
+
+      const activeOfficeCode =
+        String(
+          activeWorkspace
+            ?.headquarters
+            ?.office_code || "",
+        ).trim();
+
+      /*
+       * Headquarters becomes reserved only after
+       * authoritative payment verification.
+       */
+      if (!activeOfficeCode) {
+        await rentOffice({
+          office_code:
+            selectedOfficeCode,
+          company_id:
+            String(workspace.id),
+        });
+      }
+
+      await refreshWorkspace();
+
+      const latestWorkspace =
+        getActiveWorkspace();
+
+      const finalOrder =
+        latestWorkspace
+          ?.headquarters
+          ?.office_code
+          ? normalizeLaunchFee(
+              reconcileOrderWithActiveHeadquarters(
+                order,
+                latestWorkspace.headquarters,
+              ),
+            )
+          : normalizeLaunchFee(
+              order,
+            );
+
+      /*
+       * Local receipt mirror only.
+       * This cannot verify backend payment.
+       */
+      const confirmedOrder =
+        confirmOrder(
+          finalOrder,
+          {
+            type: "card",
+            brand: "Stripe",
+            last4: "",
+            cardholderName:
+              "Stripe Checkout",
+          },
+        );
+
+      setOrder(
+        confirmedOrder,
+      );
+
+      setActiveHeadquarters(
+        latestWorkspace
+          ?.headquarters ||
+          order.headquarters,
+      );
+
+      /*
+       * Client compliance snapshot is written only
+       * AFTER backend payment verification.
+       */
+      localStorage.setItem(
+        `firmic_compliance_status:${workspace.id}`,
+        JSON.stringify({
+          status:
+            "documents_required",
+          subscription_completed:
+            true,
+          admin_approved:
+            false,
+          infrastructure_provisioned:
+            false,
+          company_access_locked:
+            true,
+          next_step:
+            "passport",
+          updated_at:
+            new Date().toISOString(),
+        }),
+      );
+
+      localStorage.setItem(
+        "firmic_sonny_handoff",
+        JSON.stringify({
+          companyId:
+            String(workspace.id),
+          from:
+            "checkout",
+          to:
+            "hermes",
+          status:
+            "payment_confirmed",
+          message:
+            "Stripe payment verified by Firmic. Sonny is handing the company to Hermes for mandatory compliance verification.",
+          createdAt:
+            new Date().toISOString(),
+        }),
+      );
+
+      localStorage.removeItem(
+        getPendingPaymentKey(
+          String(workspace.id),
+        ),
+      );
+
+      localStorage.removeItem(
+        getPaymentAttemptKey(
+          String(workspace.id),
+        ),
+      );
+
+      localStorage.removeItem(
+        "firmic_selected_headquarters",
+      );
+
+      await refreshWorkspace();
+
+      setPaymentStage(
+        "paid",
+      );
+
+      await wait(
+        1100,
+      );
+
+      setPaymentStage(
+        "handoff",
+      );
+
+      /*
+       * Remove Stripe return query after successful
+       * authoritative processing.
+       */
+      await router.replace(
+        "/checkout",
+        undefined,
+        {
+          shallow: true,
+        },
+      );
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  useEffect(() => {
+    if (
+      !router.isReady ||
+      paymentReturnHandled.current
+    ) {
+      return;
+    }
+
+    const paymentResult =
+      typeof router.query.payment ===
+      "string"
+        ? router.query.payment
+        : "";
+
+    if (
+      paymentResult !== "success" &&
+      paymentResult !== "cancelled"
+    ) {
+      return;
+    }
+
+    const workspace =
+      getActiveWorkspace();
+
+    if (!workspace?.id) {
+      return;
+    }
+
+    if (
+      paymentResult === "cancelled"
+    ) {
+      paymentReturnHandled.current =
+        true;
+
+      setPaymentStage(
+        "checkout",
+      );
+
+      setError(
+        "Stripe Checkout was cancelled. No payment was confirmed and your company remains locked.",
+      );
+
+      void router.replace(
+        "/checkout",
+        undefined,
+        {
+          shallow: true,
+        },
+      );
+
+      return;
+    }
+
+    /*
+     * The normal initialization effect restores
+     * the configured order first.
+     */
+    if (!order) {
+      return;
+    }
+
+    const paymentId =
+      localStorage.getItem(
+        getPendingPaymentKey(
+          String(workspace.id),
+        ),
+      );
+
+    paymentReturnHandled.current =
+      true;
+
+    if (!paymentId) {
+      setPaymentStage(
+        "checkout",
+      );
+
+      setError(
+        "Firmic could not identify the payment attempt returned by Stripe. No company access has been unlocked.",
+      );
+
+      void router.replace(
+        "/checkout",
+        undefined,
+        {
+          shallow: true,
+        },
+      );
+
+      return;
+    }
+
+    void finalizeVerifiedPayment(
+      paymentId,
+    ).catch((reason) => {
+      paymentReturnHandled.current =
+        false;
+
+      setPaymentStage(
+        "checkout",
+      );
+
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to verify Stripe payment.",
+      );
+    });
+  }, [
+    router.isReady,
+    router.query.payment,
+    order,
+  ]);
+
   useEffect(() => {
     if (!router.isReady) {
       return;
@@ -332,7 +724,7 @@ export default function Checkout() {
 
     if (
       confirmedOrder &&
-      confirmedOrder.paymentStatus === "paid_demo"
+      confirmedOrder.paymentStatus === "paid"
     ) {
       setOrder(confirmedOrder);
       setPaymentStage("handoff");
@@ -437,9 +829,9 @@ export default function Checkout() {
     try {
       setActivating(true);
       setError("");
-      validatePayment();
 
-      const workspace = getActiveWorkspace();
+      const workspace =
+        getActiveWorkspace();
 
       if (!workspace?.id) {
         throw new Error(
@@ -453,103 +845,168 @@ export default function Checkout() {
         );
       }
 
-      if (!order.headquarters?.office_code) {
+      if (
+        !order.headquarters?.office_code
+      ) {
         throw new Error(
           "Choose a headquarters before checkout.",
         );
       }
 
-      setPaymentStage("processing");
-      await wait(700);
+      const companyId =
+        String(workspace.id);
 
-      const selectedOfficeCode = String(
-        order.headquarters.office_code,
-      ).trim();
+      setPaymentStage(
+        "processing",
+      );
 
-      const activeOfficeCode = String(
-        workspace.headquarters?.office_code || "",
-      ).trim();
+      let paymentId =
+        localStorage.getItem(
+          getPendingPaymentKey(
+            companyId,
+          ),
+        );
 
-      if (!activeOfficeCode) {
-        await rentOffice({
-          office_code: selectedOfficeCode,
-          company_id: String(workspace.id),
-        });
+      let payment:
+        PaymentResponse | null =
+        null;
+
+      /*
+       * Reuse the existing unresolved Firmic payment
+       * attempt where possible.
+       */
+      if (paymentId) {
+        try {
+          payment =
+            await getPayment(
+              paymentId,
+            );
+
+          if (
+            paymentIsVerified(
+              payment,
+            )
+          ) {
+            await finalizeVerifiedPayment(
+              payment.id,
+            );
+
+            return;
+          }
+
+          if (
+            payment.status ===
+            "failed"
+          ) {
+            paymentId = null;
+            payment = null;
+
+            localStorage.removeItem(
+              getPendingPaymentKey(
+                companyId,
+              ),
+            );
+
+            localStorage.removeItem(
+              getPaymentAttemptKey(
+                companyId,
+              ),
+            );
+          }
+        } catch {
+          paymentId = null;
+          payment = null;
+
+          localStorage.removeItem(
+            getPendingPaymentKey(
+              companyId,
+            ),
+          );
+        }
       }
 
-      const finalOrder =
-        workspace.headquarters?.office_code
-          ? normalizeLaunchFee(
-              reconcileOrderWithActiveHeadquarters(
-                order,
-                workspace.headquarters,
-              ),
-            )
-          : normalizeLaunchFee(order);
+      if (!paymentId) {
+        let attemptKey =
+          localStorage.getItem(
+            getPaymentAttemptKey(
+              companyId,
+            ),
+          );
 
-      const confirmedOrder = confirmOrder(
-        finalOrder,
-        {
-          type: "card",
-          brand: detectBrand(cardNumber),
-          last4: cardNumber
-            .replace(/\D/g, "")
-            .slice(-4),
-          cardholderName: cardholderName.trim(),
-        },
+        if (!attemptKey) {
+          attemptKey =
+            createPaymentAttemptKey(
+              companyId,
+            );
+
+          localStorage.setItem(
+            getPaymentAttemptKey(
+              companyId,
+            ),
+            attemptKey,
+          );
+        }
+
+        payment =
+          await createPayment(
+            companyId,
+            attemptKey,
+          );
+
+        paymentId =
+          payment.id;
+
+        /*
+         * Pointer only. This does NOT mean paid.
+         */
+        localStorage.setItem(
+          getPendingPaymentKey(
+            companyId,
+          ),
+          payment.id,
+        );
+      }
+
+      if (!paymentId) {
+        throw new Error(
+          "Firmic could not create a payment attempt.",
+        );
+      }
+
+      const session =
+        await createCheckoutSession(
+          paymentId,
+        );
+
+      if (
+        !session.checkout_url
+      ) {
+        throw new Error(
+          "Stripe did not return a checkout URL.",
+        );
+      }
+
+      /*
+       * Leave Firmic for Stripe.
+       *
+       * No paid state.
+       * No compliance state.
+       * No HQ reservation.
+       */
+      window.location.assign(
+        session.checkout_url,
       );
-
-      setOrder(confirmedOrder);
-
-      setActiveHeadquarters(
-        workspace.headquarters ||
-          order.headquarters,
-      );
-
-      localStorage.setItem(
-        `firmic_compliance_status:${workspace.id}`,
-        JSON.stringify({
-          status: "documents_required",
-          subscription_completed: true,
-          admin_approved: false,
-          infrastructure_provisioned: false,
-          company_access_locked: true,
-          next_step: "passport",
-          updated_at: new Date().toISOString(),
-        }),
-      );
-
-      localStorage.setItem(
-        "firmic_sonny_handoff",
-        JSON.stringify({
-          companyId: String(workspace.id),
-          from: "checkout",
-          to: "hermes",
-          status: "payment_confirmed",
-          message:
-            "Payment confirmed. Sonny is handing the company to Hermes for mandatory compliance verification.",
-          createdAt: new Date().toISOString(),
-        }),
-      );
-
-      localStorage.removeItem(
-        "firmic_selected_headquarters",
-      );
-
-      await refreshWorkspace();
-
-      setPaymentStage("paid");
-      await wait(1100);
-
-      setPaymentStage("handoff");
     } catch (reason) {
-      setPaymentStage("checkout");
+      setPaymentStage(
+        "checkout",
+      );
+
       setError(
         reason instanceof Error
           ? reason.message
-          : "Checkout failed.",
+          : "Unable to start secure Stripe Checkout.",
       );
-    } finally {
+
       setActivating(false);
     }
   }
@@ -753,8 +1210,7 @@ export default function Checkout() {
                   </h2>
 
                   <p className="mt-2 text-sm text-[#60798b]">
-                    Card details are used for this MVP
-                    demonstration checkout.
+                    Payment is completed securely through Stripe Checkout. Firmic does not treat this page or a browser redirect as proof of payment.
                   </p>
                 </div>
 

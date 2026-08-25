@@ -11,6 +11,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 
 import { logout } from "../../../services/authApi";
+import { getHermes } from "../../../services/hermesApi";
+import { isPathAllowedDuringCompliance } from "../../utils/complianceAccess";
 import {
   getActiveWorkspace,
   getWorkspaceChangedEventName,
@@ -187,12 +189,38 @@ export function SidebarEngine({ config }: { config: SidebarConfig }) {
   } = useSidebar();
 
   const [workspace, setWorkspace] = useState<FirmicWorkspace | null>(null);
+  const [tenantPlatformActive, setTenantPlatformActive] =
+    useState<boolean | null>(null);
 
   const lastAutomaticallyExpandedPath = useRef<string | null>(null);
 
+  const isAdmin = config.mode === "admin";
+
+  const effectiveSections = useMemo(() => {
+    if (
+      isAdmin ||
+      tenantPlatformActive === true
+    ) {
+      return config.sections;
+    }
+
+    return config.sections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) =>
+          isPathAllowedDuringCompliance(item.href),
+        ),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [
+    config.sections,
+    isAdmin,
+    tenantPlatformActive,
+  ]);
+
   const allItems = useMemo(
-    () => config.sections.flatMap((section) => section.items),
-    [config.sections],
+    () => effectiveSections.flatMap((section) => section.items),
+    [effectiveSections],
   );
 
   const favoriteItems = useMemo(
@@ -200,29 +228,130 @@ export function SidebarEngine({ config }: { config: SidebarConfig }) {
     [allItems, favorites],
   );
 
-  const isAdmin = config.mode === "admin";
+
+  const refreshTenantPlatformActivation = async () => {
+
+    if (isAdmin) {
+
+      setTenantPlatformActive(true);
+
+      return;
+
+    }
+
+
+    const workspace = getActiveWorkspace();
+
+
+    if (!workspace) {
+
+      setTenantPlatformActive(false);
+
+      return;
+
+    }
+
+
+    setTenantPlatformActive(null);
+
+
+    try {
+
+      const hermes = await getHermes(workspace.id);
+
+      setTenantPlatformActive(
+
+        hermes.platform_active === true
+
+      );
+
+    } catch {
+
+      setTenantPlatformActive(false);
+
+    }
+
+  };
+
 
   useEffect(() => {
+    void refreshTenantPlatformActivation();
     if (isAdmin) {
       return;
     }
 
-    const refreshWorkspace = () => {
-      setWorkspace(getActiveWorkspace());
+    let cancelled = false;
+
+    const refreshWorkspace = async () => {
+      const nextWorkspace = getActiveWorkspace();
+
+      if (cancelled) {
+        return;
+      }
+
+      setWorkspace(nextWorkspace);
+
+      if (!nextWorkspace?.id) {
+        setTenantPlatformActive(false);
+        return;
+      }
+
+      try {
+        const hermes = await getHermes(
+          String(nextWorkspace.id),
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setTenantPlatformActive(
+          hermes?.platform_active === true,
+        );
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        console.error(
+          "Failed to synchronize sidebar company access:",
+          error,
+        );
+
+        setTenantPlatformActive(false);
+      }
     };
 
-    refreshWorkspace();
+    void refreshWorkspace();
 
     const eventName = getWorkspaceChangedEventName();
 
-    window.addEventListener(eventName, refreshWorkspace);
+    const handleWorkspaceChange = () => {
+      void refreshWorkspace();
+    };
 
-    window.addEventListener("storage", refreshWorkspace);
+    window.addEventListener(
+      eventName,
+      handleWorkspaceChange,
+    );
+
+    window.addEventListener(
+      "storage",
+      handleWorkspaceChange,
+    );
 
     return () => {
-      window.removeEventListener(eventName, refreshWorkspace);
+      cancelled = true;
 
-      window.removeEventListener("storage", refreshWorkspace);
+      window.removeEventListener(
+        eventName,
+        handleWorkspaceChange,
+      );
+
+      window.removeEventListener(
+        "storage",
+        handleWorkspaceChange,
+      );
     };
   }, [isAdmin]);
 
@@ -233,14 +362,14 @@ export function SidebarEngine({ config }: { config: SidebarConfig }) {
 
     lastAutomaticallyExpandedPath.current = router.pathname;
 
-    const activeSection = config.sections.find((section) =>
+    const activeSection = effectiveSections.find((section) =>
       section.items.some((item) => routeIsActive(router.pathname, item.href)),
     );
 
     if (activeSection) {
       expandSection(activeSection.id);
     }
-  }, [config.sections, expandSection, router.pathname]);
+  }, [effectiveSections, expandSection, router.pathname]);
 
   const sidebarContent = (
     <aside
@@ -365,7 +494,7 @@ export function SidebarEngine({ config }: { config: SidebarConfig }) {
           </section>
         )}
 
-        {config.sections.map((section) => (
+        {effectiveSections.map((section) => (
           <SidebarSection key={section.id} section={section} />
         ))}
       </nav>

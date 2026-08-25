@@ -33,9 +33,19 @@ export type SonnyOrchestrationRun = {
   orchestration_type?: string;
   trigger_type?: string;
   status?: string;
+  approval_required?: boolean;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  coordinator_agent_code?: string | null;
   created_at?: string;
   started_at?: string | null;
   completed_at?: string | null;
+  failed_at?: string | null;
+  cancelled_at?: string | null;
+  retry_count?: number;
+  max_retries?: number;
+  error_message?: string | null;
+  metrics?: Record<string, number>;
   assignments?: SonnyAssignment[];
   input_payload?: Record<string, any>;
   output_payload?: Record<string, any>;
@@ -75,6 +85,17 @@ export async function getSonny(companyId: string) {
     await fetch(`${API_URL}/api/sonny/company/${companyId}`, {
       headers: headers(),
     })
+  );
+}
+
+export async function getSonnyState(companyId: string) {
+  return parse(
+    await fetch(
+      `${API_URL}/api/sonny/company/${companyId}/state`,
+      {
+        headers: headers(),
+      }
+    )
   );
 }
 
@@ -165,6 +186,15 @@ export function startSonnyOrchestration(
 ) {
   return post(
     `/api/sonny/company/${companyId}/orchestrations/${runId}/start`
+  );
+}
+
+export function cancelSonnyOrchestration(
+  companyId: string,
+  runId: string
+) {
+  return post(
+    `/api/sonny/company/${companyId}/orchestrations/${runId}/cancel`
   );
 }
 

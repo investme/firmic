@@ -18,6 +18,7 @@ from services.sonny.executive_actions import execute_action
 from services.executive_intelligence.executive_engine import generate_executive_intelligence
 from services.sonny.executive_intelligence_bridge import answer_from_executive_intelligence
 from services.sonny.navigation import resolve_navigation
+from services.ai_provider import run_agent_completion
 from services.intelligence.engine import (
     accept_handoff,
     build_memory_context as build_intelligence_memory_context,
@@ -111,6 +112,99 @@ def action_preview(plan: dict[str, Any]) -> str:
         )
 
     return "The requested action is ready. Please confirm before I continue."
+
+
+def generate_sonny_ai_reply(
+    *,
+    context: dict[str, Any],
+    founder_message: str,
+) -> str:
+    prompt_context = str(
+        context.get("prompt_context") or ""
+    ).strip()
+
+    if not prompt_context:
+        raise RuntimeError(
+            "Sonny executive prompt context is unavailable."
+        )
+
+    instructions = """
+You are Sonny, Firmic's AI Chief Operating Officer.
+
+You are speaking directly to the founder or authorized
+company operator.
+
+Your job is to think and communicate like an exceptional
+AI COO using ONLY the verified Firmic executive context
+provided to you.
+
+OPERATING RULES:
+
+1. Live Firmic company state is the source of truth for
+   operational facts.
+
+2. Never invent tasks, documents, invoices, meetings,
+   payments, employees, customers, company activity,
+   completed actions, or other company records.
+
+3. Company knowledge is strategic context. It is not proof
+   that an operational action occurred.
+
+4. Clearly distinguish verified facts from analysis,
+   recommendations, risks, and assumptions.
+
+5. Prioritize critical risks, blockers, deadlines, and
+   high-impact opportunities.
+
+6. Give practical executive reasoning instead of merely
+   repeating dashboard numbers.
+
+7. When useful, explain WHY something matters and WHAT the
+   founder should do next.
+
+8. Never claim that you executed, created, changed,
+   assigned, cancelled, booked, paid, approved, or sent
+   anything. Firmic's deterministic action system handles
+   execution separately.
+
+9. Do not ask the founder to confirm an action. Action
+   planning and confirmation are handled outside this AI
+   response.
+
+10. Never reference or infer information belonging to
+    another company or tenant.
+
+11. If verified context does not contain enough information
+    to answer something as fact, say so clearly instead of
+    guessing.
+
+12. Be concise, confident, professional, commercially aware,
+    and founder-focused. Speak naturally as Sonny rather
+    than describing yourself as a language model.
+""".strip()
+
+    user_prompt = (
+        "VERIFIED FIRMIC EXECUTIVE CONTEXT:\n"
+        + prompt_context
+        + "\n\nFOUNDER MESSAGE:\n"
+        + founder_message
+    )
+
+    result = run_agent_completion(
+        agent_name="SONNY",
+        system_prompt=instructions,
+        user_prompt=user_prompt,
+        temperature=0.2,
+    )
+
+    reply = str(result.get("text") or "").strip()
+
+    if not reply:
+        raise RuntimeError(
+            "Sonny returned an empty AI response."
+        )
+
+    return reply
 
 
 @router.post("/chat")
@@ -263,10 +357,33 @@ def sonny_chat(
         reply = action_preview(planner["plan"])
 
     elif intelligence_answer:
-        reply = intelligence_answer["reply"]
+        try:
+            reply = generate_sonny_ai_reply(
+                context={
+                    **context,
+                    "prompt_context": (
+                        str(context.get("prompt_context") or "")
+                        + "\n\n## VERIFIED EXECUTIVE INTELLIGENCE\n"
+                        + str(intelligence_answer["reply"])
+                    ),
+                },
+                founder_message=message,
+            )
+        except Exception:
+            # Preserve the verified deterministic intelligence
+            # answer if the configured AI provider is unavailable.
+            reply = intelligence_answer["reply"]
 
     else:
-        reply = decision["reply"]
+        try:
+            reply = generate_sonny_ai_reply(
+                context=context,
+                founder_message=message,
+            )
+        except Exception:
+            # Preserve deterministic Sonny availability if
+            # the configured AI provider is unavailable.
+            reply = decision["reply"]
 
     add_memory(
         db=db,

@@ -530,12 +530,7 @@ def build_candidates(
         "documents"
     ]["signals"]["requirements"]
 
-    required_keys = {
-        "trade_license",
-        "passport_copy",
-        "incorporation_certificate",
-        "proof_of_address",
-    }
+    required_keys = set(requirements)
 
     missing_documents = sorted(
         key
@@ -842,14 +837,30 @@ def build_candidates(
         "ai_workforce"
     ]["summary"]
 
-    if workforce_summary["active"] == 0:
+    workforce_capacity = workforce_summary.get(
+        "included_capacity"
+    )
+    workforce_unlimited = bool(
+        workforce_summary.get("unlimited")
+    )
+    has_workforce_entitlement = (
+        workforce_unlimited
+        or int(workforce_capacity or 0) > 0
+    )
+
+    if (
+        has_workforce_entitlement
+        and workforce_summary["active"] == 0
+    ):
         candidates.append(
             InsightCandidate(
                 code="ai_workforce_underutilization",
                 category="ai_workforce",
                 title="AI workforce is underutilized",
                 summary=(
-                    "The company currently has no active AI employee."
+                    "The company has included AI workforce capacity, "
+                    "but no company-specific AI employee assignment "
+                    "is currently active."
                 ),
                 pattern_type="opportunity",
                 severity="low",
@@ -862,9 +873,14 @@ def build_candidates(
                 is_actionable=True,
                 source_summary={
                     "active_agents": 0,
-                    "total_agents": (
+                    "assigned_agents": (
                         workforce_summary["total"]
                     ),
+                    "included_capacity": workforce_capacity,
+                    "available_slots": workforce_summary.get(
+                        "available_slots"
+                    ),
+                    "unlimited": workforce_unlimited,
                 },
                 evidence=(
                     EvidenceCandidate(
@@ -876,11 +892,18 @@ def build_candidates(
                         ),
                         evidence_data={
                             "active_agents": 0,
-                            "total_agents": (
-                                workforce_summary[
-                                    "total"
-                                ]
+                            "assigned_agents": (
+                                workforce_summary["total"]
                             ),
+                            "included_capacity": (
+                                workforce_capacity
+                            ),
+                            "available_slots": (
+                                workforce_summary.get(
+                                    "available_slots"
+                                )
+                            ),
+                            "unlimited": workforce_unlimited,
                         },
                         observed_at=now,
                     ),

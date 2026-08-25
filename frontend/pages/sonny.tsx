@@ -8,8 +8,8 @@ import {
   approveSonnyOrchestration,
   completeSonnyAssignment,
   completeSonnyOrchestration,
-  getProgress,
   getSonny,
+  getSonnyState,
   getSonnyAgents,
   getSonnyAssignments,
   getSonnyOrchestrations,
@@ -19,8 +19,6 @@ import {
   startSonnyAssignment,
   startSonnyOrchestration,
 } from "../services/sonnyApi";
-import { getCompanyTasks } from "../services/taskApi";
-import { getCompanyDocuments } from "../services/documentApi";
 import {
   getActiveWorkspace,
   getWorkspaceChangedEventName,
@@ -50,7 +48,7 @@ import {
 
 type Dashboard = {
   sonny: any;
-  progress: any;
+  state: any;
   tasks: any[];
   documents: any[];
   agents: SonnyAgent[];
@@ -60,7 +58,7 @@ type Dashboard = {
 
 const emptyDashboard: Dashboard = {
   sonny: null,
-  progress: null,
+  state: null,
   tasks: [],
   documents: [],
   agents: [],
@@ -72,7 +70,7 @@ const array = <T,>(value: unknown): T[] =>
 
 function paidOrderAgents(companyId: string): SonnyAgent[] {
   const order = getConfirmedOrder(String(companyId));
-  if (!order || order.paymentStatus !== "paid_demo") return [];
+  if (!order || order.paymentStatus !== "paid") return [];
 
   return order.items
     .filter((item) => item.category === "ai" && item.billing === "monthly")
@@ -237,6 +235,51 @@ function statusTone(status?: string) {
 }
 
 
+
+function renderSonnyInline(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+
+  return parts.map((part, index) => {
+    if (
+      part.startsWith("**") &&
+      part.endsWith("**") &&
+      part.length > 4
+    ) {
+      return (
+        <strong key={index} className="font-black text-slate-950">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+
+    return <span key={index}>{part}</span>;
+  });
+}
+
+function SonnyMessageContent({ text }: { text: string }) {
+  const lines = String(text || "").split("\n");
+
+  return (
+    <div className="space-y-2 leading-6">
+      {lines.map((rawLine, index) => {
+        const line = rawLine
+          .replace(/^\s*#{1,6}\s+/, "")
+          .trimEnd();
+
+        if (!line.trim()) {
+          return <div key={index} className="h-1" />;
+        }
+
+        return (
+          <p key={index} className="whitespace-pre-wrap">
+            {renderSonnyInline(line)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SonnyAI() {
   const router = useRouter();
   const [workspace, setWorkspace] = useState(() => getActiveWorkspace());
@@ -354,9 +397,7 @@ export default function SonnyAI() {
 
     const results = await Promise.allSettled([
       getSonny(workspace.id),
-      getProgress(workspace.id),
-      getCompanyTasks(workspace.id),
-      getCompanyDocuments(workspace.id),
+      getSonnyState(workspace.id),
       getSonnyAgents(),
       getSonnyOrchestrations(workspace.id),
     ]);
@@ -374,7 +415,7 @@ export default function SonnyAI() {
     };
 
     const orchestration = pick(
-      results[5],
+      results[3],
       { runs: [] as SonnyOrchestrationRun[] },
       "orchestration engine"
     );
@@ -406,13 +447,25 @@ export default function SonnyAI() {
   )
 );
 
+    const sonnyBrief = pick(
+      results[0],
+      null,
+      "company brief"
+    );
+
+    const companyState = pick(
+      results[1],
+      null,
+      "company state"
+    );
+
     setData({
-      sonny: pick(results[0], null, "company state"),
-      progress: pick(results[1], null, "progress"),
-      tasks: array(pick(results[2], [], "tasks")),
-      documents: array(pick(results[3], [], "documents")),
+      sonny: sonnyBrief,
+      state: companyState,
+      tasks: array(companyState?.tasks?.items),
+      documents: array(companyState?.documents?.items),
       agents: mergeCompanyAgents(
-        array(pick(results[4], [], "agent registry")),
+        array(pick(results[2], [], "agent registry")),
         paidOrderAgents(String(workspace.id))
       ),
       runs: hydratedRuns,
@@ -457,12 +510,33 @@ export default function SonnyAI() {
     (task) => task.status === "completed"
   ).length;
   const pendingTasks = data.tasks.length - completedTasks;
-  const score =
-    data.progress?.progress ??
+  // Firmic's unified Sonny company state is the authority.
+  const score = Number(
+    data.state?.progress?.score ??
     data.sonny?.summary?.progress ??
-    (data.tasks.length
-      ? Math.round((completedTasks / data.tasks.length) * 100)
-      : 0);
+    0
+  );
+
+  const workforceSummary =
+    data.state?.ai_workforce?.summary || {};
+
+  const activeAgents = Number(
+    workforceSummary.active || 0
+  );
+
+  const includedAICapacity =
+    workforceSummary.unlimited
+      ? null
+      : Number(
+          workforceSummary.included_capacity || 0
+        );
+
+  const availableAISlots =
+    workforceSummary.unlimited
+      ? null
+      : Number(
+          workforceSummary.available_slots || 0
+        );
 
   const assignments = useMemo(
     () =>
@@ -476,9 +550,6 @@ export default function SonnyAI() {
     [data.runs]
   );
 
-  const activeAgents = data.agents.filter(
-    (agent) => !agent.status || agent.status === "active"
-  ).length;
   const runningRuns = data.runs.filter(
     (run) => run.status === "running"
   ).length;
@@ -499,7 +570,19 @@ export default function SonnyAI() {
       (item) => item.status === "awaiting_approval"
     ).length;
 
-  const summary = `${workspace?.name || "The company"} is at ${score}% progress. ${activeAgents} agents are online. ${runningRuns} orchestration runs are active, ${completedRuns} are completed, ${pendingApprovals} approvals are pending, ${completedAssignments} assignments are completed, and ${pendingTasks} tasks remain open.`;
+  const workforceSummaryText =
+    workforceSummary.unlimited
+      ? `${activeAgents} active AI employee assignment(s), unlimited included capacity`
+      : `${activeAgents} active AI employee assignment(s), ${includedAICapacity} included, ${availableAISlots} available`;
+
+  const summary =
+    `${workspace?.name || "The company"} is at ${score}% readiness. ` +
+    `${workforceSummaryText}. ` +
+    `${runningRuns} orchestration runs are active, ` +
+    `${completedRuns} are completed, ` +
+    `${pendingApprovals} approvals are pending, ` +
+    `${completedAssignments} assignments are completed, ` +
+    `and ${pendingTasks} tasks remain open.`;
 
   const hour = new Date().getHours();
   const greeting =
@@ -665,15 +748,28 @@ export default function SonnyAI() {
       lower.includes("how many agents");
 
     if (asksForWorkforce) {
-      const active = data.agents.filter(
-        (agent) => !agent.status || agent.status === "active"
+      const assigned = Number(
+        workforceSummary.assigned || 0
       );
-      const names = active
-        .map((agent) => agent.display_name || agent.name || label(agent.agent_code))
-        .filter(Boolean);
-      const response = active.length
-        ? `AI workforce overview:\nActive AI employees: ${active.length}. Total AI employees: ${data.agents.length}.\n${names.join(", ")}.`
-        : "AI workforce overview: No active AI employees are recorded for this company.";
+
+      const capacity = workforceSummary.unlimited
+        ? "Unlimited"
+        : String(includedAICapacity);
+
+      const available = workforceSummary.unlimited
+        ? "Unlimited"
+        : String(availableAISlots);
+
+      const response =
+        `AI workforce overview:\n` +
+        `Plan: ${String(
+          workforceSummary.plan_name || "Unknown"
+        )}.\n` +
+        `Included capacity: ${capacity}.\n` +
+        `Active assignments: ${activeAgents}.\n` +
+        `Company-specific assignments: ${assigned}.\n` +
+        `Available slots: ${available}.`;
+
       reply(response, response);
       return;
     }
@@ -696,9 +792,21 @@ export default function SonnyAI() {
         );
       }, 350);
 
-      const response = await sendSonnyChat(workspace.id, clean, {
-        signal: controller.signal,
-      });
+      // Never allow an AI provider request to leave Sonny permanently
+      // stuck in the working/planning state.
+      const requestTimeout = window.setTimeout(() => {
+        controller.abort();
+      }, 45000);
+
+      let response: SonnyChatResponse;
+
+      try {
+        response = await sendSonnyChat(workspace.id, clean, {
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(requestTimeout);
+      }
 
       if (response.actions?.length) {
         setPendingPlan(null);
@@ -975,12 +1083,12 @@ export default function SonnyAI() {
                                       : "Sonny"}
                                 </p>
                               </div>
-                              <p className="leading-6 whitespace-pre-wrap">
-                                {message.text}
+                              <div>
+                                <SonnyMessageContent text={message.text} />
                                 {streamingMessageId === message.id && (
                                   <span className="ml-1 inline-block h-4 w-1 animate-pulse rounded-full bg-violet-500 align-middle" />
                                 )}
-                              </p>
+                              </div>
                               <p className="text-[10px] opacity-45 mt-2">
                                 {date(message.createdAt)}
                               </p>
@@ -1225,7 +1333,9 @@ export default function SonnyAI() {
                         <SmallMetric title="Tasks" value={data.tasks.length} />
                         <SmallMetric
                           title="Documents"
-                          value={data.documents.length}
+                          value={Number(
+                            data.state?.documents?.summary?.total || 0
+                          )}
                         />
                         <SmallMetric
                           title="Integrations"
@@ -1237,7 +1347,11 @@ export default function SonnyAI() {
 
                     <Panel
                       title="AI Workforce"
-                      subtitle={`${activeAgents} agents connected`}
+                      subtitle={
+                        workforceSummary.unlimited
+                          ? `${activeAgents} active · unlimited included`
+                          : `${activeAgents} active · ${includedAICapacity} included`
+                      }
                     >
                       <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
                         {data.agents.map((agent) => (

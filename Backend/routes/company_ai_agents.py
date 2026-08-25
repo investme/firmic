@@ -8,15 +8,19 @@ from database import get_db
 from models.company import Company
 from models.company_ai_agent import CompanyAIAgent
 from models.sonny_orchestration import SonnyAgentRegistry
-from models.usage_ledger import UsageLedger
+from models.subscription import SubscriptionItem
 from schemas.company_ai_agent import (
     DeactivateAIAgentRequest,
     HireAIAgentRequest,
 )
 from services.activity_service import record_activity
-from services.ledger_service import (
-    current_invoice_month,
-    record_usage,
+from services.subscription_service import (
+    add_subscription_item,
+    calculate_subscription_totals,
+    get_service_by_code,
+    included_quantity_for_plan,
+    remove_subscription_item,
+    require_company_subscription,
 )
 
 
@@ -24,6 +28,13 @@ router = APIRouter(
     prefix="/api/ai-workforce",
     tags=["AI Workforce"],
 )
+
+
+CORE_AGENT_CODES = {
+    "sonny",
+    "hermes",
+    "julia",
+}
 
 
 def is_admin(token: dict) -> bool:
@@ -51,6 +62,21 @@ def authorize_company(
 
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
+
+    return company
+
+
+def require_active_company(
+    company: Company,
+) -> Company:
+    if str(company.status or "").strip().lower() != "active":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "AI Workforce is available only after "
+                "the company platform is fully activated."
+            ),
+        )
 
     return company
 
@@ -136,17 +162,36 @@ def hire_agent(
     db: Session = Depends(get_db),
 ):
     company = authorize_company(payload.company_id, token, db)
+    require_active_company(company)
 
-    if company.status == "terminated":
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot hire an agent for a terminated company",
-        )
+    subscription = require_company_subscription(
+        db,
+        company.id,
+    )
+    ai_employee_service = get_service_by_code(
+        db,
+        "SERVICE_AI_EMPLOYEE",
+    )
+    authoritative_monthly_price = float(
+        ai_employee_service.monthly_price or 0
+    )
 
     registry_agent = resolve_registry_agent(
         db,
         agent_code=payload.agent_code,
     )
+
+    if (
+        registry_agent
+        and registry_agent.agent_code in CORE_AGENT_CODES
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{registry_agent.name} is a core Firmic agent "
+                "and cannot be hired as an AI Employee."
+            ),
+        )
 
     agent_name = (
         registry_agent.name
@@ -172,7 +217,7 @@ def hire_agent(
     try:
         if agent:
             agent.status = "active"
-            agent.monthly_price_usd = payload.monthly_price_usd
+            agent.monthly_price_usd = authoritative_monthly_price
             agent.activated_at = datetime.datetime.utcnow()
             agent.deactivated_at = None
 
@@ -188,55 +233,76 @@ def hire_agent(
                     else None
                 ),
                 agent_name=agent_name,
-                monthly_price_usd=payload.monthly_price_usd,
+                monthly_price_usd=authoritative_monthly_price,
                 status="active",
             )
             db.add(agent)
 
         db.flush()
 
-        existing_charge = (
-            db.query(UsageLedger)
+        active_agent_count = (
+            db.query(CompanyAIAgent)
             .filter(
-                UsageLedger.company_id == company.id,
-                UsageLedger.service == "ai_workforce",
-                UsageLedger.resource == agent_name,
-                UsageLedger.action == "monthly_agent_subscription",
-                UsageLedger.invoice_month == current_invoice_month(),
-                UsageLedger.status == "unbilled",
+                CompanyAIAgent.company_id == company.id,
+                CompanyAIAgent.status == "active",
+            )
+            .count()
+        )
+
+        included_quantity = included_quantity_for_plan(
+            ai_employee_service,
+            subscription.plan.code,
+        )
+
+        actor = str(
+            token.get("sub")
+            or token.get("email")
+            or ""
+        )
+
+        if included_quantity is None:
+            billable_quantity = 0
+        else:
+            billable_quantity = max(
+                active_agent_count - int(included_quantity),
+                0,
+            )
+
+        existing_ai_item = (
+            db.query(SubscriptionItem)
+            .filter(
+                SubscriptionItem.subscription_id == subscription.id,
+                SubscriptionItem.service_id == ai_employee_service.id,
+                SubscriptionItem.status != "cancelled",
             )
             .first()
         )
 
-        if not existing_charge:
-            record_usage(
+        if billable_quantity > 0:
+            add_subscription_item(
                 db,
-                company_id=company.id,
-                service="ai_workforce",
-                category="subscription",
-                resource=agent_name,
-                action="monthly_agent_subscription",
-                quantity=1,
-                unit="agent_month",
-                unit_price=payload.monthly_price_usd,
-                tax_rate=0.05,
-                source_type="company_ai_agent",
-                source_id=agent.id,
+                subscription=subscription,
+                service=ai_employee_service,
+                quantity=billable_quantity,
+                actor=actor,
+                included_by_plan=False,
                 metadata={
-                    "agent_name": agent_name,
-                    "agent_code": (
-                        registry_agent.agent_code
-                        if registry_agent
-                        else None
-                    ),
-                    "registry_agent_id": (
-                        registry_agent.id
-                        if registry_agent
-                        else None
-                    ),
+                    "source": "ai_workforce",
+                    "service_code": "SERVICE_AI_EMPLOYEE",
+                    "active_agent_count": active_agent_count,
+                    "included_quantity": included_quantity,
                 },
-                commit=False,
             )
+        elif existing_ai_item:
+            remove_subscription_item(
+                db,
+                subscription=subscription,
+                item_id=existing_ai_item.id,
+                actor=actor,
+            )
+
+        db.flush()
+        calculate_subscription_totals(subscription)
 
         record_activity(
             db,
@@ -271,11 +337,32 @@ def deactivate_agent(
     db: Session = Depends(get_db),
 ):
     company = authorize_company(payload.company_id, token, db)
+    require_active_company(company)
 
+    subscription = require_company_subscription(
+        db,
+        company.id,
+    )
+    ai_employee_service = get_service_by_code(
+        db,
+        "SERVICE_AI_EMPLOYEE",
+    )
     registry_agent = resolve_registry_agent(
         db,
         agent_code=payload.agent_code,
     )
+
+    if (
+        registry_agent
+        and registry_agent.agent_code in CORE_AGENT_CODES
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{registry_agent.name} is a core Firmic agent "
+                "and cannot be deactivated through AI Employee controls."
+            ),
+        )
 
     query = db.query(CompanyAIAgent).filter(
         CompanyAIAgent.company_id == company.id
@@ -309,20 +396,71 @@ def deactivate_agent(
         agent.status = "inactive"
         agent.deactivated_at = datetime.datetime.utcnow()
 
-        ledger_entries = (
-            db.query(UsageLedger)
+        db.flush()
+
+        active_agent_count = (
+            db.query(CompanyAIAgent)
             .filter(
-                UsageLedger.company_id == company.id,
-                UsageLedger.service == "ai_workforce",
-                UsageLedger.resource == agent_name,
-                UsageLedger.invoice_month == current_invoice_month(),
-                UsageLedger.status == "unbilled",
+                CompanyAIAgent.company_id == company.id,
+                CompanyAIAgent.status == "active",
             )
-            .all()
+            .count()
         )
 
-        for entry in ledger_entries:
-            entry.status = "void"
+        ai_employee_item = (
+            db.query(SubscriptionItem)
+            .filter(
+                SubscriptionItem.subscription_id == subscription.id,
+                SubscriptionItem.service_id == ai_employee_service.id,
+                SubscriptionItem.status != "cancelled",
+            )
+            .first()
+        )
+
+        actor = str(
+            token.get("sub")
+            or token.get("email")
+            or ""
+        )
+
+        included_quantity = included_quantity_for_plan(
+            ai_employee_service,
+            subscription.plan.code,
+        )
+
+        if included_quantity is None:
+            billable_quantity = 0
+        else:
+            billable_quantity = max(
+                active_agent_count - int(included_quantity),
+                0,
+            )
+
+        if billable_quantity > 0:
+            add_subscription_item(
+                db,
+                subscription=subscription,
+                service=ai_employee_service,
+                quantity=billable_quantity,
+                actor=actor,
+                included_by_plan=False,
+                metadata={
+                    "source": "ai_workforce",
+                    "service_code": "SERVICE_AI_EMPLOYEE",
+                    "active_agent_count": active_agent_count,
+                    "included_quantity": included_quantity,
+                },
+            )
+        elif ai_employee_item:
+            remove_subscription_item(
+                db,
+                subscription=subscription,
+                item_id=ai_employee_item.id,
+                actor=actor,
+            )
+
+        db.flush()
+        calculate_subscription_totals(subscription)
 
         record_activity(
             db,
