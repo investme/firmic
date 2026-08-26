@@ -38,13 +38,12 @@ type ContextValue = {
   push: (item: Omit<FirmicNotification, "id" | "createdAt" | "read"> & {
     id?: string; createdAt?: string; read?: boolean;
   }) => void;
-  markRead: (id: string) => void;
-  markAllRead: () => void;
+  markRead: (id: string) => Promise<void>;
+  markAllRead: () => Promise<void>;
   dismiss: (id: string) => void;
 };
 
 const Context = createContext<ContextValue | null>(null);
-const READ_KEY = "firmic-notification-read-ids";
 
 function useNotificationContext() {
   const value = useContext(Context);
@@ -52,21 +51,6 @@ function useNotificationContext() {
   return value;
 }
 
-function readIds() {
-  if (typeof window === "undefined") return new Set<string>();
-  try {
-    const value = JSON.parse(localStorage.getItem(READ_KEY) || "[]");
-    return new Set<string>(Array.isArray(value) ? value : []);
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function saveIds(ids: Set<string>) {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(READ_KEY, JSON.stringify([...ids]));
-  }
-}
 
 function toneFor(type: string): Tone {
   const value = type.toLowerCase();
@@ -113,6 +97,7 @@ function relativeTime(value: string) {
 }
 
 function NotificationProvider({ children }: { children: ReactNode }) {
+  const { publish } = useEvents();
   const [workspaceId, setWorkspaceId] = useState(() => getActiveWorkspace()?.id || "");
   const [notifications, setNotifications] = useState<FirmicNotification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -149,7 +134,6 @@ function NotificationProvider({ children }: { children: ReactNode }) {
       const items = Array.isArray(body?.notifications)
         ? body.notifications
         : Array.isArray(body) ? body : [];
-      const read = readIds();
 
       setNotifications((current) => {
         const live = current.filter((item) => item.source === "event-bus");
@@ -161,7 +145,7 @@ function NotificationProvider({ children }: { children: ReactNode }) {
             title: item.title || "Firmic notification",
             description: item.description || undefined,
             createdAt: item.created_at || new Date().toISOString(),
-            read: Boolean(item.read) || read.has(String(item.id)),
+            read: Boolean(item.read),
             tone: toneFor(type),
             source: item.source || "firmic-api",
             workspaceId,
@@ -183,6 +167,203 @@ function NotificationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  useEffect(() => {
+    if (!workspaceId || typeof window === "undefined") return;
+
+    const token = localStorage.getItem("firmic_token");
+    if (!token) return;
+
+    const controller = new AbortController();
+
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempt = 0;
+    let lastEventId: string | null = null;
+    let stopped = false;
+
+    const reconnectDelay = () =>
+      Math.min(30_000, 1_000 * (2 ** Math.min(reconnectAttempt, 5)));
+
+    const connect = async () => {
+      if (stopped || controller.signal.aborted) return;
+
+      try {
+        const headers: Record<string, string> = {
+          Accept: "text/event-stream",
+          Authorization: `Bearer ${token}`,
+        };
+
+        if (lastEventId) {
+          headers["Last-Event-ID"] = lastEventId;
+        }
+
+        const response = await fetch(
+          `${API_URL}/api/notifications/company/${encodeURIComponent(workspaceId)}/stream`,
+          {
+            method: "GET",
+            headers,
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Notification stream failed with status ${response.status}`,
+          );
+        }
+
+        if (!response.body) {
+          throw new Error("Notification stream response has no body.");
+        }
+
+        reconnectAttempt = 0;
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        let buffer = "";
+
+        while (!stopped && !controller.signal.aborted) {
+          const { value, done } = await reader.read();
+
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          buffer = buffer.replace(/\r\n/g, "\n");
+
+          let boundary = buffer.indexOf("\n\n");
+
+          while (boundary !== -1) {
+            const frame = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+
+            let eventName = "message";
+            let eventId = "";
+            const dataLines: string[] = [];
+
+            for (const line of frame.split("\n")) {
+              if (!line || line.startsWith(":")) continue;
+
+              if (line.startsWith("id:")) {
+                eventId = line.slice(3).trimStart();
+                continue;
+              }
+
+              if (line.startsWith("event:")) {
+                eventName = line.slice(6).trimStart();
+                continue;
+              }
+
+              if (line.startsWith("data:")) {
+                dataLines.push(line.slice(5).trimStart());
+              }
+            }
+
+            if (eventId) {
+              lastEventId = eventId;
+            }
+
+            if (
+              eventName === "notification.created" &&
+              dataLines.length > 0
+            ) {
+              const payload = JSON.parse(dataLines.join("\n"));
+
+              await publish({
+                type: "notification.created",
+                payload,
+                metadata: {
+                  source: "notification-sse",
+                  workspaceId,
+                },
+              });
+
+              setNotifications((current) => {
+                const incomingId = String(payload?.id || "");
+
+                if (!incomingId) {
+                  return current;
+                }
+
+                const alreadyPresent = current.some(
+                  (notification) =>
+                    String(notification.id) === incomingId,
+                );
+
+                if (alreadyPresent) {
+                  return current;
+                }
+
+                const type = String(
+                  payload?.type || "info",
+                );
+
+                const notification: FirmicNotification = {
+                  id: incomingId,
+                  type,
+                  title:
+                    payload?.title ||
+                    "Firmic notification",
+                  description:
+                    payload?.description ||
+                    undefined,
+                  createdAt:
+                    payload?.created_at ||
+                    new Date().toISOString(),
+                  read: Boolean(payload?.read),
+                  tone: toneFor(type),
+                  source: "notification-sse",
+                  workspaceId,
+                  href:
+                    payload?.href ||
+                    hrefFor(type),
+                  eventId:
+                    eventId ||
+                    incomingId,
+                };
+
+                return [
+                  notification,
+                  ...current,
+                ].slice(0, 150);
+              });
+            }
+
+            boundary = buffer.indexOf("\n\n");
+          }
+        }
+      } catch (error) {
+        if (stopped || controller.signal.aborted) return;
+
+        console.warn(
+          "Firmic notification stream disconnected.",
+          error,
+        );
+      }
+
+      if (stopped || controller.signal.aborted) return;
+
+      const delay = reconnectDelay();
+      reconnectAttempt += 1;
+
+      reconnectTimer = setTimeout(() => {
+        void connect();
+      }, delay);
+    };
+
+    void connect();
+
+    return () => {
+      stopped = true;
+
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+
+      controller.abort();
+    };
+  }, [publish, workspaceId]);
+
   const push = useCallback<ContextValue["push"]>((input) => {
     const item: FirmicNotification = {
       ...input,
@@ -201,23 +382,61 @@ function NotificationProvider({ children }: { children: ReactNode }) {
     });
   }, [workspaceId]);
 
-  const markRead = useCallback((id: string) => {
+  const markRead = useCallback(async (id: string) => {
+    if (!workspaceId || typeof window === "undefined") return;
+
+    const token = localStorage.getItem("firmic_token");
+    if (!token) return;
+
+    const response = await fetch(
+      `${API_URL}/api/notifications/company/${encodeURIComponent(workspaceId)}/read/${encodeURIComponent(id)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Mark notification read failed with status ${response.status}`,
+      );
+    }
+
     setNotifications((current) => current.map((item) =>
       item.id === id ? { ...item, read: true } : item
     ));
-    const ids = readIds();
-    ids.add(id);
-    saveIds(ids);
-  }, []);
+  }, [workspaceId]);
 
-  const markAllRead = useCallback(() => {
-    setNotifications((current) => {
-      const ids = readIds();
-      current.forEach((item) => ids.add(item.id));
-      saveIds(ids);
-      return current.map((item) => ({ ...item, read: true }));
-    });
-  }, []);
+  const markAllRead = useCallback(async () => {
+    if (!workspaceId || typeof window === "undefined") return;
+
+    const token = localStorage.getItem("firmic_token");
+    if (!token) return;
+
+    const response = await fetch(
+      `${API_URL}/api/notifications/company/${encodeURIComponent(workspaceId)}/read-all`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Mark all notifications read failed with status ${response.status}`,
+      );
+    }
+
+    setNotifications((current) =>
+      current.map((item) => ({ ...item, read: true }))
+    );
+  }, [workspaceId]);
 
   const value = useMemo<ContextValue>(() => ({
     notifications,

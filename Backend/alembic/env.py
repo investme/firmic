@@ -26,6 +26,7 @@ from models.subscription import (
     SubscriptionEvent,
 )
 from models.activity_log import ActivityLog
+from models.notification_read_state import NotificationReadState
 from models.payment_transaction import PaymentTransaction
 
 from models.company_ai_agent import CompanyAIAgent

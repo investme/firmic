@@ -151,23 +151,117 @@ export default function NotificationsPage() {
     }
   }
 
-  function markNotificationRead(id: string) {
-    setNotifications((current) =>
-      current.map((item) =>
-        item.id === id
-          ? { ...item, read: true }
-          : item
-      )
-    );
+  async function markNotificationRead(id: string) {
+    if (!workspace?.id) {
+      return;
+    }
+
+    try {
+      setError("");
+
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("firmic_token")
+          : null;
+
+      if (!token) {
+        throw new Error("Not authenticated.");
+      }
+
+      const response = await fetch(
+        `${API_URL}/api/notifications/company/${workspace.id}/read/${id}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const body = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const detail =
+          body?.detail ||
+          body?.message ||
+          `Mark read request failed with status ${response.status}`;
+
+        throw new Error(
+          typeof detail === "string"
+            ? detail
+            : JSON.stringify(detail)
+        );
+      }
+
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === id
+            ? { ...item, read: true }
+            : item
+        )
+      );
+    } catch (err: any) {
+      setError(
+        err?.message ||
+          "Unable to mark notification as read."
+      );
+    }
   }
 
-  function markAllRead() {
-    setNotifications((current) =>
-      current.map((item) => ({
-        ...item,
-        read: true,
-      }))
-    );
+  async function markAllRead() {
+    if (!workspace?.id) {
+      return;
+    }
+
+    try {
+      setError("");
+
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("firmic_token")
+          : null;
+
+      if (!token) {
+        throw new Error("Not authenticated.");
+      }
+
+      const response = await fetch(
+        `${API_URL}/api/notifications/company/${workspace.id}/read-all`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const body = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const detail =
+          body?.detail ||
+          body?.message ||
+          `Mark all read request failed with status ${response.status}`;
+
+        throw new Error(
+          typeof detail === "string"
+            ? detail
+            : JSON.stringify(detail)
+        );
+      }
+
+      setNotifications((current) =>
+        current.map((item) => ({
+          ...item,
+          read: true,
+        }))
+      );
+    } catch (err: any) {
+      setError(
+        err?.message ||
+          "Unable to mark notifications as read."
+      );
+    }
   }
 
   const filteredNotifications = useMemo(() => {
