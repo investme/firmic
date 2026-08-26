@@ -53,6 +53,8 @@ from models.sonny_automation import (
     SonnyAutomationAction,
 )
 
+from models.sonny_action_confirmation import SonnyActionConfirmation
+
 from models.sonny_decision import SonnyDecision
 
 from models.sonny_insight import (

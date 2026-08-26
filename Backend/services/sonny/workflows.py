@@ -111,7 +111,7 @@ WORKFLOW_STEP_EXECUTION: dict[str, dict[str, Any]] = {
     },
     "prepare_billing_action": {
         "action_code": "prepare_billing_action",
-        "approval_required": False,
+        "approval_required": True,
     },
 
     # Meeting review is observational/coordinative, not booking mutation.

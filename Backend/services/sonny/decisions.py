@@ -754,6 +754,8 @@ def approve_decision(
             "Only proposed decisions can be approved."
         )
 
+    previous_status = decision.status
+
     decision.status = "approved"
     decision.approved_by = actor_id
     decision.approved_at = utcnow()
@@ -768,6 +770,13 @@ def approve_decision(
         actor_type="tenant",
         actor_id=actor_id,
         metadata={
+            "audit_version": "b12.7",
+            "authority_class": "founder",
+            "operation": "approve",
+            "target_type": "decision",
+            "target_id": decision.id,
+            "previous_status": previous_status,
+            "resulting_status": decision.status,
             "decision_code": decision.decision_code,
             "priority": decision.priority,
         },
@@ -790,6 +799,8 @@ def reject_decision(
             "Only proposed or approved decisions can be rejected."
         )
 
+    previous_status = decision.status
+
     decision.status = "rejected"
     decision.rejected_by = actor_id
     decision.rejected_at = utcnow()
@@ -809,6 +820,13 @@ def reject_decision(
         actor_type="tenant",
         actor_id=actor_id,
         metadata={
+            "audit_version": "b12.7",
+            "authority_class": "founder",
+            "operation": "reject",
+            "target_type": "decision",
+            "target_id": decision.id,
+            "previous_status": previous_status,
+            "resulting_status": decision.status,
             "decision_code": decision.decision_code,
             "reason": decision.rejection_reason,
         },
@@ -830,6 +848,8 @@ def cancel_decision(
             "Only proposed or approved decisions can be cancelled."
         )
 
+    previous_status = decision.status
+
     decision.status = "cancelled"
     decision.cancelled_by = actor_id
     decision.cancelled_at = utcnow()
@@ -844,6 +864,13 @@ def cancel_decision(
         actor_type="tenant",
         actor_id=actor_id,
         metadata={
+            "audit_version": "b12.7",
+            "authority_class": "founder",
+            "operation": "cancel",
+            "target_type": "decision",
+            "target_id": decision.id,
+            "previous_status": previous_status,
+            "resulting_status": decision.status,
             "decision_code": decision.decision_code,
         },
     )

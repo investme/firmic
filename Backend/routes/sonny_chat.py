@@ -10,11 +10,19 @@ from auth import get_token_payload
 from database import get_db
 from firmic_models import User
 from models.company import Company
+from services.sonny.founder_authority import (
+    require_founder_authority,
+)
 from services.sonny.memory import add_memory, remember_founder_message
 from services.sonny.executive_context import build_executive_context
 from services.sonny.executive_decision import build_decision_payload
 from services.sonny.executive_planner import build_planner_payload
 from services.sonny.executive_actions import execute_action
+from services.sonny.action_confirmation import (
+    consume_action_confirmation,
+    issue_action_confirmation,
+    serialize_action_confirmation,
+)
 from services.executive_intelligence.executive_engine import generate_executive_intelligence
 from services.sonny.executive_intelligence_bridge import answer_from_executive_intelligence
 from services.sonny.navigation import resolve_navigation
@@ -39,6 +47,10 @@ class SonnyChatRequest(BaseModel):
     company_id: str
     message: str = Field(min_length=1, max_length=10000)
     confirmed: bool = False
+    confirmation_id: str | None = None
+
+    # Deprecated compatibility field.
+    # Never use client-supplied plan data as execution authority.
     plan: dict[str, Any] | None = None
 
 
@@ -315,10 +327,38 @@ def sonny_chat(
         founder_message=message,
     )
 
-    plan = payload.plan if payload.confirmed and payload.plan else planner["plan"]
+    plan = planner["plan"]
+    confirmation = None
     action_result = None
 
-    if payload.confirmed and plan:
+    if payload.confirmed:
+        require_founder_authority(
+            company=company,
+            actor_id=actor_id,
+        )
+
+        if not payload.confirmation_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "A server-issued confirmation_id "
+                    "is required for confirmed execution."
+                ),
+            )
+
+        try:
+            plan = consume_action_confirmation(
+                db,
+                confirmation_id=payload.confirmation_id,
+                company_id=str(company.id),
+                actor_id=str(actor_id),
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=str(exc),
+            ) from exc
+
         action_result = execute_action(
             context={
                 **context,
@@ -355,6 +395,27 @@ def sonny_chat(
 
     elif planner["has_action"] and planner["ready_to_execute"]:
         reply = action_preview(planner["plan"])
+
+        if planner["requires_confirmation"]:
+            require_founder_authority(
+                company=company,
+                actor_id=actor_id,
+            )
+
+            confirmation_record = issue_action_confirmation(
+                db,
+                company_id=str(company.id),
+                actor_id=str(actor_id),
+                plan=planner["plan"],
+            )
+
+            # Preview issuance is deliberate persisted authority.
+            db.commit()
+            db.refresh(confirmation_record)
+
+            confirmation = serialize_action_confirmation(
+                confirmation_record
+            )
 
     elif intelligence_answer:
         try:
@@ -430,6 +491,12 @@ def sonny_chat(
         "executive_intelligence": intelligence,
         "intelligence_answer": intelligence_answer,
         "plan": plan,
+        "confirmation": confirmation,
+        "confirmation_id": (
+            confirmation.get("id")
+            if isinstance(confirmation, dict)
+            else None
+        ),
         "has_action": bool(planner["has_action"]),
         "ready_to_execute": bool(planner["ready_to_execute"]),
         "requires_confirmation": bool(

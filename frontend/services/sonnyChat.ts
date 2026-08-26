@@ -22,6 +22,7 @@ export type SonnyChatResponse = {
   has_action?: boolean;
   requires_confirmation?: boolean;
   plan?: SonnyPlan | null;
+  confirmation_id?: string | null;
   ready_to_execute?: boolean;
   missing_fields?: string[];
   action_result?: {
@@ -38,7 +39,7 @@ export async function sendSonnyChat(
   message: string,
   options?: {
     confirmed?: boolean;
-    plan?: SonnyPlan | null;
+    confirmationId?: string | null;
     signal?: AbortSignal;
   }
 ): Promise<SonnyChatResponse> {
@@ -58,7 +59,7 @@ export async function sendSonnyChat(
       company_id: companyId,
       message,
       confirmed: Boolean(options?.confirmed),
-      plan: options?.plan || null,
+      confirmation_id: options?.confirmationId || null,
     }),
   });
 

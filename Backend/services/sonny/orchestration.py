@@ -895,6 +895,8 @@ def approve_orchestration_run(
             "Only orchestration runs awaiting approval can be approved."
         )
 
+    previous_status = run.status
+
     run.status = "approved"
     run.approved_by = actor_id
     run.approved_at = utcnow()
@@ -908,6 +910,16 @@ def approve_orchestration_run(
         description=run.orchestration_type,
         actor_type="tenant",
         actor_id=actor_id,
+        metadata={
+            "audit_version": "b12.7",
+            "authority_class": "founder",
+            "operation": "approve",
+            "target_type": "orchestration",
+            "target_id": run.id,
+            "previous_status": previous_status,
+            "resulting_status": run.status,
+            "orchestration_type": run.orchestration_type,
+        },
     )
 
     db.commit()
@@ -932,6 +944,8 @@ def approve_assignment(
         raise ValueError(
             "Only assignments awaiting approval can be approved."
         )
+
+    previous_status = assignment.status
 
     assignment.status = "approved"
     assignment.approved_by = actor_id
@@ -961,7 +975,15 @@ def approve_assignment(
         actor_type="tenant",
         actor_id=actor_id,
         metadata={
+            "audit_version": "b12.7",
+            "authority_class": "founder",
+            "operation": "approve",
+            "target_type": "assignment",
+            "target_id": assignment.id,
+            "previous_status": previous_status,
+            "resulting_status": assignment.status,
             "assignment_id": assignment.id,
+            "orchestration_run_id": run.id,
             "agent_code": assignment.agent.agent_code,
         },
     )
@@ -1438,6 +1460,7 @@ def cancel_orchestration_run(
         )
 
     now = utcnow()
+    previous_status = run.status
 
     run.status = "cancelled"
     run.cancelled_at = now
@@ -1457,6 +1480,16 @@ def cancel_orchestration_run(
         description=run.orchestration_type,
         actor_type="tenant",
         actor_id=actor_id,
+        metadata={
+            "audit_version": "b12.7",
+            "authority_class": "founder",
+            "operation": "cancel",
+            "target_type": "orchestration",
+            "target_id": run.id,
+            "previous_status": previous_status,
+            "resulting_status": run.status,
+            "orchestration_type": run.orchestration_type,
+        },
     )
 
     db.commit()

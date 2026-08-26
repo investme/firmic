@@ -523,10 +523,18 @@ def add_automation_action(
                 "Workflow step does not belong to this company."
             )
 
-    required = (
+    # Server policy is authoritative.
+    #
+    # A caller may make a normally-safe action stricter by
+    # explicitly requesting approval, but may never downgrade
+    # an action that the allowlist requires approval for.
+    required = bool(
         allowed.approval_required
-        if approval_required is None
-        else bool(approval_required)
+        or (
+            approval_required
+            if approval_required is not None
+            else False
+        )
     )
 
     action_key = build_action_idempotency_key(
@@ -614,6 +622,8 @@ def approve_run(
             "Only automation runs awaiting approval can be approved."
         )
 
+    previous_status = run.status
+
     run.status = "approved"
     run.approved_by = actor_id
     run.approved_at = utcnow()
@@ -627,6 +637,16 @@ def approve_run(
         description=run.automation_type,
         actor_type="tenant",
         actor_id=actor_id,
+        metadata={
+            "audit_version": "b12.7",
+            "authority_class": "founder",
+            "operation": "approve",
+            "target_type": "automation",
+            "target_id": run.id,
+            "previous_status": previous_status,
+            "resulting_status": run.status,
+            "automation_type": run.automation_type,
+        },
     )
 
     db.commit()
@@ -651,6 +671,8 @@ def approve_action(
             "Only actions awaiting approval can be approved."
         )
 
+    previous_status = action.status
+
     action.status = "approved"
     action.approved_by = actor_id
     action.approved_at = utcnow()
@@ -665,7 +687,16 @@ def approve_action(
         actor_type="tenant",
         actor_id=actor_id,
         metadata={
+            "audit_version": "b12.7",
+            "authority_class": "founder",
+            "operation": "approve",
+            "target_type": "automation_action",
+            "target_id": action.id,
+            "previous_status": previous_status,
+            "resulting_status": action.status,
             "action_id": action.id,
+            "action_code": action.action_code,
+            "automation_run_id": run.id,
         },
     )
 
@@ -964,6 +995,7 @@ def cancel_run(
         )
 
     now = utcnow()
+    previous_status = run.status
 
     run.status = "cancelled"
     run.cancelled_at = now
@@ -983,6 +1015,16 @@ def cancel_run(
         description=run.automation_type,
         actor_type="tenant",
         actor_id=actor_id,
+        metadata={
+            "audit_version": "b12.7",
+            "authority_class": "founder",
+            "operation": "cancel",
+            "target_type": "automation",
+            "target_id": run.id,
+            "previous_status": previous_status,
+            "resulting_status": run.status,
+            "automation_type": run.automation_type,
+        },
     )
 
     db.commit()

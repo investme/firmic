@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState } from "react";
 import { useRouter } from "next/router";
 import FirmicSidebar from "../components/FirmicSidebar";
 import ProtectedRoute from "../components/ProtectedRoute";
@@ -18,6 +21,18 @@ import {
   SonnyOrchestrationRun,
   startSonnyAssignment,
   startSonnyOrchestration,
+  getSonnyDecisions,
+  getSonnyAutomations,
+  type SonnyDecision,
+  type SonnyAutomationRun,
+  approveSonnyDecision,
+  rejectSonnyDecision,
+  cancelSonnyDecision,
+  approveSonnyAutomation,
+  cancelSonnyAutomation,
+  approveSonnyAutomationAction,
+  type SonnyAutomationAction,
+  cancelSonnyOrchestration,
 } from "../services/sonnyApi";
 import {
   getActiveWorkspace,
@@ -53,6 +68,8 @@ type Dashboard = {
   documents: any[];
   agents: SonnyAgent[];
   runs: SonnyOrchestrationRun[];
+  decisions: SonnyDecision[];
+  automations: SonnyAutomationRun[];
 };
 
 
@@ -63,6 +80,8 @@ const emptyDashboard: Dashboard = {
   documents: [],
   agents: [],
   runs: [],
+  decisions: [],
+  automations: [],
 };
 
 const array = <T,>(value: unknown): T[] =>
@@ -360,6 +379,9 @@ export default function SonnyAI() {
   });
 
 
+  const [pendingConfirmationId, setPendingConfirmationId] =
+    useState<string | null>(null);
+
   useEffect(() => {
     const sync = () => setWorkspace(getActiveWorkspace());
     sync();
@@ -400,6 +422,8 @@ export default function SonnyAI() {
       getSonnyState(workspace.id),
       getSonnyAgents(),
       getSonnyOrchestrations(workspace.id),
+      getSonnyDecisions(workspace.id),
+      getSonnyAutomations(workspace.id),
     ]);
 
     const failed: string[] = [];
@@ -459,6 +483,18 @@ export default function SonnyAI() {
       "company state"
     );
 
+    const decisions = pick(
+      results[4],
+      [] as SonnyDecision[],
+      "decisions"
+    );
+
+    const automations = pick(
+      results[5],
+      [] as SonnyAutomationRun[],
+      "automations"
+    );
+
     setData({
       sonny: sonnyBrief,
       state: companyState,
@@ -469,6 +505,9 @@ export default function SonnyAI() {
         paidOrderAgents(String(workspace.id))
       ),
       runs: hydratedRuns,
+
+      decisions: array<SonnyDecision>(decisions),
+      automations: array<SonnyAutomationRun>(automations),
     });
 
     if (failed.length) {
@@ -564,11 +603,293 @@ export default function SonnyAI() {
   const completedAssignments = assignments.filter(
     (item) => item.status === "completed"
   ).length;
-  const pendingApprovals =
-    data.runs.filter((run) => run.status === "awaiting_approval").length +
-    assignments.filter(
-      (item) => item.status === "awaiting_approval"
-    ).length;
+  type FounderApprovalItem = {
+    id: string;
+    source:
+      | "decision"
+      | "automation"
+      | "automation_action"
+      | "orchestration"
+      | "assignment";
+    title: string;
+    detail: string;
+    status: string;
+    priority?: string;
+    risk?: string;
+    createdAt?: string | null;
+    runId?: string;
+    actionId?: string;
+    reasoning?: string;
+    recommendedAction?: string;
+    expectedOutcome?: string;
+    target?: string;
+    service?: string;
+    context?: string;
+  };
+
+  const founderApprovalQueue = useMemo<FounderApprovalItem[]>(() => {
+    const queue: FounderApprovalItem[] = [];
+
+    data.decisions
+      .filter(
+        (decision) =>
+          decision.approval_required === true &&
+          decision.status === "proposed"
+      )
+      .forEach((decision) => {
+        queue.push({
+          id: decision.id,
+          source: "decision",
+          title: decision.title || "Sonny decision",
+          detail:
+            decision.summary ||
+            decision.recommended_action ||
+            "Founder decision required.",
+          status: decision.status || "proposed",
+          priority: decision.priority,
+          risk: decision.risk_level,
+          createdAt: decision.created_at,
+          reasoning: decision.reasoning,
+          recommendedAction: decision.recommended_action,
+          expectedOutcome: decision.expected_outcome,
+        });
+      });
+
+    data.automations
+      .filter(
+        (run) =>
+          run.approval_required === true &&
+          run.status === "awaiting_approval"
+      )
+      .forEach((run) => {
+        queue.push({
+          id: run.id,
+          source: "automation",
+          title:
+            run.automation_type
+              ? label(run.automation_type)
+              : "Automation run",
+          detail: "Automation run requires founder approval.",
+          status: run.status || "awaiting_approval",
+          createdAt: run.created_at,
+          runId: run.id,
+          context:
+            run.workflow_id
+              ? `Workflow: ${run.workflow_id}`
+              : run.trigger_type
+                ? `Trigger: ${label(run.trigger_type)}`
+                : undefined,
+        });
+      });
+
+    data.automations.forEach((run) => {
+      array<SonnyAutomationAction>(run.actions)
+        .filter(
+          (action) =>
+            action.approval_required === true &&
+            action.status === "awaiting_approval"
+        )
+        .forEach((action) => {
+          queue.push({
+            id: action.id,
+            source: "automation_action",
+            title:
+              action.action_code
+                ? label(action.action_code)
+                : "Automation action",
+            detail:
+              action.service_name
+                ? `Service: ${action.service_name}`
+                : "Sensitive automation action requires approval.",
+            status: action.status || "awaiting_approval",
+            createdAt: action.created_at,
+            runId: run.id,
+            actionId: action.id,
+            service: action.service_name,
+            target:
+              action.target_type || action.target_id
+                ? [
+                    action.target_type
+                      ? label(action.target_type)
+                      : null,
+                    action.target_id || null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : undefined,
+          });
+        });
+    });
+
+    data.runs
+      .filter((run) => run.status === "awaiting_approval")
+      .forEach((run) => {
+        queue.push({
+          id: run.id,
+          source: "orchestration",
+          title: "Orchestration run",
+          detail:
+            "Orchestration requires founder approval.",
+          status: run.status || "awaiting_approval",
+          createdAt: run.created_at,
+          runId: run.id,
+          context:
+            run.orchestration_type
+              ? `Type: ${label(run.orchestration_type)}`
+              : run.coordinator_agent_code
+                ? `Coordinator: ${label(run.coordinator_agent_code)}`
+                : undefined,
+        });
+      });
+
+    assignments
+      .filter(
+        (assignment) =>
+          assignment.status === "awaiting_approval"
+      )
+      .forEach((assignment) => {
+        queue.push({
+          id: assignment.id,
+          source: "assignment",
+          title:
+            assignment.title ||
+            assignment.agent_code ||
+            "Agent assignment",
+          detail:
+            assignment.instructions ||
+            "Agent assignment requires founder approval.",
+          status:
+            assignment.status || "awaiting_approval",
+          createdAt: assignment.created_at,
+          runId: assignment.runId,
+          context:
+            assignment.required_capability
+              ? `Capability: ${label(assignment.required_capability)}`
+              : assignment.agent_code
+                ? `Agent: ${label(assignment.agent_code)}`
+                : undefined,
+        });
+      });
+
+    return queue.sort((a, b) => {
+      const priorityRank: Record<string, number> = {
+        critical: 4,
+        high: 3,
+        medium: 2,
+        low: 1,
+      };
+
+      const priorityDelta =
+        (priorityRank[b.priority || ""] || 0) -
+        (priorityRank[a.priority || ""] || 0);
+
+      if (priorityDelta !== 0) return priorityDelta;
+
+      return (
+        new Date(b.createdAt || 0).getTime() -
+        new Date(a.createdAt || 0).getTime()
+      );
+    });
+  }, [
+    data.decisions,
+    data.automations,
+    data.runs,
+    assignments,
+  ]);
+
+  const pendingApprovals = founderApprovalQueue.length;
+
+  async function handleFounderApproval(
+    item: FounderApprovalItem,
+    action: "approve" | "reject" | "cancel"
+  ) {
+    if (!workspace?.id) return;
+
+    setWarning("");
+
+    try {
+      if (item.source === "decision") {
+        if (action === "approve") {
+          await approveSonnyDecision(
+            workspace.id,
+            item.id
+          );
+        } else if (action === "reject") {
+          await rejectSonnyDecision(
+            workspace.id,
+            item.id
+          );
+        } else {
+          await cancelSonnyDecision(
+            workspace.id,
+            item.id
+          );
+        }
+      } else if (item.source === "automation") {
+        if (action === "approve") {
+          await approveSonnyAutomation(
+            workspace.id,
+            item.runId || item.id
+          );
+        } else if (action === "cancel") {
+          await cancelSonnyAutomation(
+            workspace.id,
+            item.runId || item.id
+          );
+        } else {
+          return;
+        }
+      } else if (item.source === "automation_action") {
+        if (
+          action !== "approve" ||
+          !item.runId ||
+          !item.actionId
+        ) {
+          return;
+        }
+
+        await approveSonnyAutomationAction(
+          workspace.id,
+          item.runId,
+          item.actionId
+        );
+      } else if (item.source === "orchestration") {
+        if (action !== "approve") return;
+
+        await approveSonnyOrchestration(
+          workspace.id,
+          item.runId || item.id
+        );
+      } else if (item.source === "assignment") {
+        if (
+          action !== "approve" ||
+          !item.runId
+        ) {
+          return;
+        }
+
+        await approveSonnyAssignment(
+          workspace.id,
+          item.runId,
+          item.id
+        );
+      }
+
+      setNotice(
+        action === "approve"
+          ? "Founder approval recorded."
+          : "Founder rejection recorded."
+      );
+
+      await load();
+    } catch (error) {
+      setWarning(
+        error instanceof Error
+          ? error.message
+          : "Founder control failed."
+      );
+    }
+  }
 
   const workforceSummaryText =
     workforceSummary.unlimited
@@ -643,7 +964,14 @@ export default function SonnyAI() {
   }
 
   async function executePendingPlan() {
-    if (!pendingPlan || !workspace?.id || working) return;
+    if (
+      !pendingPlan ||
+      !pendingConfirmationId ||
+      !workspace?.id ||
+      working
+    ) {
+      return;
+    }
 
     stopVoiceAndStreaming();
     const controller = beginRequest(
@@ -658,7 +986,7 @@ export default function SonnyAI() {
         "Confirm executive action",
         {
           confirmed: true,
-          plan: pendingPlan,
+          confirmationId: pendingConfirmationId,
           signal: controller.signal,
         }
       );
@@ -666,6 +994,7 @@ export default function SonnyAI() {
       setExecutionStage("refreshing");
       setNotice("Action completed. Refreshing company intelligence...");
       setPendingPlan(null);
+      setPendingConfirmationId(null);
 
       await load();
 
@@ -810,6 +1139,7 @@ export default function SonnyAI() {
 
       if (response.actions?.length) {
         setPendingPlan(null);
+        setPendingConfirmationId(null);
         setExecutionStage("executing");
         setNotice("Executing Sonny navigation...");
 
@@ -836,9 +1166,11 @@ export default function SonnyAI() {
       if (
         response.has_action &&
         response.requires_confirmation &&
-        response.plan?.action
+        response.plan?.action &&
+        response.confirmation_id
       ) {
         setPendingPlan(response.plan);
+        setPendingConfirmationId(response.confirmation_id);
         setExecutionStage("awaiting_confirmation");
 
         const confidence = Math.round(
@@ -852,6 +1184,7 @@ export default function SonnyAI() {
         );
       } else {
         setPendingPlan(null);
+        setPendingConfirmationId(null);
         setExecutionStage("completed");
         setNotice("");
       }
@@ -1088,6 +1421,8 @@ export default function SonnyAI() {
                                 {streamingMessageId === message.id && (
                                   <span className="ml-1 inline-block h-4 w-1 animate-pulse rounded-full bg-violet-500 align-middle" />
                                 )}
+
+
                               </div>
                               <p className="text-[10px] opacity-45 mt-2">
                                 {date(message.createdAt)}
@@ -1377,6 +1712,187 @@ export default function SonnyAI() {
                           </div>
                         ))}
                       </div>
+                    </Panel>
+
+                    <Panel
+                      title="Founder Approval Queue"
+                      subtitle={
+                        pendingApprovals > 0
+                          ? `${pendingApprovals} item(s) require founder authority`
+                          : "No founder decisions are waiting"
+                      }
+                    >
+                      {founderApprovalQueue.length === 0 ? (
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                          <p className="font-black text-emerald-800">
+                            Approval queue clear
+                          </p>
+                          <p className="text-sm text-emerald-700 mt-1">
+                            No sensitive operation is waiting for founder approval.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+                          {founderApprovalQueue.map((item) => (
+                            <div
+                              key={`${item.source}:${item.id}`}
+                              className="rounded-2xl border border-slate-200 bg-white p-4"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[11px] uppercase tracking-wide font-black text-violet-600">
+                                      {label(item.source)}
+                                    </span>
+
+                                    {item.priority && (
+                                      <span className="text-[11px] font-bold text-slate-500">
+                                        {label(item.priority)}
+                                      </span>
+                                    )}
+
+                                    {item.risk && (
+                                      <span className="text-[11px] font-bold text-amber-600">
+                                        {label(item.risk)} risk
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <p className="font-black text-slate-950 mt-2">
+                                    {item.title}
+                                  </p>
+
+                                  <p className="text-sm text-slate-500 mt-1">
+                                    {item.detail}
+                                  </p>
+
+                                  {(item.reasoning ||
+                                    item.recommendedAction ||
+                                    item.expectedOutcome ||
+                                    item.target ||
+                                    item.service ||
+                                    item.context) && (
+                                    <div className="mt-3 space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                                      {item.reasoning && (
+                                        <div>
+                                          <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                                            Why approval is needed
+                                          </p>
+                                          <p className="mt-1 text-xs text-slate-600">
+                                            {item.reasoning}
+                                          </p>
+                                        </div>
+                                      )}
+
+                                      {item.recommendedAction && (
+                                        <div>
+                                          <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                                            Recommended action
+                                          </p>
+                                          <p className="mt-1 text-xs text-slate-600">
+                                            {item.recommendedAction}
+                                          </p>
+                                        </div>
+                                      )}
+
+                                      {item.expectedOutcome && (
+                                        <div>
+                                          <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                                            Expected outcome
+                                          </p>
+                                          <p className="mt-1 text-xs text-slate-600">
+                                            {item.expectedOutcome}
+                                          </p>
+                                        </div>
+                                      )}
+
+                                      {item.service && (
+                                        <p className="text-xs text-slate-500">
+                                          <span className="font-black">
+                                            Service:
+                                          </span>{" "}
+                                          {item.service}
+                                        </p>
+                                      )}
+
+                                      {item.target && (
+                                        <p className="text-xs text-slate-500">
+                                          <span className="font-black">
+                                            Target:
+                                          </span>{" "}
+                                          {item.target}
+                                        </p>
+                                      )}
+
+                                      {item.context && (
+                                        <p className="text-xs text-slate-500">
+                                          {item.context}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {item.createdAt && (
+                                    <p className="text-xs text-slate-400 mt-2">
+                                      {new Date(
+                                        item.createdAt
+                                      ).toLocaleString()}
+                                    </p>
+                                  )}
+                                </div>
+
+                                <Status value={item.status} />
+                              </div>
+
+                              <div className="flex flex-wrap gap-2 mt-4">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleFounderApproval(
+                                      item,
+                                      "approve"
+                                    )
+                                  }
+                                  className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-black text-white hover:bg-violet-700 transition"
+                                >
+                                  Approve
+                                </button>
+
+                                {item.source === "decision" && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleFounderApproval(
+                                        item,
+                                        "reject"
+                                      )
+                                    }
+                                    className="rounded-xl border border-rose-200 px-4 py-2 text-xs font-black text-rose-600 hover:bg-rose-50 transition"
+                                  >
+                                    Reject
+                                  </button>
+                                )}
+
+                                {(item.source === "decision" ||
+                                  item.source === "automation") && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleFounderApproval(
+                                        item,
+                                        "cancel"
+                                      )
+                                    }
+                                    className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-black text-slate-600 hover:bg-slate-50 transition"
+                                  >
+                                    Cancel
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </Panel>
 
                     <Panel title="Sonny Priorities">

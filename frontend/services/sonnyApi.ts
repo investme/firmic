@@ -11,6 +11,72 @@ export type SonnyAgent = {
   capabilities?: string[];
 };
 
+export type SonnyDecision = {
+  id: string;
+  company_id?: string;
+  decision_code?: string;
+  decision_type?: string;
+  title?: string;
+  summary?: string;
+  reasoning?: string;
+  recommended_action?: string;
+  expected_outcome?: string;
+  priority?: string;
+  confidence?: number;
+  risk_level?: string;
+  status?: string;
+  approval_required?: boolean;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  rejected_by?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string | null;
+  cancelled_by?: string | null;
+  cancelled_at?: string | null;
+  execution_status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type SonnyAutomationAction = {
+  id: string;
+  automation_run_id?: string;
+  action_order?: number;
+  action_code?: string;
+  service_name?: string;
+  target_type?: string | null;
+  target_id?: string | null;
+  status?: string;
+  approval_required?: boolean;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  attempt_count?: number;
+  max_attempts?: number;
+  error_message?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type SonnyAutomationRun = {
+  id: string;
+  company_id?: string;
+  decision_id?: string | null;
+  workflow_id?: string | null;
+  trigger_type?: string;
+  automation_type?: string;
+  status?: string;
+  approval_required?: boolean;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  created_by?: string | null;
+  retry_count?: number;
+  max_retries?: number;
+  error_message?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  actions?: SonnyAutomationAction[];
+};
+
 export type SonnyAssignment = {
   id: string;
   assignment_code?: string;
@@ -119,6 +185,133 @@ export async function getSonnyAgents(): Promise<SonnyAgent[]> {
     : Array.isArray(body?.agents)
       ? body.agents
       : [];
+}
+
+export async function approveSonnyDecision(
+  companyId: string,
+  decisionId: string
+) {
+  return parse(
+    await fetch(
+      `${API_URL}/api/sonny/company/${companyId}/decisions/${decisionId}/approve`,
+      {
+        method: "POST",
+        headers: headers(),
+      }
+    )
+  );
+}
+
+export async function rejectSonnyDecision(
+  companyId: string,
+  decisionId: string,
+  reason = "Rejected by founder."
+) {
+  return parse(
+    await fetch(
+      `${API_URL}/api/sonny/company/${companyId}/decisions/${decisionId}/reject`,
+      {
+        method: "POST",
+        headers: headers(true),
+        body: JSON.stringify({ reason }),
+      }
+    )
+  );
+}
+
+export async function cancelSonnyDecision(
+  companyId: string,
+  decisionId: string
+): Promise<any> {
+  return parse(
+    await fetch(
+      `${API_URL}/api/sonny/company/${companyId}/decisions/${decisionId}/cancel`,
+      {
+        method: "POST",
+        headers: headers(),
+      }
+    )
+  );
+}
+
+export async function approveSonnyAutomation(
+  companyId: string,
+  runId: string
+) {
+  return parse(
+    await fetch(
+      `${API_URL}/api/sonny/company/${companyId}/automations/${runId}/approve`,
+      {
+        method: "POST",
+        headers: headers(),
+      }
+    )
+  );
+}
+
+export async function cancelSonnyAutomation(
+  companyId: string,
+  runId: string
+): Promise<any> {
+  return parse(
+    await fetch(
+      `${API_URL}/api/sonny/company/${companyId}/automations/${runId}/cancel`,
+      {
+        method: "POST",
+        headers: headers(),
+      }
+    )
+  );
+}
+
+export async function approveSonnyAutomationAction(
+  companyId: string,
+  runId: string,
+  actionId: string
+) {
+  return parse(
+    await fetch(
+      `${API_URL}/api/sonny/company/${companyId}/automations/${runId}/actions/${actionId}/approve`,
+      {
+        method: "POST",
+        headers: headers(),
+      }
+    )
+  );
+}
+
+export async function getSonnyDecisions(
+  companyId: string
+): Promise<SonnyDecision[]> {
+  const body = await parse(
+    await fetch(
+      `${API_URL}/api/sonny/company/${companyId}/decisions`,
+      {
+        headers: headers(),
+      }
+    )
+  );
+
+  return Array.isArray(body?.decisions)
+    ? body.decisions
+    : [];
+}
+
+export async function getSonnyAutomations(
+  companyId: string
+): Promise<SonnyAutomationRun[]> {
+  const body = await parse(
+    await fetch(
+      `${API_URL}/api/sonny/company/${companyId}/automations`,
+      {
+        headers: headers(),
+      }
+    )
+  );
+
+  return Array.isArray(body?.runs)
+    ? body.runs
+    : [];
 }
 
 export async function getSonnyOrchestrations(

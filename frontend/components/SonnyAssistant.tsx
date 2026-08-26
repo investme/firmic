@@ -68,6 +68,8 @@ export default function SonnyAssistant({
   const [notice, setNotice] = useState("");
   const [warning, setWarning] = useState("");
   const [pendingPlan, setPendingPlan] = useState<SonnyPlan | null>(null);
+  const [pendingConfirmationId, setPendingConfirmationId] =
+    useState<string | null>(null);
 
   const {
     listening,
@@ -150,7 +152,14 @@ export default function SonnyAssistant({
   }
 
   async function executePendingPlan() {
-    if (!workspaceId || !pendingPlan || working) return;
+    if (
+      !workspaceId ||
+      !pendingPlan ||
+      !pendingConfirmationId ||
+      working
+    ) {
+      return;
+    }
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -164,12 +173,13 @@ export default function SonnyAssistant({
         "Confirm executive action",
         {
           confirmed: true,
-          plan: pendingPlan,
+          confirmationId: pendingConfirmationId,
           signal: controller.signal,
         }
       );
 
       setPendingPlan(null);
+      setPendingConfirmationId(null);
       setNotice("Executive action completed.");
       reply(response.reply, response.speech || response.reply);
       await onRefresh?.();
@@ -256,12 +266,15 @@ export default function SonnyAssistant({
       if (
         response.has_action &&
         response.requires_confirmation &&
-        response.plan?.action
+        response.plan?.action &&
+        response.confirmation_id
       ) {
         setPendingPlan(response.plan);
+        setPendingConfirmationId(response.confirmation_id);
         setNotice("Sonny prepared an action and is awaiting confirmation.");
       } else {
         setPendingPlan(null);
+        setPendingConfirmationId(null);
         setNotice("");
       }
 

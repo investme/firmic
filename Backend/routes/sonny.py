@@ -12,6 +12,9 @@ from models.company import Company
 from firmic_models import User
 from models.sonny_decision import SonnyDecision
 from models.sonny_workflow import SonnyWorkflow
+from services.sonny.founder_authority import (
+    require_founder_authority,
+)
 from services.sonny.dashboard import build_sonny_dashboard
 from models.sonny_orchestration import (
     SonnyAgentAssignment,
@@ -546,10 +549,15 @@ def approve_sonny_decision(
     token: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ):
-    verify_company_access(
+    company = verify_company_access(
         company_id,
         str(token.get("sub") or ""),
         db,
+    )
+
+    require_founder_authority(
+        company=company,
+        actor_id=str(token.get("sub") or ""),
     )
 
     decision = resolve_decision_or_404(
@@ -586,10 +594,15 @@ def reject_sonny_decision(
     token: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ):
-    verify_company_access(
+    company = verify_company_access(
         company_id,
         str(token.get("sub") or ""),
         db,
+    )
+
+    require_founder_authority(
+        company=company,
+        actor_id=str(token.get("sub") or ""),
     )
 
     decision = resolve_decision_or_404(
@@ -626,10 +639,15 @@ def cancel_sonny_decision(
     token: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ):
-    verify_company_access(
+    company = verify_company_access(
         company_id,
         str(token.get("sub") or ""),
         db,
+    )
+
+    require_founder_authority(
+        company=company,
+        actor_id=str(token.get("sub") or ""),
     )
 
     decision = resolve_decision_or_404(
@@ -1307,7 +1325,9 @@ def create_sonny_automation(
             decision_id=payload.decision_id,
             workflow_id=payload.workflow_id,
             input_payload=payload.input_payload,
-            approval_required=payload.approval_required,
+            # Public/manual automation creation cannot
+            # downgrade the approval boundary.
+            approval_required=True,
             run_metadata=payload.run_metadata,
         )
     except ValueError as error:
@@ -1490,10 +1510,15 @@ def approve_sonny_automation(
     token: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ):
-    verify_company_access(
+    company = verify_company_access(
         company_id,
         str(token.get("sub") or ""),
         db,
+    )
+
+    require_founder_authority(
+        company=company,
+        actor_id=str(token.get("sub") or ""),
     )
 
     run = resolve_automation_run_or_404(
@@ -1569,10 +1594,15 @@ def approve_sonny_automation_action(
     token: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ):
-    verify_company_access(
+    company = verify_company_access(
         company_id,
         str(token.get("sub") or ""),
         db,
+    )
+
+    require_founder_authority(
+        company=company,
+        actor_id=str(token.get("sub") or ""),
     )
 
     run = resolve_automation_run_or_404(
@@ -1842,10 +1872,15 @@ def cancel_sonny_automation(
     token: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ):
-    verify_company_access(
+    company = verify_company_access(
         company_id,
         str(token.get("sub") or ""),
         db,
+    )
+
+    require_founder_authority(
+        company=company,
+        actor_id=str(token.get("sub") or ""),
     )
 
     run = resolve_automation_run_or_404(
@@ -1958,7 +1993,9 @@ def create_sonny_orchestration(
             decision_id=payload.decision_id,
             workflow_id=payload.workflow_id,
             automation_run_id=payload.automation_run_id,
-            approval_required=payload.approval_required,
+            # Public/manual orchestration creation cannot
+            # downgrade the approval boundary.
+            approval_required=True,
             input_payload=payload.input_payload,
             orchestration_metadata=payload.orchestration_metadata,
         )
@@ -2072,7 +2109,9 @@ def create_sonny_agent_assignment(
             preferred_agent_code=payload.preferred_agent_code,
             agent_code=payload.agent_code,
             priority=payload.priority,
-            approval_required=payload.approval_required,
+            # Public/manual assignment creation cannot
+            # downgrade the approval boundary.
+            approval_required=True,
             due_at=payload.due_at,
             confidence=payload.confidence,
             input_payload=payload.input_payload,
@@ -2104,7 +2143,16 @@ def approve_sonny_orchestration(
     token: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ):
-    verify_company_access(company_id, str(token.get("sub") or ""), db)
+    company = verify_company_access(
+        company_id,
+        str(token.get("sub") or ""),
+        db,
+    )
+
+    require_founder_authority(
+        company=company,
+        actor_id=str(token.get("sub") or ""),
+    )
     run = resolve_orchestration_run_or_404(
         db,
         company_id=company_id,
@@ -2163,7 +2211,16 @@ def approve_sonny_assignment(
     token: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ):
-    verify_company_access(company_id, str(token.get("sub") or ""), db)
+    company = verify_company_access(
+        company_id,
+        str(token.get("sub") or ""),
+        db,
+    )
+
+    require_founder_authority(
+        company=company,
+        actor_id=str(token.get("sub") or ""),
+    )
     run = resolve_orchestration_run_or_404(
         db,
         company_id=company_id,
@@ -2452,7 +2509,16 @@ def cancel_sonny_orchestration(
     token: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ):
-    verify_company_access(company_id, str(token.get("sub") or ""), db)
+    company = verify_company_access(
+        company_id,
+        str(token.get("sub") or ""),
+        db,
+    )
+
+    require_founder_authority(
+        company=company,
+        actor_id=str(token.get("sub") or ""),
+    )
     run = resolve_orchestration_run_or_404(
         db,
         company_id=company_id,
