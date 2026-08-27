@@ -5,8 +5,7 @@ from auth import get_token_payload
 from database import get_db
 from models.activity_log import ActivityLog
 from models.company import Company
-from schemas.activity_log import ActivityLogCreate
-from services.activity_service import record_activity, serialize_activity
+from services.activity_service import serialize_activity
 
 
 router = APIRouter(
@@ -42,30 +41,6 @@ def authorize_company(
         raise HTTPException(status_code=404, detail="Company not found")
 
     return company
-
-
-@router.post("/entries")
-def create_activity_entry(
-    payload: ActivityLogCreate,
-    token: dict = Depends(get_token_payload),
-    db: Session = Depends(get_db),
-):
-    company = authorize_company(payload.company_id, token, db)
-
-    event = record_activity(
-        db,
-        company_id=company.id,
-        event_type=payload.event_type,
-        title=payload.title,
-        description=payload.description,
-        actor_type=payload.actor_type,
-        actor_id=payload.actor_id,
-        source_type=payload.source_type,
-        source_id=payload.source_id,
-        metadata=payload.metadata,
-    )
-
-    return serialize_activity(event)
 
 
 @router.get("/company/{company_id}")

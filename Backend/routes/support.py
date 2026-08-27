@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from auth import get_token_payload
 from database import get_db
+from services.activity_service import record_activity
 from models.activity_log import ActivityLog
 from models.company import Company
 from models.support_ticket import (
@@ -160,8 +161,7 @@ def record_support_activity(
     metadata: dict[str, Any] | None = None,
 ) -> None:
     db.add(
-        ActivityLog(
-            id=str(uuid.uuid4()),
+        record_activity(db, commit=False,
             company_id=company_id,
             event_type=event_type,
             title=title,

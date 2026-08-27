@@ -22,6 +22,7 @@ from models.usage_ledger import UsageLedger
 from models.support_ticket import SupportMessage, SupportTicket
 from models.launch import CompanyLaunch
 from models.subscription import CompanySubscription
+from services.activity_service import record_activity
 from services.compliance_requirements import (
     REQUIRED_COMPLIANCE_DOCUMENTS,
     requirement_applies_to_company,
@@ -954,8 +955,7 @@ def invite_admin_user(
         db.add(invited_user)
         db.flush()
 
-        audit_event = ActivityLog(
-            id=str(uuid.uuid4()),
+        audit_event = record_activity(db, commit=False,
             company_id="firmic-platform",
             event_type="admin_employee_invited",
             title="New Firmic Admin invited",
@@ -1444,8 +1444,7 @@ def add_admin_support_activity(
     metadata: dict[str, Any] | None = None,
 ) -> None:
     db.add(
-        ActivityLog(
-            id=str(uuid.uuid4()),
+        record_activity(db, commit=False,
             company_id=ticket.company_id,
             event_type=event_type,
             title=title,
@@ -2489,8 +2488,7 @@ def request_admin_compliance_documents(
 
         if created_labels:
             db.add(
-                ActivityLog(
-                    id=str(uuid.uuid4()),
+                record_activity(db, commit=False,
                     company_id=company_id,
                     event_type=(
                         "compliance_documents_requested"
@@ -2619,8 +2617,7 @@ def verify_admin_compliance_document(
             approved=True,
         )
 
-        event = ActivityLog(
-            id=str(uuid.uuid4()),
+        event = record_activity(db, commit=False,
             company_id=document.company_id,
             event_type=(
                 "compliance_document_verified"
@@ -2822,8 +2819,7 @@ def approve_admin_compliance_and_unlock(
 
         company.status = "active"
 
-        event = ActivityLog(
-            id=str(uuid.uuid4()),
+        event = record_activity(db, commit=False,
             company_id=company_id,
             event_type=(
                 "company_compliance_approved"

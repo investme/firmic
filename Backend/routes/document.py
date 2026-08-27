@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from auth import get_token_payload
 from database import SessionLocal
+from services.activity_service import record_activity
 from models.activity_log import ActivityLog
 from models.company import Company, Document, Task
 from schemas.document import DocumentCreate
@@ -209,8 +210,7 @@ def record_event(
     source_id: str,
     metadata: dict[str, Any] | None = None,
 ) -> ActivityLog:
-    event = ActivityLog(
-        id=str(uuid.uuid4()),
+    event = record_activity(db, commit=False,
         company_id=company_id,
         event_type=event_type,
         title=title,
