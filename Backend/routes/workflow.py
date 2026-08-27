@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from auth import get_token_payload
 from database import SessionLocal
-from models.company import Workflow, WorkflowStep, Task
+from models.company import Company, Workflow, WorkflowStep, Task
 import uuid
 
 router = APIRouter()
@@ -19,8 +20,26 @@ def get_db():
 def create_workflow(
     company_id: str,
     name: str = "Company Onboarding",
+    token: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ):
+    user_id = token.get("sub")
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    company = (
+        db.query(Company)
+        .filter(
+            Company.id == company_id,
+            Company.user_id == str(user_id),
+        )
+        .first()
+    )
+
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
     workflow = Workflow(
         id=str(uuid.uuid4()),
         company_id=company_id,
@@ -82,9 +101,30 @@ def create_workflow(
 
 
 @router.get("/company/{company_id}")
-def list_company_workflows(company_id: str, db: Session = Depends(get_db)):
+def list_company_workflows(
+    company_id: str,
+    token: dict = Depends(get_token_payload),
+    db: Session = Depends(get_db),
+):
+    user_id = token.get("sub")
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    company = (
+        db.query(Company)
+        .filter(
+            Company.id == company_id,
+            Company.user_id == str(user_id),
+        )
+        .first()
+    )
+
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
     workflows = db.query(Workflow).filter(
-        Workflow.company_id == company_id
+        Workflow.company_id == company.id
     ).all()
 
     return [
