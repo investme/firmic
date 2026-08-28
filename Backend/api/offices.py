@@ -64,6 +64,7 @@ def serialize_headquarters(
 
 @router.get("")
 def get_offices(
+    token: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ):
     offices = (

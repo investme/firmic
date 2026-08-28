@@ -1,6 +1,11 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from database import SessionLocal
+import logging
+import time
+import uuid
+
+from database import SessionLocal, engine
 from models.subscription import Plan
 from routes import auth
 from sqlalchemy import text
@@ -149,6 +154,57 @@ def debug_plan_lookup(plan_code: str):
     finally:
         db.close()
 
+http_logger = logging.getLogger("firmic.http")
+
+
+@app.middleware("http")
+async def request_observability(request, call_next):
+    request_id = (
+        request.headers.get("X-Request-ID")
+        or str(uuid.uuid4())
+    )
+    request.state.request_id = request_id
+
+    started = time.perf_counter()
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = round(
+            (time.perf_counter() - started) * 1000,
+            2,
+        )
+
+        http_logger.exception(
+            "request_failed request_id=%s method=%s "
+            "path=%s duration_ms=%s",
+            request_id,
+            request.method,
+            request.url.path,
+            duration_ms,
+        )
+        raise
+
+    duration_ms = round(
+        (time.perf_counter() - started) * 1000,
+        2,
+    )
+
+    response.headers["X-Request-ID"] = request_id
+
+    http_logger.info(
+        "request_complete request_id=%s method=%s "
+        "path=%s status_code=%s duration_ms=%s",
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+
+    return response
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -292,6 +348,28 @@ def health():
         "app": "Firmic Backend",
         "status": "healthy",
         "version": "1.4.0",
+    }
+
+
+@app.get("/ready")
+def readiness():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "app": "Firmic Backend",
+                "status": "not_ready",
+                "database": "unavailable",
+            },
+        )
+
+    return {
+        "app": "Firmic Backend",
+        "status": "ready",
+        "database": "available",
     }
 
 

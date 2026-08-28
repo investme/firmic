@@ -31,7 +31,9 @@ async function parseResponse(
 }
 
 export async function getOffices() {
-  const response = await fetch(`${API_URL}/api/offices`);
+  const response = await fetch(`${API_URL}/api/offices`, {
+    headers: getAuthHeaders(),
+  });
 
   return parseResponse(response, "Failed to load offices");
 }
