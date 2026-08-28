@@ -57,43 +57,6 @@ app = FastAPI(
     title="Firmic Backend",
     version="1.4.0",
 )
-@app.get("/api/debug/database")
-def debug_database():
-    with engine.connect() as connection:
-        database_name = connection.execute(
-            text("SELECT current_database()")
-        ).scalar()
-
-        schema_name = connection.execute(
-            text("SELECT current_schema()")
-        ).scalar()
-
-        search_path = connection.execute(
-            text("SHOW search_path")
-        ).scalar()
-
-        plans = connection.execute(
-            text(
-                """
-                SELECT
-                    id,
-                    code,
-                    name,
-                    monthly_price,
-                    max_ai_employees,
-                    active
-                FROM plans
-                ORDER BY monthly_price
-                """
-            )
-        ).mappings().all()
-
-    return {
-        "database": database_name,
-        "schema": schema_name,
-        "search_path": search_path,
-        "plans": [dict(plan) for plan in plans],
-    }
 @app.get("/api/debug/plan/{plan_code}")
 def debug_plan_lookup(plan_code: str):
     db = SessionLocal()
