@@ -357,6 +357,9 @@ def readiness():
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
     except Exception:
+        http_logger.exception(
+            "readiness_failed database=unavailable"
+        )
         return JSONResponse(
             status_code=503,
             content={
