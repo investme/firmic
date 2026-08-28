@@ -154,6 +154,9 @@ async def request_observability(request, call_next):
     )
 
     response.headers["X-Request-ID"] = request_id
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
 
     http_logger.info(
         "request_complete request_id=%s method=%s "
