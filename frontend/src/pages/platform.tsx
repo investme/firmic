@@ -201,7 +201,7 @@ export default function PlatformPage() {
                 The Firmic Platform
               </p>
 
-              <h1 className="mt-4 text-[2.65rem] font-semibold leading-[1.04] tracking-[-0.052em] sm:mt-5 sm:text-[3.8rem] lg:text-[4.25rem]">
+              <h1 className="mt-4 text-[2.35rem] font-semibold leading-[1.04] tracking-[-0.052em] min-[390px]:text-[2.65rem] sm:mt-5 sm:text-[3.8rem] lg:text-[4.25rem]">
                 Create Your Company.
                 <span className="block text-[#4baa36]">
                   Firmic Makes It Work.
@@ -232,9 +232,9 @@ export default function PlatformPage() {
             </div>
 
             {/* RIGHT / SONNY */}
-            <div className="relative min-h-[455px] overflow-hidden rounded-[24px] bg-[#f5f6f4] shadow-[0_18px_55px_rgba(0,0,0,.06)] sm:min-h-[500px] sm:rounded-[32px] lg:min-h-[530px]">
+            <div className="relative min-h-[610px] overflow-hidden rounded-[24px] bg-[#f5f6f4] shadow-[0_18px_55px_rgba(0,0,0,.06)] sm:min-h-[500px] sm:rounded-[32px] lg:min-h-[530px]">
 
-              <div className="absolute bottom-0 left-[-5%] h-[410px] w-[72%] sm:left-[1%] sm:h-[470px] sm:w-[66%] lg:left-[4%] lg:h-[500px] lg:w-[62%]">
+              <div className="absolute bottom-[165px] left-1/2 h-[350px] w-[92%] -translate-x-1/2 sm:bottom-0 sm:left-[1%] sm:h-[470px] sm:w-[66%] sm:translate-x-0 lg:left-[4%] lg:h-[500px] lg:w-[62%]">
                 <Image
                   src="/agents/sonny-canonical-v1.png"
                   alt="Sonny, Firmic AI Chief Operating Officer"
@@ -245,7 +245,7 @@ export default function PlatformPage() {
                 />
               </div>
 
-              <div className="absolute right-4 top-8 w-[205px] sm:right-6 sm:top-10 sm:w-[240px] lg:right-8 lg:top-14 lg:w-[260px]">
+              <div className="absolute left-5 right-5 top-5 z-20 sm:left-auto sm:right-6 sm:top-10 sm:w-[240px] lg:right-8 lg:top-14 lg:w-[260px]">
                 <p className="text-xl font-bold text-[#4baa36]">
                   SONNY
                 </p>
@@ -260,7 +260,7 @@ export default function PlatformPage() {
                 </div>
               </div>
 
-              <div className="absolute bottom-10 right-8 w-[245px] rounded-[20px] border border-black/[0.06] bg-white p-5 shadow-[0_14px_40px_rgba(0,0,0,.08)]">
+              <div className="absolute bottom-4 left-4 right-4 z-20 rounded-[18px] border border-black/[0.06] bg-white p-4 shadow-[0_14px_40px_rgba(0,0,0,.08)] sm:bottom-10 sm:left-auto sm:right-8 sm:w-[245px] sm:rounded-[20px] sm:p-5">
                 <h2 className="text-base font-bold leading-6">
                   Your Company, Ready to Operate
                 </h2>
@@ -452,7 +452,7 @@ export default function PlatformPage() {
                 </p>
               </article>
 
-              <article className="flex h-full flex-col rounded-[28px] border border-black/[0.06] bg-white p-8">
+              <article className="flex h-full flex-col rounded-[22px] border border-black/[0.06] bg-white p-6 sm:rounded-[28px] sm:p-8">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#eef7eb] text-xl text-[#4baa36]">
                   🤖
                 </div>
@@ -468,7 +468,7 @@ export default function PlatformPage() {
                 </p>
               </article>
 
-              <article className="flex h-full flex-col rounded-[28px] border border-black/[0.06] bg-white p-8">
+              <article className="flex h-full flex-col rounded-[22px] border border-black/[0.06] bg-white p-6 sm:rounded-[28px] sm:p-8">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#eef7eb] text-xl text-[#4baa36]">
                   ✓
                 </div>
@@ -484,7 +484,7 @@ export default function PlatformPage() {
                 </p>
               </article>
 
-              <article className="flex h-full flex-col rounded-[28px] border border-black/[0.06] bg-white p-8">
+              <article className="flex h-full flex-col rounded-[22px] border border-black/[0.06] bg-white p-6 sm:rounded-[28px] sm:p-8">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#eef7eb] text-xl text-[#4baa36]">
                   ◉
                 </div>
@@ -502,12 +502,12 @@ export default function PlatformPage() {
             </div>
 
             <div className="mt-5 grid items-stretch gap-5 lg:grid-cols-2">
-              <article className="flex h-full flex-col rounded-[28px] bg-[#1d1d1f] p-8 text-white">
+              <article className="flex h-full flex-col rounded-[22px] bg-[#1d1d1f] p-6 text-white sm:rounded-[28px] sm:p-8">
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#72c860]">
                   AI Workforce Security
                 </p>
 
-                <h3 className="mt-5 text-3xl font-semibold tracking-[-0.04em]">
+                <h3 className="mt-5 text-[1.65rem] font-semibold tracking-[-0.04em] sm:text-3xl">
                   An AI worker knows its job — and operates within programmed boundaries.
                 </h3>
 
@@ -534,12 +534,12 @@ export default function PlatformPage() {
                 </div>
               </article>
 
-              <article className="flex h-full flex-col rounded-[28px] border border-black/[0.06] bg-white p-8">
+              <article className="flex h-full flex-col rounded-[22px] border border-black/[0.06] bg-white p-6 sm:rounded-[28px] sm:p-8">
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#4baa36]">
                   Payments & Sensitive Information
                 </p>
 
-                <h3 className="mt-5 text-3xl font-semibold tracking-[-0.04em]">
+                <h3 className="mt-5 text-[1.65rem] font-semibold tracking-[-0.04em] sm:text-3xl">
                   Keep payment access separate from AI execution.
                 </h3>
 
@@ -604,12 +604,12 @@ export default function PlatformPage() {
               </h2>
             </div>
 
-            <div className="mx-auto mt-12 max-w-[780px] rounded-[28px] border border-black/[0.06] bg-white p-7 shadow-[0_18px_55px_rgba(0,0,0,.05)] sm:p-9">
+            <div className="mx-auto mt-9 max-w-[780px] rounded-[22px] border border-black/[0.06] bg-white p-5 shadow-[0_18px_55px_rgba(0,0,0,.05)] sm:mt-12 sm:rounded-[28px] sm:p-9">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#8a9098]">
                 You
               </p>
 
-              <p className="mt-3 text-xl font-semibold leading-8">
+              <p className="mt-3 text-lg font-semibold leading-7 sm:text-xl sm:leading-8">
                 “Sonny, prepare our monthly financial report and identify
                 overdue invoices.”
               </p>
@@ -659,7 +659,7 @@ export default function PlatformPage() {
                 Governed Execution
               </p>
 
-              <h2 className="mt-5 text-4xl font-semibold tracking-[-0.045em]">
+              <h2 className="mt-5 text-[2rem] font-semibold tracking-[-0.045em] sm:text-4xl">
                 Intelligence with boundaries.
               </h2>
 
@@ -696,7 +696,7 @@ export default function PlatformPage() {
               Your company, ready to operate.
             </p>
 
-            <h2 className="mt-5 text-5xl font-semibold tracking-[-0.055em] sm:text-6xl">
+            <h2 className="mt-5 text-[2.5rem] font-semibold leading-[1.05] tracking-[-0.055em] sm:text-6xl">
               Create Your Company.
               <span className="block text-[#4baa36]">
                 Firmic Makes It Work.
@@ -729,7 +729,7 @@ export default function PlatformPage() {
         <button
           type="button"
           onClick={() => setSonnyOpen((value) => !value)}
-          className={`${mobileMenuOpen ? "hidden md:flex" : "flex"} fixed bottom-4 right-3 z-40 items-center gap-2 rounded-full border border-black/[0.07] bg-white py-1.5 pl-1.5 pr-3 shadow-[0_12px_40px_rgba(0,0,0,.14)] sm:bottom-6 sm:right-6 sm:gap-3 sm:py-2 sm:pl-2 sm:pr-5`}
+          className={`${mobileMenuOpen ? "hidden md:flex" : "flex"} fixed bottom-4 right-3 z-40 items-center rounded-full border border-black/[0.07] bg-white p-1.5 shadow-[0_12px_40px_rgba(0,0,0,.14)] sm:bottom-6 sm:right-6 sm:gap-3 sm:py-2 sm:pl-2 sm:pr-5`}
         >
           <span className="h-9 w-9 overflow-hidden rounded-full bg-[#f2f2ef] sm:h-11 sm:w-11">
             <Image
@@ -742,7 +742,7 @@ export default function PlatformPage() {
             />
           </span>
 
-          <span className="text-left">
+          <span className="hidden text-left sm:block">
             <span className="block text-xs font-bold">Ask Sonny</span>
             <span className="block text-[10px] font-semibold text-[#4baa36]">
               ● Online

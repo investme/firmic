@@ -4,6 +4,12 @@ import FirmicSidebar from "../components/FirmicSidebar";
 import ProtectedRoute from "../components/ProtectedRoute";
 
 import { getCompanyAIAgents } from "../services/aiWorkforceApi";
+import { getCompany } from "../services/companyApi";
+import {
+  getIncludedAICount,
+  normalizePlanCode,
+  type FirmicPlanCode,
+} from "../src/utils/planEntitlements";
 import { getCompanyActivity } from "../services/activityApi";
 import { API_URL } from "../services/config";
 import { getCompanyLaunch, type LaunchSummary } from "../services/launchApi";
@@ -72,6 +78,7 @@ type TaskItem = {
 
 export default function Dashboard() {
   const [workspace, setWorkspace] = useState<FirmicWorkspace | null>(null);
+  const [companyPlan, setCompanyPlan] = useState<FirmicPlanCode | null>(null);
   const [launch, setLaunch] = useState<LaunchSummary | null>(null);
   const [agents, setAgents] = useState<ActiveAgent[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -109,6 +116,7 @@ export default function Dashboard() {
 
   async function loadDashboard() {
     if (!workspace?.id) {
+      setCompanyPlan(null);
       setLaunch(null);
       setAgents([]);
       setBookings([]);
@@ -127,6 +135,7 @@ export default function Dashboard() {
       setConfirmedOrder(getConfirmedOrder(String(workspace.id)));
 
       const results = await Promise.allSettled([
+        getCompany(workspace.id),
         getCompanyLaunch(workspace.id),
         getCompanyAIAgents(workspace.id),
         getCompanyMeetingBookings(workspace.id),
@@ -137,16 +146,23 @@ export default function Dashboard() {
         fetchCompanyResource(`/api/timeline/company/${workspace.id}`),
       ]);
 
-      setLaunch(results[0].status === "fulfilled" ? results[0].value : null);
-      setAgents(fulfilledArray<ActiveAgent>(results[1]));
-      setBookings(fulfilledArray<Booking>(results[2]));
-      setSummary(results[3].status === "fulfilled" ? results[3].value : null);
+      const company =
+        results[0].status === "fulfilled" ? results[0].value : null;
 
-      const legacyActivity = fulfilledArray<Activity>(results[4]);
-      setTasks(fulfilledArray<TaskItem>(results[5]));
+      setCompanyPlan(
+        company?.plan_code ? normalizePlanCode(company.plan_code) : null,
+      );
+
+      setLaunch(results[1].status === "fulfilled" ? results[1].value : null);
+      setAgents(fulfilledArray<ActiveAgent>(results[2]));
+      setBookings(fulfilledArray<Booking>(results[3]));
+      setSummary(results[4].status === "fulfilled" ? results[4].value : null);
+
+      const legacyActivity = fulfilledArray<Activity>(results[5]);
+      setTasks(fulfilledArray<TaskItem>(results[6]));
 
       const notificationBody =
-        results[6].status === "fulfilled" ? results[6].value : null;
+        results[7].status === "fulfilled" ? results[7].value : null;
 
       setNotifications(
         Array.isArray(notificationBody?.notifications)
@@ -155,7 +171,7 @@ export default function Dashboard() {
       );
 
       const timelineBody =
-        results[7].status === "fulfilled" ? results[7].value : null;
+        results[8].status === "fulfilled" ? results[8].value : null;
 
       const timelineEvents = Array.isArray(timelineBody?.events)
         ? timelineBody.events
@@ -188,6 +204,20 @@ export default function Dashboard() {
 
   const companyLaunchFee = 79;
   const firstMonthTotal = monthlyTotal + companyLaunchFee;
+
+  const includedAIWorkers =
+    companyPlan === null ? 0 : getIncludedAICount(companyPlan);
+
+  const aiWorkforceDisplay =
+    companyPlan !== null && agents.length <= includedAIWorkers
+      ? "Included"
+      : `$${agents
+          .reduce(
+            (total, agent) =>
+              total + Number(agent.monthly_price_usd || 0),
+            0,
+          )
+          .toFixed(2)}`;
 
   const subtotal =
     confirmedOrder?.monthlySubtotalUsd ?? Number(summary?.subtotal || 0);
@@ -428,14 +458,8 @@ export default function Dashboard() {
                           }
                         />
                         <Mini
-                          title="Monthly AI Cost"
-                          value={`$${agents
-                            .reduce(
-                              (total, agent) =>
-                                total + Number(agent.monthly_price_usd || 0),
-                              0,
-                            )
-                            .toFixed(2)}`}
+                          title="AI Workforce"
+                          value={aiWorkforceDisplay}
                         />
                         <Mini
                           title="Sonny"
