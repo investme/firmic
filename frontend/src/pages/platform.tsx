@@ -73,6 +73,18 @@ function PlatformColumn({
 export default function PlatformPage() {
   const [sonnyOpen, setSonnyOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sonnyQuestion, setSonnyQuestion] = useState("");
+  const [sonnyReply, setSonnyReply] = useState<string | null>(null);
+
+  const askPublicSonny = () => {
+    const question = sonnyQuestion.trim();
+
+    if (!question) return;
+
+    setSonnyReply(
+      "I can help you understand how Firmic can operate your company. To work with your actual company, AI workforce, data, approvals and tools, sign in or create your company first."
+    );
+  };
 
   return (
     <>
@@ -751,40 +763,111 @@ export default function PlatformPage() {
         </button>
 
         {sonnyOpen && (
-          <div className="fixed bottom-20 left-3 right-3 z-40 rounded-[24px] border border-black/[0.07] bg-white p-5 shadow-[0_24px_70px_rgba(0,0,0,.16)] sm:bottom-24 sm:left-auto sm:right-6 sm:w-[330px] sm:p-6">
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 overflow-hidden rounded-full bg-[#f2f2ef]">
-                <Image
-                  src="/agents/sonny-canonical-v1.png"
-                  alt="Sonny"
-                  width={48}
-                  height={48}
-                  unoptimized
-                  className="h-full w-full object-cover object-top"
-                />
+          <div className="fixed bottom-20 left-3 right-3 z-40 overflow-hidden rounded-[24px] border border-black/[0.07] bg-white shadow-[0_24px_70px_rgba(0,0,0,.16)] sm:bottom-24 sm:left-auto sm:right-6 sm:w-[370px]">
+            <div className="border-b border-black/[0.06] p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 overflow-hidden rounded-full bg-[#f2f2ef]">
+                    <Image
+                      src="/agents/sonny-canonical-v1.png"
+                      alt="Sonny"
+                      width={48}
+                      height={48}
+                      unoptimized
+                      className="h-full w-full object-cover object-top"
+                    />
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-bold">Sonny</p>
+                    <p className="text-xs font-semibold text-[#4baa36]">
+                      AI Executive & Orchestrator
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSonnyOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg text-[#858b92] transition hover:bg-[#f3f3f0] hover:text-[#1d1d1f]"
+                  aria-label="Close Sonny"
+                >
+                  ×
+                </button>
               </div>
 
-              <div>
-                <p className="text-sm font-bold">Sonny</p>
-                <p className="text-xs font-semibold text-[#4baa36]">
-                  AI Chief Operating Officer
-                </p>
-              </div>
+              <p className="mt-4 text-sm leading-6 text-[#646b74]">
+                Ask me how Firmic can help launch, organize and operate your company
+                with an Agentic AI Workforce.
+              </p>
             </div>
 
-            <p className="mt-5 text-sm leading-6 text-[#646b74]">
-              I can explain how Firmic brings your company infrastructure,
-              operations and intelligent capabilities together.
-            </p>
+            <div className="p-5">
+              {sonnyReply && (
+                <div className="mb-4 rounded-2xl bg-[#f4f5f2] p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#4baa36]">
+                    Sonny
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-[#555c64]">
+                    {sonnyReply}
+                  </p>
+                </div>
+              )}
 
-            <Link
-              href="/sonny"
-              className="mt-5 inline-flex text-sm font-bold text-[#4baa36]"
-            >
-              Meet Sonny <span className="ml-2">→</span>
-            </Link>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  askPublicSonny();
+                }}
+              >
+                <label htmlFor="public-sonny-question" className="sr-only">
+                  Ask Sonny a question
+                </label>
+
+                <textarea
+                  id="public-sonny-question"
+                  value={sonnyQuestion}
+                  onChange={(event) => {
+                    setSonnyQuestion(event.target.value);
+                    if (sonnyReply) setSonnyReply(null);
+                  }}
+                  rows={3}
+                  placeholder="Ask Sonny about Firmic..."
+                  className="w-full resize-none rounded-2xl border border-black/[0.08] bg-[#fbfbfa] px-4 py-3 text-sm leading-6 text-[#1d1d1f] outline-none transition placeholder:text-[#9aa0a6] focus:border-[#4baa36]/50 focus:ring-2 focus:ring-[#4baa36]/10"
+                />
+
+                <button
+                  type="submit"
+                  disabled={!sonnyQuestion.trim()}
+                  className="mt-3 flex w-full items-center justify-center rounded-xl bg-[#4baa36] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#429832] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Ask Sonny <span className="ml-2">→</span>
+                </button>
+              </form>
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Link
+                  href="/login"
+                  className="flex items-center justify-center rounded-xl border border-black/[0.08] px-3 py-2.5 text-xs font-bold text-[#555c64] transition hover:bg-[#f5f5f3]"
+                >
+                  Sign In
+                </Link>
+
+                <Link
+                  href="/create-company"
+                  className="flex items-center justify-center rounded-xl bg-[#1d1d1f] px-3 py-2.5 text-xs font-bold text-white transition hover:bg-black"
+                >
+                  Create Company
+                </Link>
+              </div>
+
+              <p className="mt-4 text-center text-[10px] leading-4 text-[#969ca3]">
+                Company data, tools and authorized actions are available after authentication.
+              </p>
+            </div>
           </div>
         )}
+
       </main>
     </>
   );

@@ -12,6 +12,7 @@ import {
 } from "../src/os/events";
 import { FirmicNotificationSystem } from "../src/os/notifications";
 import { SidebarProvider } from "../src/os/sidebar";
+import GlobalSonnyAssistant from "../components/GlobalSonnyAssistant";
 
 const PUBLIC_ROUTES = new Set([
   "/",
@@ -63,6 +64,7 @@ export default function App({
               <FirmicActionSystem>
                 <ActionEventBridge />
                 <Component {...pageProps} />
+                <GlobalSonnyAssistant />
               </FirmicActionSystem>
             </SidebarProvider>
           </FirmicNotificationSystem>
